@@ -1,26 +1,52 @@
 {
   "name": "energy-mgmt-aiot",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+  "description": "Enterprise Carbon-Neutral Energy Management System",
+  "keywords": ["energy", "carbon", "ems", "aiot", "multi-tenant", "iot"],
+  "author": "Your Organization",
+  "license": "MIT",
+  "packageManager": "pnpm@8.15.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
   },
-  "dependencies": {
-    "next": "16.1.4",
-    "react": "19.2.3",
-    "react-dom": "19.2.3"
+  "workspaces": [
+    "app/api",
+    "app/web",
+    "app/packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:api": "pnpm --filter @energy/api dev",
+    "dev:web": "pnpm --filter @energy/web dev",
+    "build": "turbo run build",
+    "build:api": "pnpm --filter @energy/api build",
+    "build:web": "pnpm --filter @energy/web build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "prepare": "husky install",
+    "docker:dev": "docker-compose -f app/infra/docker/docker-compose.yml up -d",
+    "docker:prod": "docker-compose -f app/infra/docker/docker-compose.prod.yml up -d",
+    "docker:down": "docker-compose -f app/infra/docker/docker-compose.yml down",
+    "docker:logs": "docker-compose -f app/infra/docker/docker-compose.yml logs -f",
+    "docker:restart": "pnpm docker:down && pnpm docker:dev",
+    "db:migrate": "pnpm --filter @energy/api prisma migrate deploy",
+    "db:migrate:dev": "pnpm --filter @energy/api prisma migrate dev",
+    "db:seed": "pnpm --filter @energy/api prisma db seed",
+    "db:studio": "pnpm --filter @energy/api prisma studio",
+    "db:reset": "pnpm --filter @energy/api prisma migrate reset",
+    "prisma:generate": "pnpm --filter @energy/api prisma generate"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.1.4",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "@commitlint/cli": "^18.6.0",
+    "@commitlint/config-conventional": "^18.6.0",
+    "@types/node": "^20.11.0",
+    "husky": "^8.0.3",
+    "prettier": "^3.2.4",
+    "turbo": "^1.12.4",
+    "typescript": "^5.3.3"
   }
 }

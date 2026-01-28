@@ -1,8 +1,8 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
+# ==========================================
+# Dependencies
+# ==========================================
+node_modules/
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -10,32 +10,90 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
+# ==========================================
+# Testing
+# ==========================================
+coverage/
+.nyc_output/
 
-# next.js
-/.next/
-/out/
+# ==========================================
+# Next.js
+# ==========================================
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
 
-# production
-/build
+# ==========================================
+# Build
+# ==========================================
+build/
+dist/
 
-# misc
-.DS_Store
+# ==========================================
+# Environment Variables
+# ==========================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 *.pem
 
-# debug
+# ==========================================
+# Debug & Logs
+# ==========================================
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+lerna-debug.log*
+logs/
+*.log
 
-# env files (can opt-in for committing if needed)
-.env*
+# ==========================================
+# OS Files
+# ==========================================
+.DS_Store
+*.swp
+*.swo
+*~
+Thumbs.db
 
-# vercel
+# ==========================================
+# IDEs
+# ==========================================
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.sublime-project
+*.sublime-workspace
+
+# ==========================================
+# Turbo
+# ==========================================
+.turbo
+
+# ==========================================
+# Docker
+# ==========================================
+docker-compose.override.yml
+docker-compose.yml
+# ==========================================
+# Backup & Temporary
+# ==========================================
+*.backup
+*.bak
+*.tmp
+
+# ==========================================
+# Cache
+# ==========================================
+.cache/
+.parcel-cache/
+
+# ==========================================
+# Vercel
+# ==========================================
 .vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts

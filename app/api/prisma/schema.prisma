@@ -1,0 +1,1086 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================================
+// CORE: Tenant & Organization
+// ========================================
+
+model Tenant {
+  id              String   @id @default(uuid())
+  
+  // 기본 정보
+  name            String   @db.VarChar(200)
+  businessNumber  String?  @unique @map("business_number") @db.VarChar(50)
+  domain          String?  @unique @db.VarChar(100)
+  
+  // 산업 분류
+  industryType    IndustryType @default(manufacturing) @map("industry_type")
+  
+  // 주소
+  address         String?  @db.Text
+  city            String?  @db.VarChar(100)
+  country         String   @default("KR") @db.VarChar(50)
+  timezone        String   @default("Asia/Seoul") @db.VarChar(50)
+  
+  // 상태
+  status          TenantStatus @default(active)
+  
+  // 메타
+  settings        Json?
+  metadata        Json?
+  
+  // 타임스탬프
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+  
+  // Relations
+  users           User[]
+  sites           Site[]
+  gateways        Gateway[]
+  devices         Device[]
+  metrics         Metric[]
+  measurements    Measurement[]
+  subscriptions   Subscription[]
+  alertRules      AlertRule[]
+  auditLogs       AuditLog[]
+  
+  @@index([status])
+  @@index([industryType])
+  @@map("tenant")
+}
+
+enum IndustryType {
+  manufacturing
+  building
+  industrial_complex
+  datacenter
+  other
+}
+
+enum TenantStatus {
+  active
+  suspended
+  terminated
+}
+
+// ========================================
+// CORE: Plan (구독 플랜)
+// ========================================
+
+model Plan {
+  id                  String   @id @default(uuid())
+  
+  name                String   @db.VarChar(100)
+  tier                PlanTier
+  
+  // 가격
+  monthlyPrice        Decimal? @map("monthly_price") @db.Decimal(12, 2)
+  yearlyPrice         Decimal? @map("yearly_price") @db.Decimal(12, 2)
+  setupFee            Decimal  @default(0) @map("setup_fee") @db.Decimal(12, 2)
+  
+  // 제한
+  maxSites            Int?     @map("max_sites")
+  maxDevices          Int?     @map("max_devices")
+  maxUsers            Int?     @map("max_users")
+  dataRetentionDays   Int      @default(90) @map("data_retention_days")
+  apiRateLimit        Int      @default(1000) @map("api_rate_limit")
+  
+  // 기능
+  features            Json
+  
+  // 상태
+  isActive            Boolean  @default(true) @map("is_active")
+  isPublic            Boolean  @default(true) @map("is_public")
+  
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  subscriptions       Subscription[]
+  
+  @@map("plan")
+}
+
+enum PlanTier {
+  trial
+  basic
+  pro
+  enterprise
+}
+
+// ========================================
+// CORE: Subscription (구독 상태 머신)
+// ========================================
+
+model Subscription {
+  id                          String   @id @default(uuid())
+  tenantId                    String   @map("tenant_id")
+  planId                      String   @map("plan_id")
+  
+  // 상태 머신
+  status                      SubscriptionStatus
+  
+  // 날짜
+  startDate                   DateTime @map("start_date") @db.Date
+  endDate                     DateTime @map("end_date") @db.Date
+  trialEndDate                DateTime? @map("trial_end_date") @db.Date
+  
+  // 결제
+  paymentStatus               PaymentStatus? @map("payment_status")
+  paymentMethod               String?  @map("payment_method") @db.VarChar(50)
+  billingCycle                BillingCycle? @map("billing_cycle")
+  
+  // 설치
+  installationScheduledDate   DateTime? @map("installation_scheduled_date") @db.Date
+  installationCompletedDate   DateTime? @map("installation_completed_date") @db.Date
+  firstDataReceivedAt         DateTime? @map("first_data_received_at")
+  
+  // 자동 갱신
+  autoRenew                   Boolean  @default(true) @map("auto_renew")
+  
+  // 메타
+  metadata                    Json?
+  
+  createdAt                   DateTime @default(now()) @map("created_at")
+  updatedAt                   DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  tenant                      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan                        Plan     @relation(fields: [planId], references: [id])
+  
+  @@index([tenantId])
+  @@index([status])
+  @@index([endDate])
+  @@map("subscription")
+}
+
+enum SubscriptionStatus {
+  PRE_PAYMENT
+  PAID
+  INSTALL_SCHEDULED
+  INSTALLED
+  ACTIVE
+  EXPIRE_SOON
+  EXPIRED
+  SUSPENDED
+  TERMINATED
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+  refunded
+}
+
+enum BillingCycle {
+  monthly
+  yearly
+  lifetime
+}
+
+// ========================================
+// CORE: User
+// ========================================
+
+model User {
+  id                      String   @id @default(uuid())
+  tenantId                String   @map("tenant_id")
+  
+  // 인증
+  email                   String   @unique @db.VarChar(255)
+  passwordHash            String   @map("password_hash") @db.VarChar(255)
+  
+  // 기본 정보
+  name                    String   @db.VarChar(100)
+  phone                   String?  @db.VarChar(50)
+  
+  // 권한
+  role                    UserRole @default(viewer)
+  
+  // 상태
+  isActive                Boolean  @default(true) @map("is_active")
+  isEmailVerified         Boolean  @default(false) @map("is_email_verified")
+  
+  // 보안
+  mfaEnabled              Boolean  @default(false) @map("mfa_enabled")
+  mfaSecret               String?  @map("mfa_secret") @db.VarChar(255)
+  
+  // 세션
+  lastLoginAt             DateTime? @map("last_login_at")
+  lastLoginIp             String?  @map("last_login_ip") @db.VarChar(45)
+  loginAttempts           Int      @default(0) @map("login_attempts")
+  lockedUntil             DateTime? @map("locked_until")
+  
+  // 토큰
+  refreshToken            String?  @map("refresh_token") @db.VarChar(500)
+  refreshTokenExpiresAt   DateTime? @map("refresh_token_expires_at")
+  resetToken              String?  @map("reset_token") @db.VarChar(255)
+  resetTokenExpiresAt     DateTime? @map("reset_token_expires_at")
+  tokenVersion            Int      @default(0) @map("token_version")
+  
+  // 설정
+  preferences             Json?
+  
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+  deletedAt               DateTime? @map("deleted_at")
+  
+  // Relations
+  tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  managedSites            Site[]   @relation("SiteManager")
+  auditLogs               AuditLog[]
+  menuFavorites           UserMenuFavorite[]
+  menuAccessLogs          MenuAccessLog[]
+  
+  @@index([tenantId])
+  @@index([email])
+  @@index([role])
+  @@map("user")
+}
+
+enum UserRole {
+  super_admin
+  tenant_admin
+  site_manager
+  operator
+  viewer
+}
+
+// ========================================
+// SITE: 사업장
+// ========================================
+
+model Site {
+  id                String   @id @default(uuid())
+  tenantId          String   @map("tenant_id")
+  
+  // 기본
+  name              String   @db.VarChar(200)
+  code              String?  @db.VarChar(50)
+  
+  // 위치
+  address           String?  @db.Text
+  city              String?  @db.VarChar(100)
+  country           String   @default("KR") @db.VarChar(50)
+  latitude          Decimal? @db.Decimal(10, 8)
+  longitude         Decimal? @db.Decimal(11, 8)
+  timezone          String   @default("Asia/Seoul") @db.VarChar(50)
+  
+  // 시설 정보
+  siteType          SiteType @default(factory) @map("site_type")
+  areaSqm           Decimal? @map("area_sqm") @db.Decimal(10, 2)
+  floors            Int?
+  
+  // 운영
+  operatingHours    Json?    @map("operating_hours")
+  peakPowerKw       Decimal? @map("peak_power_kw") @db.Decimal(10, 2)
+  
+  // 상태
+  isActive          Boolean  @default(true) @map("is_active")
+  
+  // 담당자
+  managerId         String?  @map("manager_id")
+  
+  // 메타
+  metadata          Json?
+  
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+  
+  // Relations
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  manager           User?    @relation("SiteManager", fields: [managerId], references: [id], onDelete: SetNull)
+  gateways          Gateway[]
+  devices           Device[]
+  
+  @@index([tenantId])
+  @@index([siteType])
+  @@map("site")
+}
+
+enum SiteType {
+  factory
+  office
+  warehouse
+  retail
+  mixed
+}
+
+// ========================================
+// HARDWARE: Gateway
+// ========================================
+
+model Gateway {
+  id                  String   @id @default(uuid())
+  tenantId            String   @map("tenant_id")
+  siteId              String   @map("site_id")
+  
+  // 식별
+  serialNumber        String   @unique @map("serial_number") @db.VarChar(100)
+  name                String?  @db.VarChar(100)
+  
+  // 하드웨어
+  model               String?  @db.VarChar(50)
+  firmwareVersion     String?  @map("firmware_version") @db.VarChar(20)
+  
+  // 네트워크
+  ipAddress           String?  @map("ip_address") @db.VarChar(45)
+  macAddress          String?  @map("mac_address") @db.VarChar(17)
+  vpnAddress          String?  @map("vpn_address") @db.VarChar(45)
+  
+  // 통신
+  primaryConnection   GatewayConnection @default(ethernet) @map("primary_connection")
+  fallbackConnection  GatewayFallback @default(lte) @map("fallback_connection")
+  
+  // 상태
+  status              DeviceStatus @default(offline)
+  lastSeenAt          DateTime? @map("last_seen_at")
+  lastHeartbeatAt     DateTime? @map("last_heartbeat_at")
+  
+  // 데이터 버퍼
+  bufferSizeMb        Int      @default(100) @map("buffer_size_mb")
+  bufferedRecords     Int      @default(0) @map("buffered_records")
+  
+  // 설정
+  config              Json?
+  
+  // 소유권
+  ownership           GatewayOwnership @default(company)
+  installationDate    DateTime? @map("installation_date") @db.Date
+  
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site                Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  devices             Device[]
+  measurements        Measurement[]
+  
+  @@index([tenantId])
+  @@index([siteId])
+  @@index([status])
+  @@map("gateway")
+}
+
+enum GatewayConnection {
+  ethernet
+  lte
+  wifi
+}
+
+enum GatewayFallback {
+  lte
+  wifi
+  none
+}
+
+enum GatewayOwnership {
+  company
+  customer
+}
+
+// ========================================
+// DEVICE: 설비
+// ========================================
+
+model Device {
+  id                String   @id @default(uuid())
+  tenantId          String   @map("tenant_id")
+  siteId            String   @map("site_id")
+  gatewayId         String?  @map("gateway_id")
+  
+  // 기본
+  name              String   @db.VarChar(200)
+  code              String?  @db.VarChar(50)
+  
+  // 유형
+  deviceType        String   @map("device_type") @db.VarChar(50)
+  manufacturer      String?  @db.VarChar(100)
+  model             String?  @db.VarChar(100)
+  
+  // 프로토콜
+  protocol          DeviceProtocol
+  connectionConfig  Json     @map("connection_config")
+  
+  // 제어
+  controlCapable    Boolean  @default(false) @map("control_capable")
+  controlMode       ControlMode @default(disabled) @map("control_mode")
+  
+  // 상태
+  status            DeviceStatus @default(offline)
+  lastSeenAt        DateTime? @map("last_seen_at")
+  
+  // 성능
+  pollIntervalMs    Int      @default(5000) @map("poll_interval_ms")
+  responseTimeMs    Int?     @map("response_time_ms")
+  
+  // 설치 정보
+  installationDate  DateTime? @map("installation_date") @db.Date
+  warrantyEndDate   DateTime? @map("warranty_end_date") @db.Date
+  location          String?  @db.VarChar(200)
+  
+  // 메타
+  metadata          Json?
+  
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+  
+  // Relations
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site              Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  gateway           Gateway? @relation(fields: [gatewayId], references: [id], onDelete: SetNull)
+  metrics           Metric[]
+  
+  @@index([tenantId])
+  @@index([siteId])
+  @@index([gatewayId])
+  @@index([deviceType])
+  @@index([status])
+  @@map("device")
+}
+
+enum DeviceProtocol {
+  modbus_tcp
+  modbus_rtu
+  bacnet
+  opcua
+  mqtt
+  http
+}
+
+enum ControlMode {
+  auto
+  manual
+  disabled
+}
+
+enum DeviceStatus {
+  online
+  offline
+  error
+  maintenance
+}
+
+// ========================================
+// DEVICE: Metric (계측 포인트)
+// ========================================
+
+model Metric {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  deviceId        String   @map("device_id")
+  
+  // 식별
+  key             String   @db.VarChar(100)
+  name            String?  @db.VarChar(200)
+  
+  // 타입
+  dataType        DataType @default(float) @map("data_type")
+  unit            String?  @db.VarChar(20)
+  
+  // 통신
+  registerAddress Int?     @map("register_address")
+  registerType    RegisterType? @map("register_type")
+  scaleFactor     Decimal  @default(1.0) @map("scale_factor") @db.Decimal(10, 6)
+  
+  // 범위
+  minValue        Decimal? @map("min_value") @db.Decimal(15, 4)
+  maxValue        Decimal? @map("max_value") @db.Decimal(15, 4)
+  
+  // 접근
+  accessLevel     AccessLevel @default(read) @map("access_level")
+  
+  // 메타
+  metadata        Json?
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  device          Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  measurements    Measurement[]
+  
+  @@unique([deviceId, key])
+  @@index([tenantId])
+  @@index([key])
+  @@map("metric")
+}
+
+enum DataType {
+  float
+  int
+  boolean
+  string
+}
+
+enum RegisterType {
+  holding
+  input
+  coil
+  discrete
+}
+
+enum AccessLevel {
+  read
+  write
+}
+
+// ========================================
+// TIMESERIES: Measurement
+// ========================================
+
+model Measurement {
+  time        DateTime
+  tenantId    String   @map("tenant_id")
+  metricId    String   @map("metric_id")
+  
+  value       Decimal  @db.Decimal(15, 4)
+  
+  // 데이터 품질
+  quality     DataQuality @default(good)
+  source      DataSource @default(sensor)
+  
+  // 원본 정보
+  gatewayId   String?  @map("gateway_id")
+  receivedAt  DateTime @default(now()) @map("received_at")
+  
+  // Relations
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  metric      Metric   @relation(fields: [metricId], references: [id], onDelete: Cascade)
+  gateway     Gateway? @relation(fields: [gatewayId], references: [id])
+  
+  @@id([metricId, time])
+  @@index([tenantId, time(sort: Desc)])
+  @@index([gatewayId, time(sort: Desc)])
+  @@map("measurement")
+}
+
+enum DataQuality {
+  good
+  bad
+  uncertain
+}
+
+enum DataSource {
+  sensor
+  calculated
+  estimated
+  manual
+}
+
+// ========================================
+// ALERT: 알람 규칙
+// ========================================
+
+model AlertRule {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  
+  // 기본
+  name        String   @db.VarChar(200)
+  description String?  @db.Text
+  
+  // 카테고리
+  category    AlertCategory
+  severity    AlertSeverity
+  
+  // 대상
+  scope       AlertScope
+  scopeId     String?  @map("scope_id")
+  
+  // 조건
+  condition   Json
+  
+  // 알림
+  channels    Json?
+  recipients  Json?
+  
+  // 제어
+  enabled     Boolean  @default(true)
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  @@index([tenantId])
+  @@index([category])
+  @@index([enabled])
+  @@map("alert_rule")
+}
+
+enum AlertCategory {
+  system
+  energy
+  device
+  security
+  dr
+  carbon
+  cost
+}
+
+enum AlertSeverity {
+  info
+  warning
+  critical
+}
+
+enum AlertScope {
+  tenant
+  site
+  device
+  metric
+}
+
+// ========================================
+// AUDIT: 감사 로그
+// ========================================
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  tenantId      String?  @map("tenant_id")
+  userId        String?  @map("user_id")
+  
+  // 행동
+  action        String   @db.VarChar(100)
+  resourceType  String?  @map("resource_type") @db.VarChar(50)
+  resourceId    String?  @map("resource_id")
+  
+  // 변경
+  changes       Json?
+  
+  // 결과
+  result        AuditResult?
+  errorMessage  String?  @map("error_message") @db.Text
+  
+  // 컨텍스트
+  ipAddress     String?  @map("ip_address") @db.VarChar(45)
+  userAgent     String?  @map("user_agent") @db.Text
+  requestId     String?  @map("request_id")
+  
+  // 메타
+  metadata      Json?
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  tenant        Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action])
+  @@index([resourceType, resourceId])
+  @@map("audit_log")
+}
+
+enum AuditResult {
+  success
+  failure
+  partial
+}
+
+// ========================================
+// MENU: 메뉴 그룹
+// ========================================
+
+model MenuGroup {
+  id                      String   @id @default(uuid())
+  
+  // 기본 정보
+  code                    String   @unique @db.VarChar(50)
+  name                    String   @db.VarChar(100)
+  icon                    String?  @db.VarChar(50)
+  
+  // 순서 및 레벨
+  displayOrder            Int      @default(0) @map("display_order")
+  level                   Int      @default(1)
+  
+  // 권한
+  minRole                 UserRole @default(viewer) @map("min_role")
+  
+  // 구독
+  subscriptionRequired    Boolean  @default(true) @map("subscription_required")
+  minSubscriptionStatus   String?  @map("min_subscription_status") @db.VarChar(50)
+  
+  // 상태
+  isActive                Boolean  @default(true) @map("is_active")
+  isVisible               Boolean  @default(true) @map("is_visible")
+  
+  // 메타
+  description             String?  @db.Text
+  metadata                Json?
+  
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  menuItems               MenuItem[]
+  
+  @@index([isActive, displayOrder])
+  @@index([minRole])
+  @@map("menu_group")
+}
+
+// ========================================
+// MENU: 메뉴 아이템
+// ========================================
+
+model MenuItem {
+  id                      String   @id @default(uuid())
+  
+  // 기본 정보
+  code                    String   @unique @db.VarChar(50)
+  name                    String   @db.VarChar(100)
+  icon                    String?  @db.VarChar(50)
+  
+  // 경로
+  path                    String?  @db.VarChar(200)
+  externalUrl             String?  @map("external_url") @db.VarChar(500)
+  
+  // 계층 구조
+  menuGroupId             String?  @map("menu_group_id")
+  parentId                String?  @map("parent_id")
+  displayOrder            Int      @default(0) @map("display_order")
+  level                   Int      @default(1)
+  
+  // 권한
+  minRole                 UserRole @default(viewer) @map("min_role")
+  allowedRoles            Json?    @map("allowed_roles")
+  
+  // 구독 & 기능
+  subscriptionRequired    Boolean  @default(true) @map("subscription_required")
+  minSubscriptionStatus   String?  @map("min_subscription_status") @db.VarChar(50)
+  featureRequired         String?  @map("feature_required") @db.VarChar(100)
+  
+  // 상태
+  isActive                Boolean  @default(true) @map("is_active")
+  isVisible               Boolean  @default(true) @map("is_visible")
+  
+  // 배지/알림
+  badgeType               BadgeType @default(none) @map("badge_type")
+  badgeColor              String?  @map("badge_color") @db.VarChar(20)
+  
+  // 메타
+  description             String?  @db.Text
+  metadata                Json?
+  
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  menuGroup               MenuGroup? @relation(fields: [menuGroupId], references: [id], onDelete: Cascade)
+  parent                  MenuItem?  @relation("MenuItemChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children                MenuItem[] @relation("MenuItemChildren")
+  
+  favorites               UserMenuFavorite[]
+  accessLogs              MenuAccessLog[]
+  
+  @@index([menuGroupId, displayOrder])
+  @@index([parentId, displayOrder])
+  @@index([isActive, isVisible])
+  @@index([minRole])
+  @@map("menu_item")
+}
+
+enum BadgeType {
+  none
+  count
+  dot
+  new
+}
+
+// ========================================
+// MENU: 사용자별 즐겨찾기
+// ========================================
+
+model UserMenuFavorite {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  menuItemId    String   @map("menu_item_id")
+  displayOrder  Int      @default(0) @map("display_order")
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  menuItem      MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, menuItemId])
+  @@index([userId, displayOrder])
+  @@map("user_menu_favorite")
+}
+
+// ========================================
+// MENU: 접근 로그
+// ========================================
+
+model MenuAccessLog {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  menuItemId    String   @map("menu_item_id")
+  tenantId      String?  @map("tenant_id")
+  
+  accessedAt    DateTime @default(now()) @map("accessed_at")
+  sessionId     String?  @map("session_id") @db.VarChar(100)
+  ipAddress     String?  @map("ip_address") @db.VarChar(45)
+  userAgent     String?  @map("user_agent") @db.Text
+  
+  // Relations
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  menuItem      MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, accessedAt(sort: Desc)])
+  @@index([menuItemId, accessedAt(sort: Desc)])
+  @@index([tenantId, accessedAt(sort: Desc)])
+  @@map("menu_access_log")
+}
+
+// ========================================
+// CONTROL: 제어 로그 (감사용 필수)
+// ========================================
+
+model ControlLog {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  deviceId        String   @map("device_id")
+  
+  // 제어 정보
+  action          String   @db.VarChar(100)
+  parameters      Json?
+  targetValue     Decimal? @map("target_value") @db.Decimal(15, 4)
+  actualValue     Decimal? @map("actual_value") @db.Decimal(15, 4)
+  
+  // 상태
+  status          ControlStatus @default(pending)
+  
+  // 승인 워크플로우
+  requiresApproval Boolean  @default(false) @map("requires_approval")
+  approvedBy      String?  @map("approved_by")
+  approvedAt      DateTime? @map("approved_at")
+  
+  // 실행자
+  executedBy      String   @map("executed_by")
+  executionMode   ExecutionMode @map("execution_mode")
+  
+  // 컨텍스트
+  ipAddress       String?  @map("ip_address") @db.VarChar(45)
+  requestedAt     DateTime @default(now()) @map("requested_at")
+  
+  @@index([tenantId, requestedAt(sort: Desc)])
+  @@index([deviceId, requestedAt(sort: Desc)])
+  @@index([executedBy])
+  @@map("control_log")
+}
+
+enum ControlStatus {
+  pending
+  sent
+  success
+  failed
+  timeout
+  cancelled
+}
+
+enum ExecutionMode {
+  manual
+  scheduled
+  automated
+  dr
+}
+
+// ========================================
+// DR: 수요반응 이벤트
+// ========================================
+
+model DrEvent {
+  id                  String   @id @default(uuid())
+  tenantId            String   @map("tenant_id")
+  
+  // 이벤트 정보
+  title               String   @db.VarChar(200)
+  startTime           DateTime @map("start_time")
+  endTime             DateTime @map("end_time")
+  
+  // 목표
+  targetReductionKw   Decimal  @map("target_reduction_kw") @db.Decimal(10, 2)
+  actualReductionKw   Decimal? @map("actual_reduction_kw") @db.Decimal(10, 2)
+  
+  // 수익
+  revenue             Decimal? @db.Decimal(12, 2)
+  
+  // 상태
+  status              DrEventStatus @default(scheduled)
+  
+  createdAt           DateTime @default(now()) @map("created_at")
+  
+  @@index([tenantId, startTime])
+  @@index([status])
+  @@map("dr_event")
+}
+
+enum DrEventStatus {
+  scheduled
+  in_progress
+  completed
+  cancelled
+}
+
+// ========================================
+// CARBON: 탄소 배출 데이터
+// ========================================
+
+model EmissionsData {
+  id                  String   @id @default(uuid())
+  tenantId            String   @map("tenant_id")
+  
+  // 배출원
+  deviceId            String?  @map("device_id")
+  emissionType        EmissionType @map("emission_type")
+  sourceType          String   @map("source_type") @db.VarChar(50)
+  
+  // 수치
+  amount              Decimal  @db.Decimal(15, 3)
+  unit                String   @db.VarChar(20)
+  emissionFactor      Decimal  @map("emission_factor") @db.Decimal(10, 6)
+  calculatedEmission  Decimal  @map("calculated_emission") @db.Decimal(15, 3)
+  
+  // 기간
+  period              String   @db.VarChar(7) // YYYY-MM
+  
+  // 계산 방식
+  calculationMethod   CalculationMethod @default(manual) @map("calculation_method")
+  dataSource          DataSourceType @default(MANUAL) @map("data_source")
+  
+  createdAt           DateTime @default(now()) @map("created_at")
+  
+  @@index([tenantId, period])
+  @@index([emissionType])
+  @@map("emissions_data")
+}
+
+enum EmissionType {
+  scope1
+  scope2
+  scope3
+}
+
+enum CalculationMethod {
+  auto
+  manual
+}
+
+enum DataSourceType {
+  MANUAL
+  SENSOR
+  HYBRID
+}
+
+// ========================================
+// COMPLIANCE: 규제 보고서
+// ========================================
+
+model RegulationReport {
+  id                String   @id @default(uuid())
+  tenantId          String   @map("tenant_id")
+  
+  // 보고서 정보
+  reportType        String   @map("report_type") @db.VarChar(50)
+  reportName        String   @map("report_name") @db.VarChar(200)
+  period            String   @db.VarChar(7) // YYYY-MM
+  
+  // 상태
+  status            ReportStatus @default(draft)
+  dueDate           DateTime @map("due_date") @db.Date
+  
+  // 제출
+  submittedDate     DateTime? @map("submitted_date")
+  submittedBy       String?  @map("submitted_by")
+  
+  // 승인
+  approvedDate      DateTime? @map("approved_date")
+  approvedBy        String?  @map("approved_by")
+  
+  // 배출량
+  totalEmissions    Decimal  @default(0) @map("total_emissions") @db.Decimal(15, 3)
+  scope1            Decimal  @default(0) @db.Decimal(15, 3)
+  scope2            Decimal  @default(0) @db.Decimal(15, 3)
+  scope3            Decimal  @default(0) @db.Decimal(15, 3)
+  
+  // 파일
+  fileUrl           String?  @map("file_url") @db.VarChar(500)
+  pdfUrl            String?  @map("pdf_url") @db.VarChar(500)
+  
+  createdAt         DateTime @default(now()) @map("created_at")
+  
+  @@index([tenantId, period])
+  @@index([status])
+  @@map("regulation_report")
+}
+
+enum ReportStatus {
+  draft
+  submitted
+  approved
+  rejected
+}
+
+// ========================================
+// SYSTEM: 시스템 설정
+// ========================================
+
+model SystemSetting {
+  id            String   @id @default(uuid())
+  
+  // 설정 정보
+  category      String   @db.VarChar(50)
+  settingKey    String   @unique @map("setting_key") @db.VarChar(100)
+  settingValue  String   @map("setting_value") @db.Text
+  
+  // 타입
+  valueType     SettingValueType @map("value_type") @default(string)
+  
+  // 메타
+  displayName   String   @map("display_name") @db.VarChar(100)
+  description   String?  @db.Text
+  unit          String?  @db.VarChar(20)
+  minValue      Decimal? @map("min_value") @db.Decimal(15, 2)
+  maxValue      Decimal? @map("max_value") @db.Decimal(15, 2)
+  defaultValue  String?  @map("default_value") @db.Text
+  
+  // 제약
+  isRequired    Boolean  @default(false) @map("is_required")
+  isReadonly    Boolean  @default(false) @map("is_readonly")
+  
+  // 상태
+  isActive      Boolean  @default(true) @map("is_active")
+  
+  updatedBy     String?  @map("updated_by") @db.VarChar(50)
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  
+  @@index([category])
+  @@map("system_setting")
+}
+
+enum SettingValueType {
+  string
+  number
+  boolean
+  json
+  array
+}
