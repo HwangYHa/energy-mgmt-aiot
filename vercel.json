@@ -1,0 +1,26 @@
+{
+  "buildCommand": "prisma generate && next build",
+  "devCommand": "next dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "outputDirectory": ".next",
+  "env": {
+    "MYSQL_HOST": "@mysql_host",
+    "MYSQL_USER": "@mysql_user",
+    "MYSQL_PASSWORD": "@mysql_password",
+    "MYSQL_DATABASE": "@mysql_database",
+    "MYSQL_PORT": "@mysql_port",
+    "NEXTAUTH_SECRET": "@nextauth_secret",
+    "NEXTAUTH_URL": "@nextauth_url"
+  },
+  "crons": [
+    {
+      "path": "/api/cron/daily-report",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/subscription-check",
+      "schedule": "0 1 * * *"
+    }
+  ]
+}

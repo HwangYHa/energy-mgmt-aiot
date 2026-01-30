@@ -1,0 +1,59 @@
+version: '3.9'
+
+services:
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ems_dev
+      MYSQL_USER: ems_user
+      MYSQL_PASSWORD: ems_password
+    volumes:
+      - mysql-dev-data:/var/lib/mysql
+    networks:
+      - ems-dev
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-dev-data:/data
+    networks:
+      - ems-dev
+
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./infra/docker/mosquitto/config:/mosquitto/config
+    networks:
+      - ems-dev
+
+  ai-engine:
+    build:
+      context: ./ai-engine
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./ai-engine:/app
+    depends_on:
+      - mysql
+    networks:
+      - ems-dev
+
+volumes:
+  mysql-dev-data:
+  redis-dev-data:
+
+networks:
+  ems-dev:
+    driver: bridge
