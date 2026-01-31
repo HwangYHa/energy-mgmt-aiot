@@ -8,6 +8,21 @@ generator client {
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
+  
+  // ========================================
+  // 연결 풀링 설정 (Prisma Accelerate)
+  // ========================================
+  // 프로덕션 환경에서 poolingLimit 설정
+  // directUrl = env("DIRECT_DATABASE_URL")  # Prisma Accelerate 사용 시
+  
+  // ========================================
+  // MySQL 연결 설정
+  // ========================================
+  // URL 형식: mysql://user:password@host:port/database?params
+  // 권장 파라미터:
+  // - connectionLimit=10        # 최대 연결 풀 크기
+  // - socketPath=/cloudsql/...  # Cloud SQL Proxy 사용 시
+  // - sslmode=require           # SSL 강제 (프로덕션)
 }
 
 // ========================================

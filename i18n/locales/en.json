@@ -1,0 +1,7 @@
+// i18n/locales/en.json
+{
+  "dashboard": {
+    "title": "Dashboard",
+    "current_load": "Current Load",
+    "energy_today": "Today's Energy"
+  }

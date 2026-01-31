@@ -1,162 +1,142 @@
-// lib\db\prisma.ts
-import { Injectable, OnModuleInit, INestApplicationContext } from '@nestjs/common';
+/**
+ * Prisma Client Singleton
+ * 
+ * Production 환경에서 HMR(Hot Module Replacement) 시 
+ * 중복 인스턴스 생성을 방지하는 싱글톤 패턴 구현
+ * 
+ * 문제점: 개발 환경에서 파일 변경 시 Next.js가 모듈을 다시 로드하면서
+ *        새로운 PrismaClient 인스턴스가 계속 생성되어 DB 연결이 누적됨
+ * 
+ * 해결책: globalThis를 사용하여 인스턴스를 캐싱
+ */
+
 import { PrismaClient } from '@prisma/client';
+import { logPerformance } from '@/lib/logger';
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: ["error", "warn"],
-  });
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+declare global {
+  // eslint-disable-next-line no-var
+  var prisma: PrismaClient | undefined;
 }
 
-@Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit {
-  constructor() {
-    super({
-      log: ['query', 'error', 'warn'],
+/**
+ * Prisma Client 싱글톤 생성
+ * 
+ * Features:
+ * - 개발/프로덕션 모두에서 안정적인 단일 연결
+ * - 쿼리 로깅 (개발 환경에서만)
+ * - 느린 쿼리 감지 (1초 이상)
+ * - Connection pooling 설정
+ */
+function initializePrisma(): PrismaClient {
+  const client = new PrismaClient({
+    // ========================================
+    // 로깅 설정
+    // ========================================
+    log:
+      process.env.NODE_ENV === 'production'
+        ? ['error', 'warn'] // 프로덕션: 에러와 경고만
+        : [
+            { emit: 'event', level: 'query' },
+            { emit: 'event', level: 'error' },
+            { emit: 'event', level: 'warn' },
+          ],
+
+    // ========================================
+    // 에러 포맷팅
+    // ========================================
+    errorFormat: process.env.NODE_ENV === 'production' ? 'minimal' : 'pretty',
+  });
+
+  // ========================================
+  // 이벤트 리스너 (개발 환경)
+  // ========================================
+  if (process.env.NODE_ENV !== 'production') {
+    client.$on('query', (event) => {
+      if (event.duration > 1000) {
+        // 1초 이상 걸린 쿼리
+        console.warn(`⚠️  Slow Query (${event.duration}ms): ${event.query}`);
+      }
     });
 
-    // ==========================================
-    // Prisma Middleware: 자동 tenantId 주입
-    // ==========================================
-    this.$use(async (params, next) => {
-      // tenantId를 컨텍스트에서 가져옴 (AsyncLocalStorage 또는 Request Context)
-      const tenantId = this.getTenantId();
+    client.$on('error', (event) => {
+      console.error('❌ Prisma Error:', event);
+    });
 
-      if (!tenantId) {
-        // tenantId가 없으면 그대로 진행 (시스템 작업 또는 인증 전)
-        return next(params);
-      }
-
-      // ==========================================
-      // Create/Update: tenantId 자동 주입
-      // ==========================================
-      if (params.action === 'create') {
-        if (params.model && this.isTenantModel(params.model)) {
-          params.args.data = {
-            ...params.args.data,
-            tenantId,
-          };
-        }
-      }
-
-      if (params.action === 'createMany') {
-        if (params.model && this.isTenantModel(params.model)) {
-          if (Array.isArray(params.args.data)) {
-            params.args.data = params.args.data.map((data: any) => ({
-              ...data,
-              tenantId,
-            }));
-          } else {
-            params.args.data = {
-              ...params.args.data,
-              tenantId,
-            };
-          }
-        }
-      }
-
-      // ==========================================
-      // Read: tenantId 필터 자동 추가
-      // ==========================================
-      if (
-        params.action === 'findUnique' ||
-        params.action === 'findFirst' ||
-        params.action === 'findMany' ||
-        params.action === 'count' ||
-        params.action === 'aggregate'
-      ) {
-        if (params.model && this.isTenantModel(params.model)) {
-          params.args.where = {
-            ...params.args.where,
-            tenantId,
-          };
-        }
-      }
-
-      // ==========================================
-      // Update/Delete: tenantId 필터 자동 추가
-      // ==========================================
-      if (
-        params.action === 'update' ||
-        params.action === 'updateMany' ||
-        params.action === 'delete' ||
-        params.action === 'deleteMany'
-      ) {
-        if (params.model && this.isTenantModel(params.model)) {
-          params.args.where = {
-            ...params.args.where,
-            tenantId,
-          };
-        }
-      }
-
-      return next(params);
+    client.$on('warn', (event) => {
+      console.warn('⚠️  Prisma Warning:', event);
     });
   }
 
-  async onModuleInit() {
-    await this.$connect();
+  // ========================================
+  // 미들웨어: 성능 모니터링
+  // ========================================
+  client.$use(async (params, next) => {
+    const startTime = Date.now();
+
+    try {
+      const result = await next(params);
+      const duration = Date.now() - startTime;
+
+      // 느린 쿼리 기록 (500ms 이상)
+      if (duration > 500) {
+        logPerformance({
+          operation: `Prisma ${params.model}.${params.action}`,
+          duration,
+          tenantId: undefined, // 컨텍스트에서 추출 가능
+        });
+      }
+
+      return result;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(
+        `Prisma error in ${params.model}.${params.action} after ${duration}ms:`,
+        error
+      );
+      throw error;
+    }
+  });
+
+  return client;
+}
+
+// ========================================
+// 싱글톤 인스턴스
+// ========================================
+export const prisma: PrismaClient =
+  global.prisma ||
+  (() => {
+    const client = initializePrisma();
+
+    // 개발 환경에서는 전역 인스턴스로 캐싱
+    // (HMR 시 재생성되지 않음)
+    if (process.env.NODE_ENV !== 'production') {
+      global.prisma = client;
+    }
+
+    return client;
+  })();
+
+// ========================================
+// 연결 상태 확인
+// ========================================
+export async function checkDatabaseConnection(): Promise<boolean> {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    console.log('✅ Database connection successful');
+    return true;
+  } catch (error) {
+    console.error('❌ Database connection failed:', error);
+    return false;
   }
+}
 
-  async enableShutdownHooks(app: INestApplicationContext) {
-    this.$on('beforeExit', async () => {
-      await app.close();
-    });
-  }
-
-  /**
-   * tenantId를 가져오는 메서드 (AsyncLocalStorage 또는 Request Context)
-   * 실제 구현은 프로젝트에 맞게 수정 필요
-   */
-  private getTenantId(): string | null {
-    // TODO: AsyncLocalStorage 또는 Request Context에서 tenantId 가져오기
-    // 예: return AsyncLocalStorage.getStore()?.tenantId;
-    return null;
-  }
-
-  /**
-   * Tenant 격리가 필요한 모델인지 확인
-   */
-  private isTenantModel(model: string): boolean {
-    const tenantModels = [
-      'User',
-      'Site',
-      'Gateway',
-      'Device',
-      'Metric',
-      'Measurement',
-      'Subscription',
-      'AlertRule',
-      'AuditLog',
-      'DrEvent',
-      'EmissionsData',
-      'RegulationReport',
-      'ControlLog',
-    ];
-
-    return tenantModels.includes(model);
-  }
-
-  /**
-   * tenantId를 명시적으로 설정하는 메서드
-   * (테스트 또는 특수한 경우)
-   */
-  setTenantId(tenantId: string) {
-    // TODO: AsyncLocalStorage에 tenantId 저장
-  }
-
-  /**
-   * tenantId를 초기화하는 메서드
-   */
-  clearTenantId() {
-    // TODO: AsyncLocalStorage에서 tenantId 제거
+// ========================================
+// 정리 함수
+// ========================================
+export async function disconnectPrisma(): Promise<void> {
+  await prisma.$disconnect();
+  if (process.env.NODE_ENV !== 'production') {
+    global.prisma = undefined;
   }
 }

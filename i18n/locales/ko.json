@@ -1,0 +1,7 @@
+{
+  "dashboard": {
+    "title": "대시보드",
+    "current_load": "현재 부하",
+    "energy_today": "금일 사용량"
+  }
+}

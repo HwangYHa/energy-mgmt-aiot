@@ -249,7 +249,7 @@ export default function HomePage() {
           </div>
           <div className="border-t border-slate-800 pt-8">
             <p className="text-slate-400 text-sm text-center">
-              © 2024 Energy Management Platform. All rights reserved.
+              © 2026 Energy Management Platform. All rights reserved.
             </p>
           </div>
         </div>
