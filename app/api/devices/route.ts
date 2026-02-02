@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth, validateTenantMatch, requireRole } from '@/lib/auth/verify';
 import { prisma } from '@/lib/db/prisma';
-import { deviceCreateSchema, deviceUpdateSchema, formatValidationError } from '@/lib/validation/schemas';
+import { deviceCreateSchema, formatValidationError } from '@/lib/validation/schemas';
 import { z } from 'zod';
 
 export async function GET(request: NextRequest) {
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
 
     const devices = await prisma.device.findMany(findArgs);
 
-    const nextCursor = devices.length === take ? devices[devices.length - 1].id : null;
+    const nextCursor = devices.length === take && devices.length > 0 ? devices[devices.length - 1]?.id : null;
 
     return NextResponse.json({ data: devices, nextCursor, pageSize: take });
   } catch (error) {

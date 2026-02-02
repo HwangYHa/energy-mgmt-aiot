@@ -16,7 +16,6 @@ import {
 } from 'recharts';
 import {
   TrendingUp,
-  TrendingDown,
   Zap,
   Calendar,
   Target,

@@ -1,6 +1,6 @@
 // app/api/control/dr-events/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/db/prisma';
+import { prisma } from '@/lib/db/prisma';
 
 // GET: List all DR events
 export async function GET(req: NextRequest) {
@@ -21,11 +21,7 @@ export async function GET(req: NextRequest) {
 
     const events = await prisma.drEvent.findMany({
       where,
-      include: {
-        tenant: { select: { id: true, name: true } },
-        devices: { select: { id: true, name: true, type: true } },
-      },
-      orderBy: { scheduledAt: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
 
     return NextResponse.json(events);
@@ -45,41 +41,32 @@ export async function POST(req: NextRequest) {
     const {
       tenantId,
       name,
-      description,
-      eventType,
       scheduledAt,
       duration,
       targetReduction,
       compensation,
-      deviceIds,
     } = body;
 
-    if (!tenantId || !name || !eventType) {
+    if (!tenantId || !name || !scheduledAt) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
+    const startDate = new Date(scheduledAt);
+    const endDate = new Date(startDate.getTime() + (duration || 60) * 60 * 1000);
+
     const event = await prisma.drEvent.create({
       data: {
         tenantId,
-        name,
-        description: description || '',
-        eventType,
+        title: name,
+        startTime: startDate,
+        endTime: endDate,
         status: 'scheduled',
-        scheduledAt: new Date(scheduledAt),
-        duration: duration || 60,
-        targetReduction: targetReduction || 0,
-        compensation: compensation || 0,
-        actualReduction: 0,
-        responseRate: 0,
-        devices: {
-          connect: deviceIds?.map((id: string) => ({ id })) || [],
-        },
-      },
-      include: {
-        devices: true,
+        targetReductionKw: targetReduction || 0,
+        actualReductionKw: null,
+        revenue: compensation || null,
       },
     });
 

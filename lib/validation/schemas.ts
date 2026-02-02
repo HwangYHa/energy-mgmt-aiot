@@ -40,7 +40,7 @@ export const registerSchema = z.object({
     .string()
     .min(1, 'Name required')
     .max(100, 'Name too long'),
-  tenantId: uuidSchema,
+  tenantId: uuidSchema.optional(), // ⭐ optional로 변경 (자동 생성)
 });
 
 // ==========================================
@@ -148,22 +148,6 @@ export const siteCreateSchema = z.object({
 });
 
 // ==========================================
-// Forecast Schemas
-// ==========================================
-
-export const forecastHorizonEnum = z.enum(['24h', '7d', '30d']);
-
-export const forecastRequestSchema = z.object({
-  siteId: uuidSchema.optional(),
-  
-  horizon: forecastHorizonEnum.default('24h'),
-  
-  features: z
-    .array(z.string())
-    .optional(),
-});
-
-// ==========================================
 // DR Event Schemas
 // ==========================================
 
@@ -232,6 +216,195 @@ export const deviceFilterSchema = z.object({
 });
 
 // ==========================================
+// AI Forecast Schemas
+// ==========================================
+
+export const forecastRequestSchema = z.object({
+  siteId: uuidSchema.optional(),
+  horizon: z
+    .string()
+    .regex(/^\d+[hd]$/, 'Horizon must be in format like "24h" or "7d"')
+    .default('24h'),
+  features: z
+    .array(z.string())
+    .default(['hour', 'weekday', 'temperature']),
+});
+
+export const anomalyRequestSchema = z.object({
+  siteId: uuidSchema.optional(),
+  sensitivity: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.1),
+});
+
+export const optimizeRequestSchema = z.object({
+  siteId: uuidSchema.optional(),
+  targetReduction: z
+    .number()
+    .min(0)
+    .max(100)
+    .default(50),
+});
+
+// ==========================================
+// Carbon Schemas
+// ==========================================
+
+export const emissionTypeEnum = z.enum(['scope1', 'scope2', 'scope3']);
+
+export const emissionsRegisterSchema = z.object({
+  emissionType: emissionTypeEnum,
+  sourceType: z.string().min(1, 'Source type required'),
+  amount: z.number().positive('Amount must be positive'),
+  unit: z.string().min(1, 'Unit required'),
+  period: z.string().regex(/^\d{4}-\d{2}$/, 'Period must be YYYY-MM format'),
+  notes: z.string().max(1000).optional(),
+});
+
+// ==========================================
+// Report Schemas
+// ==========================================
+
+export const reportTypeEnum = z.enum([
+  'energy',
+  'cost',
+  'carbon',
+  'regulation',
+  'dr',
+  'custom',
+]);
+
+export const reportGenerateSchema = z.object({
+  type: reportTypeEnum,
+  format: z.enum(['pdf', 'excel', 'csv']).default('pdf'),
+  startDate: z.string().datetime('Invalid start date'),
+  endDate: z.string().datetime('Invalid end date'),
+  siteId: uuidSchema.optional(),
+  includeCharts: z.boolean().default(true),
+  includeSummary: z.boolean().default(true),
+}).refine(
+  (data) => new Date(data.endDate) > new Date(data.startDate),
+  {
+    message: 'endDate must be after startDate',
+    path: ['endDate'],
+  }
+);
+
+// ==========================================
+// Alert Schemas
+// ==========================================
+
+export const alertCategoryEnum = z.enum([
+  'system',
+  'energy',
+  'device',
+  'security',
+  'dr',
+  'carbon',
+  'cost',
+]);
+
+export const alertSeverityEnum = z.enum(['info', 'warning', 'critical']);
+
+export const alertRuleCreateSchema = z.object({
+  name: z.string().min(1, 'Name required').max(200, 'Name too long'),
+  description: z.string().max(1000).optional(),
+  category: alertCategoryEnum,
+  severity: alertSeverityEnum,
+  scope: z.enum(['tenant', 'site', 'device', 'metric']),
+  scopeId: z.string().optional(),
+  condition: z.record(z.any()), // JSON object
+  channels: z.array(z.string()).optional(),
+  recipients: z.array(z.string()).optional(),
+  enabled: z.boolean().default(true),
+});
+
+// ==========================================
+// Control Schemas
+// ==========================================
+
+export const controlActionEnum = z.enum([
+  'start',
+  'stop',
+  'setpoint',
+  'schedule',
+  'optimize',
+]);
+
+export const controlExecutionModeEnum = z.enum([
+  'manual',
+  'scheduled',
+  'automated',
+  'dr',
+]);
+
+export const controlRequestSchema = z.object({
+  deviceId: uuidSchema,
+  action: controlActionEnum,
+  parameters: z.record(z.any()).optional(),
+  targetValue: z.number().optional(),
+  executionMode: controlExecutionModeEnum.default('manual'),
+  requiresApproval: z.boolean().default(false),
+});
+
+// ==========================================
+// Schedule Schemas
+// ==========================================
+
+export const scheduleCreateSchema = z.object({
+  name: z.string().min(1, 'Name required').max(200, 'Name too long'),
+  deviceId: uuidSchema,
+  action: controlActionEnum,
+  parameters: z.record(z.any()).optional(),
+  cronExpression: z.string().min(1, 'Cron expression required'),
+  enabled: z.boolean().default(true),
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
+});
+
+// ==========================================
+// Measurement Schemas
+// ==========================================
+
+export const measurementCreateSchema = z.object({
+  metricId: uuidSchema,
+  value: z.number(),
+  quality: z.enum(['good', 'bad', 'uncertain']).default('good'),
+  source: z.enum(['sensor', 'calculated', 'estimated', 'manual']).default('sensor'),
+  timestamp: z.string().datetime().optional(),
+});
+
+export const measurementBatchSchema = z.object({
+  measurements: z.array(measurementCreateSchema).min(1, 'At least one measurement required'),
+});
+
+// ==========================================
+// Subscription Schemas
+// ==========================================
+
+export const subscriptionStatusEnum = z.enum([
+  'PRE_PAYMENT',
+  'PAID',
+  'INSTALL_SCHEDULED',
+  'INSTALLED',
+  'ACTIVE',
+  'EXPIRE_SOON',
+  'EXPIRED',
+  'SUSPENDED',
+  'TERMINATED',
+]);
+
+export const billingCycleEnum = z.enum(['monthly', 'yearly', 'lifetime']);
+
+export const subscriptionUpdateSchema = z.object({
+  status: subscriptionStatusEnum.optional(),
+  autoRenew: z.boolean().optional(),
+  paymentMethod: z.string().max(50).optional(),
+});
+
+// ==========================================
 // Helper Functions
 // ==========================================
 
@@ -244,4 +417,32 @@ export function formatValidationError(error: z.ZodError) {
     message: err.message,
     code: err.code,
   }));
+}
+
+/**
+ * 안전한 파싱 (에러 발생 시 기본값 반환)
+ */
+export function safeParse<T>(
+  schema: z.ZodSchema<T>,
+  data: unknown,
+  fallback: T
+): T {
+  const result = schema.safeParse(data);
+  return result.success ? result.data : fallback;
+}
+
+/**
+ * 부분 업데이트 검증 (undefined 값 제거)
+ */
+export function parsePartialUpdate<T extends z.ZodRawShape>(
+  schema: z.ZodObject<T>,
+  data: unknown
+) {
+  const partial = schema.partial();
+  const result = partial.parse(data);
+  
+  // undefined 값 제거
+  return Object.fromEntries(
+    Object.entries(result).filter(([_, v]) => v !== undefined)
+  ) as Partial<z.infer<z.ZodObject<T>>>;
 }

@@ -65,12 +65,15 @@ export async function POST(request: NextRequest) {
     const report = await prisma.regulationReport.create({
       data: {
         tenantId: session.user.tenantId,
-        type: regulationType,
-        year,
-        siteId,
-        data: reportData as any,
+        reportType: regulationType,
+        reportName: `${regulationType} Report ${year}`,
+        period: `${year}-12`, // YYYY-MM format
         status: 'draft',
-        generatedBy: session.user.id,
+        dueDate: new Date(year, 11, 31), // End of year
+        totalEmissions: (reportData as any)?.totalEmissions || 0,
+        scope1: (reportData as any)?.scope1 || 0,
+        scope2: (reportData as any)?.scope2 || 0,
+        scope3: (reportData as any)?.scope3 || 0,
       },
     });
 
@@ -309,8 +312,8 @@ export async function PATCH(request: NextRequest) {
     const updated = await prisma.regulationReport.update({
       where: { id: reportId },
       data: {
-        status,
-        submittedAt: action === 'submit' ? new Date() : undefined,
+        status: status as any,
+        submittedDate: action === 'submit' ? new Date() : undefined,
         submittedBy: action === 'submit' ? session.user.id : undefined,
       },
     });

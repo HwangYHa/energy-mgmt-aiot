@@ -1,259 +1,288 @@
+/**
+ * HMI 대시보드 메인 페이지
+ * 산업용 에너지 관리 24/7 운영 화면
+ *
+ * 특징:
+ * - 실시간 데이터 (5초 자동 갱신)
+ * - 한눈에 상태 파악 (에너지/설비/탄소)
+ * - 긴급 알람 배너
+ * - 최소 클릭으로 정보 접근
+ * - 야간 운영 최적화 (어두운 배경, 높은 대비)
+ */
+
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/Button';
-import { Zap, BarChart3, AlertCircle, Leaf, Smartphone, Lock } from 'lucide-react';
+import { useDashboardData } from '@/lib/hooks/use-dashboard-data';
+import { EnergyWidget } from '@/components/hmi/EnergyWidget';
+import { EquipmentWidget } from '@/components/hmi/EquipmentWidget';
+import { CarbonWidget } from '@/components/hmi/CarbonWidget';
+import { AlertBanner } from '@/components/hmi/AlertBanner';
+import { SiteStatusTable } from '@/components/hmi/SiteStatusTable';
+import {
+  Zap,
+  Bell,
+  RefreshCw,
+  Menu,
+  Clock,
+  TrendingUp,
+  Lightbulb,
+} from 'lucide-react';
 
-export default function HomePage() {
+export default function HMIDashboard() {
+  const { data, isLoading, error, lastUpdate, refresh } = useDashboardData(5000); // 5초 자동 갱신
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // 현재 시간 업데이트 (1초마다)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // 수동 갱신
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await refresh();
+    setTimeout(() => setIsRefreshing(false), 500);
+  };
+
+  // 로딩 상태
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="w-12 h-12 text-emerald-400 animate-spin mx-auto mb-4" />
+          <p className="text-slate-400 text-lg">대시보드 로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 에러 상태
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="text-red-400 text-xl mb-4">⚠️ 데이터 로드 실패</div>
+          <p className="text-slate-400 mb-6">{error}</p>
+          <button
+            onClick={handleRefresh}
+            className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
+          >
+            다시 시도
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 데이터가 없는 경우
+  if (!data) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-slate-400 text-lg">데이터가 없습니다</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
-      {/* Navigation */}
-      <nav className="fixed top-0 w-full bg-slate-900/80 backdrop-blur border-b border-slate-700 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <Zap className="w-8 h-8 text-emerald-400" />
-              <span className="font-bold text-xl text-white">Energy Management</span>
-            </div>
-            <div className="flex gap-4">
-              <Link href="/login">
-                <Button variant="outline" size="sm">로그인</Button>
+    <div className="min-h-screen bg-slate-950">
+      {/* 헤더 */}
+      <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-50">
+        <div className="max-w-[1920px] mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            {/* 로고 & 타이틀 */}
+            <div className="flex items-center gap-4">
+              <Link href="/" className="flex items-center gap-2 group">
+                <Zap className="w-8 h-8 text-emerald-400 group-hover:text-emerald-300 transition-colors" />
+                <span className="font-bold text-xl text-white">
+                  Energy<span className="text-emerald-400">AI</span>
+                </span>
               </Link>
-              <Link href="/register">
-                <Button size="sm">시작하기</Button>
-              </Link>
+              <div className="hidden md:block h-6 w-px bg-slate-700" />
+              <h1 className="hidden md:block text-lg font-semibold text-white">
+                HMI 운영 대시보드
+              </h1>
+            </div>
+
+            {/* 중앙: 현재 시간 */}
+            <div className="flex items-center gap-2 text-slate-300">
+              <Clock className="w-5 h-5" />
+              <div className="font-mono text-lg">
+                {currentTime.toLocaleTimeString('ko-KR', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                })}
+              </div>
+              <div className="text-sm text-slate-500 ml-2">
+                {currentTime.toLocaleDateString('ko-KR', {
+                  month: 'long',
+                  day: 'numeric',
+                  weekday: 'short',
+                })}
+              </div>
+            </div>
+
+            {/* 우측: 액션 버튼 */}
+            <div className="flex items-center gap-3">
+              {/* 갱신 버튼 */}
+              <button
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="p-2 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
+                aria-label="새로고침"
+              >
+                <RefreshCw
+                  className={`w-5 h-5 text-slate-400 ${isRefreshing ? 'animate-spin' : ''}`}
+                />
+              </button>
+
+              {/* 알람 버튼 */}
+              <button
+                className="relative p-2 hover:bg-slate-800 rounded-lg transition-colors"
+                aria-label="알람"
+              >
+                <Bell className="w-5 h-5 text-slate-400" />
+                {data.alerts.filter((a) => !a.acknowledged).length > 0 && (
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                )}
+              </button>
+
+              {/* 사용자 메뉴 */}
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/dashboard"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors text-sm font-semibold"
+                >
+                  대시보드
+                </Link>
+              </div>
             </div>
           </div>
-        </div>
-      </nav>
 
-      {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4">
-        <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-5xl sm:text-6xl font-bold text-white mb-6">
-            스마트 에너지 관리 플랫폼
-          </h1>
-          <p className="text-xl text-slate-300 mb-8 leading-relaxed">
-            AI 기반 부하 예측, 이상 탐지, 최적화 추천 및 수요반응 시스템을 통해
-            <br />
-            에너지 효율을 극대화하고 운영 비용을 절감하세요.
+          {/* 마지막 업데이트 시간 */}
+          {lastUpdate && (
+            <div className="mt-2 text-xs text-slate-500 text-center">
+              마지막 업데이트: {lastUpdate.toLocaleTimeString('ko-KR')} (5초마다 자동 갱신)
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* 메인 컨텐츠 */}
+      <main className="max-w-[1920px] mx-auto px-6 py-6 space-y-6">
+        {/* 긴급 알람 배너 */}
+        <AlertBanner alerts={data.alerts} />
+
+        {/* 핵심 위젯 3개 (에너지/설비/탄소) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <EnergyWidget data={data.energy} />
+          <EquipmentWidget data={data.equipment} />
+          <CarbonWidget data={data.carbon} />
+        </div>
+
+        {/* 사이트별 상세 현황 */}
+        <section>
+          <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <Menu className="w-5 h-5 text-emerald-400" />
+            사이트별 현황
+          </h2>
+          <SiteStatusTable sites={data.sites} />
+        </section>
+
+        {/* AI 예측 & 최적화 추천 */}
+        {data.recommendations.length > 0 && (
+          <section>
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Lightbulb className="w-5 h-5 text-yellow-400" />
+              AI 예측 & 최적화 추천
+            </h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {data.recommendations.map((rec) => {
+                const priorityColors = {
+                  high: 'border-red-500 bg-red-900/20',
+                  medium: 'border-yellow-500 bg-yellow-900/20',
+                  low: 'border-green-500 bg-green-900/20',
+                };
+
+                return (
+                  <div
+                    key={rec.id}
+                    className={`border-2 ${priorityColors[rec.priority]} rounded-lg p-4`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <TrendingUp
+                            className={`w-4 h-4 ${
+                              rec.priority === 'high'
+                                ? 'text-red-400'
+                                : rec.priority === 'medium'
+                                  ? 'text-yellow-400'
+                                  : 'text-green-400'
+                            }`}
+                          />
+                          <h3 className="font-semibold text-white">{rec.title}</h3>
+                        </div>
+                        <p className="text-sm text-slate-300 mb-3">{rec.description}</p>
+                        <div className="flex items-center gap-4 text-xs text-slate-400">
+                          {rec.siteName && <span>사이트: {rec.siteName}</span>}
+                          <span>
+                            절감 예상:{' '}
+                            <span className="font-bold text-emerald-400">
+                              {rec.expectedSavings.toFixed(0)} kW
+                            </span>
+                          </span>
+                          <span>
+                            비용:{' '}
+                            <span className="font-bold text-emerald-400">
+                              ₩{rec.expectedCost.toLocaleString('ko-KR')}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-bold ${
+                          rec.priority === 'high'
+                            ? 'bg-red-500 text-white'
+                            : rec.priority === 'medium'
+                              ? 'bg-yellow-500 text-white'
+                              : 'bg-green-500 text-white'
+                        }`}
+                      >
+                        {rec.priority === 'high'
+                          ? '높음'
+                          : rec.priority === 'medium'
+                            ? '중간'
+                            : '낮음'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* 푸터 정보 */}
+        <footer className="mt-8 pt-6 border-t border-slate-800 text-center text-sm text-slate-500">
+          <p>© 2026 EnergyAI Platform. 24/7 실시간 에너지 관리 시스템</p>
+          <p className="mt-1">
+            문의:{' '}
+            <a href="mailto:support@energyai.com" className="text-emerald-400 hover:underline">
+              support@energyai.com
+            </a>
           </p>
-          <div className="flex gap-4 justify-center flex-wrap">
-            <Link href="/register">
-              <Button size="lg" className="bg-emerald-500 hover:bg-emerald-600">
-                무료 시작하기
-              </Button>
-            </Link>
-            <Link href="/login">
-              <Button size="lg" variant="outline">
-                로그인
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section className="py-20 px-4 bg-slate-800/50">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl font-bold text-center text-white mb-16">
-            주요 기능
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {/* Feature 1: Forecasting */}
-            <div className="bg-slate-800 border border-slate-700 rounded-lg p-8 hover:border-emerald-500/50 transition">
-              <div className="flex items-center gap-3 mb-4">
-                <BarChart3 className="w-8 h-8 text-emerald-400" />
-                <h3 className="text-xl font-semibold text-white">부하 예측</h3>
-              </div>
-              <p className="text-slate-300">
-                LSTM 신경망을 이용한 정확한 전력 수요 예측 (24시간/7일/30일)
-              </p>
-              <ul className="mt-4 space-y-2 text-sm text-slate-400">
-                <li>✓ 정확도 92% (MAPE &lt; 10%)</li>
-                <li>✓ 95% 신뢰도 신뢰 구간</li>
-                <li>✓ 실시간 업데이트</li>
-              </ul>
-            </div>
-
-            {/* Feature 2: Anomaly Detection */}
-            <div className="bg-slate-800 border border-slate-700 rounded-lg p-8 hover:border-emerald-500/50 transition">
-              <div className="flex items-center gap-3 mb-4">
-                <AlertCircle className="w-8 h-8 text-orange-400" />
-                <h3 className="text-xl font-semibold text-white">이상 탐지</h3>
-              </div>
-              <p className="text-slate-300">
-                Isolation Forest 알고리즘으로 비정상 패턴 자동 감지
-              </p>
-              <ul className="mt-4 space-y-2 text-sm text-slate-400">
-                <li>✓ F1 점수 0.92</li>
-                <li>✓ 4단계 심각도 분류</li>
-                <li>✓ 원인 분석 자동화</li>
-              </ul>
-            </div>
-
-            {/* Feature 3: Optimization */}
-            <div className="bg-slate-800 border border-slate-700 rounded-lg p-8 hover:border-emerald-500/50 transition">
-              <div className="flex items-center gap-3 mb-4">
-                <Zap className="w-8 h-8 text-yellow-400" />
-                <h3 className="text-xl font-semibold text-white">최적화 추천</h3>
-              </div>
-              <p className="text-slate-300">
-                Peak Shaving, ESS 스케줄, HVAC 최적화로 에너지 절감
-              </p>
-              <ul className="mt-4 space-y-2 text-sm text-slate-400">
-                <li>✓ 일일 절감 1,200 kWh</li>
-                <li>✓ 월간 절감액 ₩7.2M</li>
-                <li>✓ ROI 20개월</li>
-              </ul>
-            </div>
-
-            {/* Feature 4: Demand Response */}
-            <div className="bg-slate-800 border border-slate-700 rounded-lg p-8 hover:border-emerald-500/50 transition">
-              <div className="flex items-center gap-3 mb-4">
-                <Smartphone className="w-8 h-8 text-blue-400" />
-                <h3 className="text-xl font-semibold text-white">수요반응</h3>
-              </div>
-              <p className="text-slate-300">
-                자동화된 DR 이벤트 관리 및 응답률 모니터링
-              </p>
-              <ul className="mt-4 space-y-2 text-sm text-slate-400">
-                <li>✓ 자동 제어 명령</li>
-                <li>✓ 월간 수익 ₩9M</li>
-                <li>✓ 실시간 대시보드</li>
-              </ul>
-            </div>
-
-            {/* Feature 5: Carbon Tracking */}
-            <div className="bg-slate-800 border border-slate-700 rounded-lg p-8 hover:border-emerald-500/50 transition">
-              <div className="flex items-center gap-3 mb-4">
-                <Leaf className="w-8 h-8 text-green-400" />
-                <h3 className="text-xl font-semibold text-white">탄소 추적</h3>
-              </div>
-              <p className="text-slate-300">
-                Scope 1/2/3 배출량 자동 계산 및 규제 보고서 생성
-              </p>
-              <ul className="mt-4 space-y-2 text-sm text-slate-400">
-                <li>✓ 자동 계산</li>
-                <li>✓ 규제 준수</li>
-                <li>✓ ESG 리포팅</li>
-              </ul>
-            </div>
-
-            {/* Feature 6: Security */}
-            <div className="bg-slate-800 border border-slate-700 rounded-lg p-8 hover:border-emerald-500/50 transition">
-              <div className="flex items-center gap-3 mb-4">
-                <Lock className="w-8 h-8 text-red-400" />
-                <h3 className="text-xl font-semibold text-white">보안</h3>
-              </div>
-              <p className="text-slate-300">
-                엔터프라이즈급 보안 및 규정 준수
-              </p>
-              <ul className="mt-4 space-y-2 text-sm text-slate-400">
-                <li>✓ 감사 로그</li>
-                <li>✓ 역할 기반 접근</li>
-                <li>✓ 데이터 암호화</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Metrics Section */}
-      <section className="py-20 px-4">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl font-bold text-center text-white mb-16">
-            검증된 성과
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="text-center">
-              <div className="text-4xl font-bold text-emerald-400 mb-2">92%</div>
-              <p className="text-slate-300">예측 정확도</p>
-            </div>
-            <div className="text-center">
-              <div className="text-4xl font-bold text-orange-400 mb-2">0.92</div>
-              <p className="text-slate-300">이상탐지 F1</p>
-            </div>
-            <div className="text-center">
-              <div className="text-4xl font-bold text-yellow-400 mb-2">1.2K</div>
-              <p className="text-slate-300">일일 절감 kWh</p>
-            </div>
-            <div className="text-center">
-              <div className="text-4xl font-bold text-blue-400 mb-2">₩7.2M</div>
-              <p className="text-slate-300">월간 절감액</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-20 px-4 bg-gradient-to-r from-emerald-600/20 to-blue-600/20 border-y border-slate-700">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl font-bold text-white mb-6">
-            지금 바로 시작하세요
-          </h2>
-          <p className="text-xl text-slate-300 mb-8">
-            무료 평가판으로 에너지 효율을 높이고 비용을 절감하세요.
-          </p>
-          <div className="flex gap-4 justify-center flex-wrap">
-            <Link href="/register">
-              <Button size="lg" className="bg-emerald-500 hover:bg-emerald-600">
-                무료 가입
-              </Button>
-            </Link>
-            <Link href="/login">
-              <Button size="lg" variant="outline">
-                로그인
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-slate-900 border-t border-slate-800 py-8 px-4">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <h3 className="font-semibold text-white mb-4">제품</h3>
-              <ul className="space-y-2 text-slate-400 text-sm">
-                <li><Link href="#" className="hover:text-emerald-400">기능</Link></li>
-                <li><Link href="#" className="hover:text-emerald-400">가격</Link></li>
-                <li><Link href="#" className="hover:text-emerald-400">평가판</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold text-white mb-4">솔루션</h3>
-              <ul className="space-y-2 text-slate-400 text-sm">
-                <li><Link href="#" className="hover:text-emerald-400">제조업</Link></li>
-                <li><Link href="#" className="hover:text-emerald-400">빌딩</Link></li>
-                <li><Link href="#" className="hover:text-emerald-400">데이터센터</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold text-white mb-4">회사</h3>
-              <ul className="space-y-2 text-slate-400 text-sm">
-                <li><Link href="#" className="hover:text-emerald-400">소개</Link></li>
-                <li><Link href="#" className="hover:text-emerald-400">블로그</Link></li>
-                <li><Link href="#" className="hover:text-emerald-400">문서</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold text-white mb-4">지원</h3>
-              <ul className="space-y-2 text-slate-400 text-sm">
-                <li><Link href="#" className="hover:text-emerald-400">도움말</Link></li>
-                <li><Link href="#" className="hover:text-emerald-400">문의</Link></li>
-                <li><Link href="#" className="hover:text-emerald-400">상태</Link></li>
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-slate-800 pt-8">
-            <p className="text-slate-400 text-sm text-center">
-              © 2026 Energy Management Platform. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </footer>
-    </main>
+        </footer>
+      </main>
+    </div>
   );
 }

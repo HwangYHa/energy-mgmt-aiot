@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-interface StatusIndicatorProps {
+export interface StatusIndicatorProps {
   status: 'online' | 'offline' | 'error' | 'warning' | 'maintenance';
   label: string;
   size?: 'sm' | 'md' | 'lg';

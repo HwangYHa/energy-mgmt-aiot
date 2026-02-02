@@ -1,26 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth/session';
+import { verifyAuth } from '@/lib/auth/verify';
 import { prisma } from '@/lib/db/prisma';
+import { optimizeRequestSchema, formatValidationError } from '@/lib/validation/schemas';
+import env from '@/lib/env';
+import logger from '@/lib/logger';
+import { z } from 'zod';
 
 export async function POST(request: NextRequest) {
+  let auth: Awaited<ReturnType<typeof verifyAuth>> | undefined;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    // ✅ 인증 및 테넌트 검증
+    auth = await verifyAuth(request);
+    if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { siteId, targetReduction = 50 } = body;
+    const { tenantId } = auth;
 
-    // 1. 과거 데이터 조회
+    // ✅ 입력 검증
+    const body = await request.json();
+    let validated;
+    try {
+      validated = optimizeRequestSchema.parse(body);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return NextResponse.json(
+          {
+            error: 'Validation failed',
+            details: formatValidationError(error),
+          },
+          { status: 400 }
+        );
+      }
+      throw error;
+    }
+
+    const { siteId, targetReduction } = validated;
+
+    // ✅ 과거 데이터 조회
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 30);
 
     const historicalData = await prisma.measurement.findMany({
       where: {
-        tenantId: session.user.tenantId,
-        receivedAt: {
+        tenantId,
+        time: {
           gte: startDate,
         },
         ...(siteId && {
@@ -34,20 +58,38 @@ export async function POST(request: NextRequest) {
       orderBy: {
         time: 'asc',
       },
+      take: 720,
     });
+
+    if (historicalData.length < 48) {
+      return NextResponse.json(
+        {
+          error: 'Insufficient data',
+          message: '최소 48시간의 데이터가 필요합니다',
+          required: 48,
+          current: historicalData.length,
+        },
+        { status: 400 }
+      );
+    }
 
     const formattedData = historicalData.map((m) => ({
       timestamp: m.time.toISOString(),
       value: parseFloat(m.value.toString()),
     }));
 
-    // 2. FastAPI 호출
-    const aiEngineUrl = process.env.AI_ENGINE_URL || 'http://localhost:8001';
-    const aiResponse = await fetch(`${aiEngineUrl}/api/optimize`, {
+    // ✅ AI Engine 호출
+    logger.info('Optimization request', { tenantId, siteId, targetReduction });
+
+    const aiResponse = await fetch(`${env.AI_ENGINE_URL}/api/optimize`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${env.AI_ENGINE_API_KEY}`,
+        'X-Tenant-ID': tenantId,
+      },
       body: JSON.stringify({
-        tenantId: session.user.tenantId,
+        tenantId,
         siteId: siteId || 'all',
         targetReduction,
         historicalData: formattedData,
@@ -55,6 +97,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (!aiResponse.ok) {
+      const errorText = await aiResponse.text();
+      logger.error('AI Engine error', {
+        tenantId,
+        siteId,
+        status: aiResponse.status,
+        error: errorText,
+      });
       throw new Error('AI Engine 호출 실패');
     }
 
@@ -66,7 +115,12 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Optimization error:', error);
+    logger.error('Optimization failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      tenantId: auth?.tenantId,
+    });
+
     return NextResponse.json(
       { error: 'Failed to generate optimization recommendations' },
       { status: 500 }

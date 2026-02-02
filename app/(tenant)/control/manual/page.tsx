@@ -2,12 +2,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { 
-  Power, 
-  AlertTriangle, 
+import {
+  Power,
+  AlertTriangle,
   CheckCircle,
-  Clock,
-  User,
   Settings,
 } from 'lucide-react';
 
@@ -91,7 +89,7 @@ export default function ManualControlPage() {
       });
 
       if (response.ok) {
-        const result = await response.json();
+        await response.json();
         alert(requiresApproval ? '승인 요청이 전송되었습니다.' : '제어 명령이 실행되었습니다.');
         
         // 폼 초기화
@@ -125,7 +123,7 @@ export default function ManualControlPage() {
   };
 
   const getCommandOptions = (deviceType: string) => {
-    const commands = {
+    const commands: Record<string, { value: string; label: string }[]> = {
       power_meter: [
         { value: 'reset', label: '계측기 리셋' },
         { value: 'calibrate', label: '캘리브레이션' },

@@ -1,8 +1,11 @@
 // app/api/ai/forecast/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth/session';
+import { verifyAuth } from '@/lib/auth/verify';
 import { prisma } from '@/lib/db/prisma';
+import { forecastRequestSchema, formatValidationError } from '@/lib/validation/schemas';
+import env from '@/lib/env';
+import logger from '@/lib/logger';
+import { z } from 'zod';
 
 /**
  * 🤖 AI 부하 예측 API
@@ -31,37 +34,47 @@ import { prisma } from '@/lib/db/prisma';
  * }
  */
 
-// AI Engine 설정
-const AI_ENGINE_URL = process.env.AI_ENGINE_URL || 'http://localhost:8001';
+const AI_ENGINE_URL = env.AI_ENGINE_URL; // ✅ 검증된 환경 변수 사용
 const MIN_DATA_POINTS = 48; // 최소 48시간 데이터
 const HISTORICAL_DAYS = 30;  // 과거 30일 데이터 사용
 
 export async function POST(request: NextRequest) {
+  let auth: Awaited<ReturnType<typeof verifyAuth>> | undefined;
   try {
-    // 1. 인증 확인
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    // ✅ 1. 인증 및 테넌트 검증 (3중 검증)
+    auth = await verifyAuth(request);
+    if (!auth) {
       return NextResponse.json(
         { error: 'Unauthorized', message: '로그인이 필요합니다' },
         { status: 401 }
       );
     }
 
-    const tenantId = session.user.tenantId;
-    if (!tenantId) {
-      return NextResponse.json(
-        { error: 'Invalid session', message: '테넌트 정보가 없습니다' },
-        { status: 400 }
-      );
+    const { tenantId } = auth; // ✅ DB에서 검증된 tenantId
+
+    // ✅ 2. 요청 파라미터 검증
+    const body = await request.json();
+    let validated;
+    try {
+      validated = forecastRequestSchema.parse(body);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return NextResponse.json(
+          {
+            error: 'Validation failed',
+            details: formatValidationError(error),
+          },
+          { status: 400 }
+        );
+      }
+      throw error;
     }
 
-    // 2. 요청 파라미터 파싱
-    const body = await request.json();
     const {
       siteId,
-      horizon = '24h',
-      features = ['hour', 'weekday', 'temperature'],
-    } = body;
+      horizon,
+      features,
+    } = validated;
 
     // 3. 과거 데이터 조회 (최근 30일)
     const startDate = new Date();
@@ -127,12 +140,13 @@ export async function POST(request: NextRequest) {
     }));
 
     // 6. AI Engine 호출
-    console.log(`[AI Forecast] Calling AI Engine: ${AI_ENGINE_URL}`);
+    logger.info('AI Forecast request', { tenantId, siteId, horizon });
     
     const aiResponse = await fetch(`${AI_ENGINE_URL}/api/forecast`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${env.AI_ENGINE_API_KEY}`, // ✅ API 키 추가
         'X-Tenant-ID': tenantId,
       },
       body: JSON.stringify({
@@ -152,7 +166,12 @@ export async function POST(request: NextRequest) {
     // 7. AI Engine 응답 처리
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error('[AI Forecast] AI Engine error:', errorText);
+      logger.error('AI Engine error', { 
+        tenantId, 
+        siteId, 
+        status: aiResponse.status,
+        error: errorText 
+      });
       
       // AI Engine 오류 시 폴백 (단순 평균 예측)
       const fallbackPredictions = generateFallbackPredictions(
@@ -169,7 +188,6 @@ export async function POST(request: NextRequest) {
         metadata: {
           fallback: true,
           reason: 'AI Engine unavailable',
-          error: errorText,
         },
       });
     }
@@ -183,22 +201,49 @@ export async function POST(request: NextRequest) {
       metadata = {},
     } = aiResult;
 
-    // 8. 예측 결과 DB 저장
-    const forecastResult = await prisma.forecastResult.create({
-      data: {
-        tenantId,
-        siteId: siteId || null,
-        horizon,
-        predictions: JSON.stringify(predictions), // JSON 배열로 저장
-        accuracy: confidence, // confidence를 accuracy 필드에 저장
-        model,
-        createdAt: new Date(),
-      },
+    // ✅ 8. 예측 결과 DB 저장 (트랜잭션으로 원자성 보장)
+    const forecastResult = await prisma.$transaction(async (tx) => {
+      const result = await tx.forecastResult.create({
+        data: {
+          tenantId,
+          siteId: siteId || null,
+          horizon,
+          predictions: predictions, // Prisma가 자동으로 JSON 변환
+          accuracy: confidence,
+          model,
+          createdAt: new Date(),
+        },
+      });
+
+      // ✅ 감사 로그 기록
+      await tx.auditLog.create({
+        data: {
+          tenantId,
+          userId: auth!.userId,
+          action: 'AI_FORECAST_GENERATED',
+          resourceType: 'FORECAST',
+          resourceId: result.id,
+          result: 'success',
+          metadata: {
+            siteId: siteId || 'all',
+            horizon,
+            model,
+            confidence,
+          },
+        },
+      }).catch((err) => {
+        logger.error('Failed to create audit log', { error: err });
+        // 감사 로그 실패해도 계속 진행 (선택적)
+      });
+
+      return result;
     });
 
-    console.log(
-      `[AI Forecast] Result saved: ID=${forecastResult.id}, Confidence=${confidence}`
-    );
+    logger.info('Forecast result saved', { 
+      forecastId: forecastResult.id, 
+      tenantId,
+      confidence 
+    });
 
     // 9. 성공 응답
     return NextResponse.json({
@@ -219,14 +264,19 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('[AI Forecast] Error:', error);
+    // ✅ 서버 로그에 상세 정보 기록
+    logger.error('Forecast generation failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      tenantId: auth?.tenantId,
+      userId: auth?.userId,
+    });
     
+    // ✅ 클라이언트에는 일반적인 메시지만 전달 (보안)
     return NextResponse.json(
       {
         success: false,
         error: 'Failed to generate forecast',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        details: process.env.NODE_ENV === 'development' ? error : undefined,
       },
       { status: 500 }
     );
@@ -237,19 +287,29 @@ export async function POST(request: NextRequest) {
  * GET: 예측 이력 조회
  */
 export async function GET(request: NextRequest) {
+  let auth: Awaited<ReturnType<typeof verifyAuth>> | undefined;
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    // ✅ 인증 및 테넌트 검증
+    auth = await verifyAuth(request);
+    if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
     const siteId = searchParams.get('siteId');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const limit = Math.min(Number(searchParams.get('limit') || '10'), 100); // ✅ 최대 100개 제한
+
+    // ✅ 입력 검증
+    if (siteId && !z.string().uuid().safeParse(siteId).success) {
+      return NextResponse.json(
+        { error: 'Invalid siteId format' },
+        { status: 400 }
+      );
+    }
 
     const forecasts = await prisma.forecastResult.findMany({
       where: {
-        tenantId: session.user.tenantId,
+        tenantId: auth.tenantId, // ✅ 검증된 tenantId만 사용
         ...(siteId && { siteId }),
       },
       orderBy: {
@@ -269,12 +329,16 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      forecasts,
+      data: forecasts,
       count: forecasts.length,
     });
 
   } catch (error) {
-    console.error('[AI Forecast] GET Error:', error);
+    logger.error('Failed to fetch forecast history', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      tenantId: auth?.tenantId,
+    });
+    
     return NextResponse.json(
       { error: 'Failed to fetch forecast history' },
       { status: 500 }

@@ -1,20 +1,16 @@
 // app/api/control/dr-events/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/db/prisma';
+import { prisma } from '@/lib/db/prisma';
 
 // GET: Get specific DR event
 export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } }
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const event = await prisma.drEvent.findUnique({
-      where: { id: params.id },
-      include: {
-        tenant: { select: { id: true, name: true } },
-        devices: { select: { id: true, name: true, type: true } },
-        logs: { orderBy: { createdAt: 'desc' } },
-      },
+      where: { id },
     });
 
     if (!event) {
@@ -37,9 +33,10 @@ export async function GET(
 // PATCH: Update DR event
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await req.json();
     const {
       name,
@@ -52,7 +49,7 @@ export async function PATCH(
     } = body;
 
     const event = await prisma.drEvent.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         ...(name && { name }),
         ...(description && { description }),
@@ -62,7 +59,6 @@ export async function PATCH(
         ...(compensation !== undefined && { compensation }),
         ...(status && { status }),
       },
-      include: { devices: true },
     });
 
     return NextResponse.json(event);
@@ -77,12 +73,13 @@ export async function PATCH(
 
 // DELETE: Delete DR event
 export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } }
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     await prisma.drEvent.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json(

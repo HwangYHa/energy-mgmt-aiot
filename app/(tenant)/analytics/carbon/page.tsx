@@ -6,8 +6,6 @@ import { useSession } from 'next-auth/react';
 import {
   BarChart,
   Bar,
-  LineChart,
-  Line,
   PieChart,
   Pie,
   Cell,
@@ -91,9 +89,9 @@ export default function CarbonAnalyticsPage() {
   const [error, setError] = useState<string | null>(null);
   
   // 모달 상태
-  const [showFuelModal, setShowFuelModal] = useState(false);
-  const [showTransportModal, setShowTransportModal] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [_showFuelModal, setShowFuelModal] = useState(false);
+  const [_showTransportModal, setShowTransportModal] = useState(false);
+  const [_showSettingsModal, setShowSettingsModal] = useState(false);
 
   useEffect(() => {
     if (session?.user) {
@@ -108,12 +106,7 @@ export default function CarbonAnalyticsPage() {
     try {
       // 월별 배출량
       const emissionsResponse = await fetch(
-        `/api/analytics/carbon/emissions?year=${year}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${session?.user?.accessToken}`,
-          },
-        }
+        `/api/analytics/carbon/emissions?year=${year}`
       );
 
       if (!emissionsResponse.ok) {
@@ -130,12 +123,7 @@ export default function CarbonAnalyticsPage() {
 
       // 탄소 발자국
       const footprintResponse = await fetch(
-        `/api/analytics/carbon/footprint?year=${year}&target=500`,
-        {
-          headers: {
-            'Authorization': `Bearer ${session?.user?.accessToken}`,
-          },
-        }
+        `/api/analytics/carbon/footprint?year=${year}&target=500`
       );
 
       if (!footprintResponse.ok) {
@@ -156,12 +144,7 @@ export default function CarbonAnalyticsPage() {
   const handleExportPDF = async () => {
     try {
       const response = await fetch(
-        `/api/analytics/carbon/export/pdf?year=${year}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${session?.user?.accessToken}`,
-          },
-        }
+        `/api/analytics/carbon/export/pdf?year=${year}`
       );
 
       if (!response.ok) throw new Error('PDF 생성 실패');
@@ -181,12 +164,7 @@ export default function CarbonAnalyticsPage() {
   const handleExportExcel = async () => {
     try {
       const response = await fetch(
-        `/api/analytics/carbon/export/excel?year=${year}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${session?.user?.accessToken}`,
-          },
-        }
+        `/api/analytics/carbon/export/excel?year=${year}`
       );
 
       if (!response.ok) throw new Error('Excel 생성 실패');

@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import {
   LineChart,
-  Line,
   AreaChart,
   Area,
   XAxis,
@@ -12,7 +11,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  ReferenceLine,
 } from 'recharts';
 import { TrendingUp, Zap, Target, AlertCircle, Loader2 } from 'lucide-react';
 

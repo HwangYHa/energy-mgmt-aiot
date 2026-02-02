@@ -5,8 +5,7 @@
  * {
  *   "email": "user@example.com",
  *   "password": "SecurePass123",
- *   "name": "John Doe",
- *   "tenantId": "uuid"
+ *   "name": "John Doe"
  * }
  * 
  * 응답: 201 Created
@@ -14,7 +13,8 @@
  *   "id": "user-uuid",
  *   "email": "user@example.com",
  *   "name": "John Doe",
- *   "role": "viewer"
+ *   "role": "tenant_admin",
+ *   "tenantId": "tenant-uuid"
  * }
  * 
  * 레이트 제한: IP당 3회/시간
@@ -22,12 +22,24 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { registerSchema, formatValidationError } from '@/lib/validation/schemas';
 import { rateLimitMiddleware, getSignupRateLimit } from '@/lib/middleware/rate-limit';
 import { logHttpRequest, logHttpResponse, logBusinessEvent, logSecurityEvent, logError } from '@/lib/logger';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import crypto from 'crypto';
+
+// ⭐ 간단한 회원가입 스키마 (tenantId 제거)
+const registerSchema = z.object({
+  email: z.string().email('Invalid email format').max(255, 'Email too long'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(100, 'Password too long')
+    .regex(/[A-Z]/, 'Password must contain uppercase letter')
+    .regex(/[a-z]/, 'Password must contain lowercase letter')
+    .regex(/[0-9]/, 'Password must contain number'),
+  name: z.string().min(1, 'Name required').max(100, 'Name too long'),
+});
 
 export async function POST(request: NextRequest) {
   const requestId = crypto.randomUUID();
@@ -90,75 +102,77 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json(
-        { error: 'Email already registered' },
+        { error: '이메일 주소가 이미 등록되었습니다.' },
         { status: 409 }
       );
     }
 
-    // ✅ 테넌트 존재 확인
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: validated.tenantId },
-      select: { id: true, status: true },
-    });
-
-    if (!tenant) {
-      logHttpResponse({
-        requestId,
-        method: 'POST',
-        path: '/api/auth/register',
-        statusCode: 404,
-        duration: 45,
+    // ✅ 트랜잭션으로 Tenant와 User 동시 생성
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Tenant 생성 (회사명은 사용자 이름 기반)
+      const tenant = await tx.tenant.create({
+        data: {
+          name: `${validated.name}'s Organization`,
+          industryType: 'other',
+          status: 'active',
+        },
       });
 
-      return NextResponse.json(
-        { error: 'Tenant not found' },
-        { status: 404 }
-      );
-    }
+      // 2. 비밀번호 해싱
+      const passwordHash = await bcrypt.hash(validated.password, 12);
 
-    if (tenant.status !== 'active') {
-      logHttpResponse({
-        requestId,
-        method: 'POST',
-        path: '/api/auth/register',
-        statusCode: 403,
-        duration: 45,
+      // 3. User 생성
+      const user = await tx.user.create({
+        data: {
+          email: validated.email,
+          name: validated.name,
+          tenantId: tenant.id,
+          passwordHash,
+          role: 'tenant_admin', // ⭐ 첫 사용자는 관리자
+          isActive: true,
+          isEmailVerified: false, // 이메일 인증은 나중에
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          tenantId: true,
+        },
       });
 
-      return NextResponse.json(
-        { error: 'Tenant is not active' },
-        { status: 403 }
-      );
-    }
+      // 4. 기본 Site 생성 (선택사항)
+      await tx.site.create({
+        data: {
+          tenantId: tenant.id,
+          name: 'Main Site',
+          code: 'MAIN',
+          siteType: 'factory',
+          isActive: true,
+        },
+      });
 
-    // ✅ 비밀번호 해싱
-    const passwordHash = await bcrypt.hash(validated.password, 12);
-
-    // ✅ 사용자 생성
-    const user = await prisma.user.create({
-      data: {
-        email: validated.email,
-        name: validated.name,
-        tenantId: validated.tenantId,
-        passwordHash,
-        role: 'viewer', // 기본 역할
-        isActive: true,
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-      },
+      return { user, tenant };
     });
 
     // ✅ 감사 로그
     logBusinessEvent({
       action: 'USER_REGISTERED',
       resourceType: 'USER',
-      resourceId: user.id,
-      userId: user.id,
-      tenantId: validated.tenantId,
+      resourceId: result.user.id,
+      userId: result.user.id,
+      tenantId: result.user.tenantId,
+      result: 'success',
+      ipAddress,
+      requestId,
+    });
+
+    logBusinessEvent({
+      action: 'TENANT_CREATED',
+      resourceType: 'TENANT',
+      resourceId: result.tenant.id,
+      userId: result.user.id,
+      tenantId: result.tenant.id,
       result: 'success',
       ipAddress,
       requestId,
@@ -169,11 +183,11 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       path: '/api/auth/register',
       statusCode: 201,
-      duration: 100,
-      userId: user.id,
+      duration: 150,
+      userId: result.user.id,
     });
 
-    return NextResponse.json(user, { status: 201 });
+    return NextResponse.json(result.user, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       logHttpResponse({

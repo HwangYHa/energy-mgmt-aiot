@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(mkdir:*)",
+      "Bash(rm:*)",
+      "Bash(mv:*)",
+      "Bash(cp:*)",
+      "Bash(npm:*)",
+      "Bash(pnpm:*)",
+      "Bash(git status)",
+      "Bash(git diff)",
+      "Bash(git ls-files)",
+      "Bash(test:*)",
+      "Bash(rename:*)",
+      "Bash(ren docker-compose.yml docker-compose.yml.bak)",
+      "Bash(head:*)",
+      "Bash(wc:*)"
+    ],
+    "deny": [
+      "Bash(sudo:*)",
+      "Bash(shutdown:*)",
+      "Bash(reboot:*)",
+      "Bash(dd:*)",
+      "Bash(curl http://*)",
+      "Bash(wget http://*)"
+    ]
+  }
+}

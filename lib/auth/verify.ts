@@ -1,6 +1,6 @@
 /**
  * lib/auth/verify.ts - 인증 및 테넌트 검증
- * 
+ *
  * 모든 API 라우트에서 사용:
  * const auth = await verifyAuth(request);
  * if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -11,6 +11,8 @@ import { jwtVerify } from 'jose';
 import { prisma } from '@/lib/db/prisma';
 import { TenantContext } from '@/lib/context/tenant-context';
 import env from '@/lib/env';
+import { UserRole, hasRoleOrHigher, hasAnyRole } from '@/lib/constants/roles';
+import { Permission, hasPermission, hasAnyPermission, hasAllPermissions } from '@/lib/constants/permissions';
 
 const secret = new TextEncoder().encode(env.JWT_SECRET);
 
@@ -126,7 +128,9 @@ export async function verifyAuth(
 }
 
 /**
- * 특정 역할 요구 검증
+ * 특정 역할 요구 검증 (기존 방식 - 하위 호환성 유지)
+ *
+ * @deprecated 새로운 코드에서는 requireRoleOrHigher 또는 requireAnyRole 사용 권장
  */
 export function requireRole(
   context: TenantContext | null,
@@ -137,7 +141,86 @@ export function requireRole(
 }
 
 /**
- * 두 테넌트 ID가 같은지 검증
+ * 특정 역할 또는 그 이상의 권한 요구
+ *
+ * @example
+ * // site_manager 이상 권한 필요 (site_manager, tenant_admin, super_admin 허용)
+ * if (!requireRoleOrHigher(auth, UserRole.SITE_MANAGER)) {
+ *   return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+ * }
+ */
+export function requireRoleOrHigher(
+  context: TenantContext | null,
+  minimumRole: UserRole
+): boolean {
+  if (!context) return false;
+  return hasRoleOrHigher(context.role, minimumRole);
+}
+
+/**
+ * 여러 역할 중 하나라도 만족하는지 검증
+ *
+ * @example
+ * // site_manager 또는 operator 필요
+ * if (!requireAnyRole(auth, [UserRole.SITE_MANAGER, UserRole.OPERATOR])) {
+ *   return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+ * }
+ */
+export function requireAnyRole(
+  context: TenantContext | null,
+  allowedRoles: UserRole[]
+): boolean {
+  if (!context) return false;
+  return hasAnyRole(context.role, allowedRoles);
+}
+
+/**
+ * 세밀한 권한 검증 (Permission 기반)
+ *
+ * @example
+ * // 사이트 생성 권한 필요
+ * if (!requirePermission(auth, Permissions.SITE_CREATE)) {
+ *   return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
+ * }
+ */
+export function requirePermission(
+  context: TenantContext | null,
+  permission: Permission
+): boolean {
+  if (!context) return false;
+  return hasPermission(context.role as UserRole, permission);
+}
+
+/**
+ * 여러 권한 중 하나라도 가지는지 검증
+ */
+export function requireAnyPermission(
+  context: TenantContext | null,
+  permissions: Permission[]
+): boolean {
+  if (!context) return false;
+  return hasAnyPermission(context.role as UserRole, permissions);
+}
+
+/**
+ * 모든 권한을 가지는지 검증
+ */
+export function requireAllPermissions(
+  context: TenantContext | null,
+  permissions: Permission[]
+): boolean {
+  if (!context) return false;
+  return hasAllPermissions(context.role as UserRole, permissions);
+}
+
+/**
+ * 두 테넌트 ID가 같은지 검증 (Multi-tenancy 격리)
+ *
+ * @example
+ * const site = await prisma.site.findUnique({ where: { id: siteId } });
+ * if (!validateTenantMatch(auth.tenantId, site.tenantId)) {
+ *   return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+ * }
  */
 export function validateTenantMatch(
   contextTenantId: string,
@@ -150,4 +233,19 @@ export function validateTenantMatch(
     return false;
   }
   return true;
+}
+
+/**
+ * super_admin 권한 확인
+ */
+export function isSuperAdmin(context: TenantContext | null): boolean {
+  return context?.role === UserRole.SUPER_ADMIN;
+}
+
+/**
+ * tenant_admin 이상 권한 확인
+ */
+export function isTenantAdmin(context: TenantContext | null): boolean {
+  if (!context) return false;
+  return requireRoleOrHigher(context, UserRole.TENANT_ADMIN);
 }

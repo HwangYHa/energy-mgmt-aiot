@@ -2,12 +2,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { 
-  Zap, 
-  TrendingUp, 
+import {
+  Zap,
+  TrendingUp,
   TrendingDown,
   AlertTriangle,
-  CheckCircle,
   Leaf,
   Target,
   Activity,

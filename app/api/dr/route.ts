@@ -12,13 +12,13 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams;
-    const status = searchParams.get('status');
+    const statusParam = searchParams.get('status');
 
     // TODO: DB에서 DR 이벤트 조회
     const events = await prisma.drEvent.findMany({
       where: {
         tenantId: session.user.tenantId,
-        ...(status && { status }),
+        ...(statusParam && { status: statusParam as any }),
       },
       orderBy: { startTime: 'desc' },
     });

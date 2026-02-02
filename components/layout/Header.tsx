@@ -20,7 +20,7 @@ export default function Header() {
   const router = useRouter();
   const [user, setUser] = useState<UserInfo | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [notificationCount, setNotificationCount] = useState(0);
+  const [notificationCount, _setNotificationCount] = useState(0);
 
   useEffect(() => {
     fetchUserInfo();

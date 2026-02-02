@@ -1,6 +1,7 @@
 // app/layout.tsx
 import './globals.css';
 import type { Metadata } from 'next';
+import { SessionProvider } from '@/components/providers/SessionProvider';
 
 export const metadata: Metadata = {
   title: '에너지 관리 플랫폼',
@@ -13,9 +14,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ko">
-      <body className="bg-slate-900 text-white">
-        {children}
+    <html lang="ko" className="dark">
+      <body className="bg-dark-bg text-white antialiased">
+        <SessionProvider>
+          {children}
+        </SessionProvider>
       </body>
     </html>
   );

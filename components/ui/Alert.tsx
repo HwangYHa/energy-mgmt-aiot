@@ -39,6 +39,7 @@ export function Alert({
         <div className="flex-1">
           <h3 className={titleStyles[severity]}>{title}</h3>
           <p className="text-sm mt-1 opacity-90">{message}</p>
+
           {onAction && actionLabel && (
             <button
               onClick={onAction}
@@ -48,18 +49,17 @@ export function Alert({
             </button>
           )}
         </div>
+
         {dismissible && (
           <button
             onClick={onDismiss}
             className="text-lg opacity-60 hover:opacity-100 transition flex-shrink-0"
+            aria-label="Dismiss alert"
           >
             ✕
           </button>
         )}
       </div>
-    </div>
-  );
-}
     </div>
   );
 }

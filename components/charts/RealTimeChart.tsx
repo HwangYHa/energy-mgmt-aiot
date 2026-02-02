@@ -3,15 +3,19 @@
 
 import { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { io, Socket } from 'socket.io-client';
+// TODO: Install socket.io-client package
+// import { io, Socket } from 'socket.io-client';
 
-interface MeasurementData {
-  timestamp: string;
-  deviceId: string;
-  metricKey: string;
-  value: number;
-  quality: string;
-}
+type Socket = any;
+
+// TODO: Will be used when socket.io-client is installed
+// interface MeasurementData {
+//   timestamp: string;
+//   deviceId: string;
+//   metricKey: string;
+//   value: number;
+//   quality: string;
+// }
 
 interface ChartDataPoint {
   time: string;
@@ -31,14 +35,23 @@ export default function RealTimeChart({
   title = '실시간 데이터',
   maxDataPoints = 20,
 }: RealTimeChartProps) {
-  const [data, setData] = useState<ChartDataPoint[]>([]);
+  const [data, _setData] = useState<ChartDataPoint[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const [_socket, setSocket] = useState<Socket | null>(null);
 
   useEffect(() => {
-    // WebSocket 연결
+    // TODO: Implement socket.io connection when package is installed
+    console.log('RealTimeChart: socket.io-client not installed, skipping WebSocket connection');
+    console.log('Device ID:', deviceId, 'Metric Key:', metricKey);
+
+    // Stub: Set disconnected state
+    setIsConnected(false);
+    setSocket(null);
+
+    // WebSocket 연결 (commented out until socket.io-client is installed)
+    /*
     const token = localStorage.getItem('accessToken');
-    
+
     if (!token) {
       console.error('No access token found');
       return;
@@ -54,7 +67,7 @@ export default function RealTimeChart({
     newSocket.on('connect', () => {
       console.log('✅ Connected to WebSocket');
       setIsConnected(true);
-      
+
       // 디바이스 구독
       newSocket.emit('subscribe', { deviceIds: [deviceId] });
     });
@@ -99,6 +112,7 @@ export default function RealTimeChart({
       newSocket.emit('unsubscribe', { deviceIds: [deviceId] });
       newSocket.disconnect();
     };
+    */
   }, [deviceId, metricKey, maxDataPoints]);
 
   return (

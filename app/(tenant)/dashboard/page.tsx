@@ -9,25 +9,6 @@ import { StatusIndicator } from '@/components/ui/StatusIndicator';
 import { Alert } from '@/components/ui/Alert';
 import { ControlPanel } from '@/components/ui/ControlPanel';
 
-interface DashboardStats {
-  sites: number;
-  devices: {
-    total: number;
-    online: number;
-    offline: number;
-  };
-  energy: {
-    current: number;
-    today: number;
-    thisMonth: number;
-  };
-  alerts: {
-    critical: number;
-    warning: number;
-    info: number;
-  };
-}
-
 export default function DashboardPage() {
   const [currentTime, setCurrentTime] = useState<string>('');
   const [isPeakHours, setIsPeakHours] = useState(false);

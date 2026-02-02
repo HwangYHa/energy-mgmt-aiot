@@ -8,13 +8,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
-  LineChart,
-  Line,
-  ComposedChart,
 } from 'recharts';
-import { AlertTriangle, Zap, TrendingDown, Clock, Loader2 } from 'lucide-react';
+import { AlertTriangle, Zap, TrendingDown, Loader2 } from 'lucide-react';
 
 interface Anomaly {
   index: number;
