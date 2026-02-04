@@ -3,7 +3,6 @@ import { prisma } from '@/lib/db/prisma';
 import {
   getCurrentEmissionFactor,
   calculateEmission,
-  ELECTRICITY_FACTORS,
 } from '@/lib/constants/emission-factors';
 
 /**
@@ -149,8 +148,8 @@ export class EmissionsService {
 
     // 기간 파싱
     const [year, month] = period.split('-').map(Number);
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0);
+    const startDate = new Date(year!, month! - 1, 1);
+    const endDate = new Date(year!, month!, 0);
 
     // 각 Scope별 계산
     const [scope1, scope2, scope3] = await Promise.all([
@@ -214,8 +213,9 @@ export class EmissionsService {
     siteId?: string
   ): Promise<EmissionBreakdown[]> {
     const [year, month] = period.split('-').map(Number);
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0);
+    // Period format is always "YYYY-MM"
+    const startDate = new Date(year!, month! - 1, 1);
+    const endDate = new Date(year!, month!, 0);
 
     // Scope 2: 전력
     const scope2Emission = await this.calculateScope2Electricity(

@@ -1,52 +1,21 @@
 // app/web/components/layout/Header.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 import { Bell, User, LogOut, Settings, ChevronDown } from 'lucide-react';
-
-interface UserInfo {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  tenant: {
-    id: string;
-    name: string;
-  };
-}
 
 export default function Header() {
   const router = useRouter();
-  const [user, setUser] = useState<UserInfo | null>(null);
+  const { data: session } = useSession();
   const [showDropdown, setShowDropdown] = useState(false);
   const [notificationCount, _setNotificationCount] = useState(0);
 
-  useEffect(() => {
-    fetchUserInfo();
-  }, []);
+  const user = session?.user;
 
-  const fetchUserInfo = async () => {
-    try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('http://localhost:4000/api/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.user);
-      }
-    } catch (error) {
-      console.error('Failed to fetch user info:', error);
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
+  const handleLogout = async () => {
+    await signOut({ redirect: false });
     router.push('/login');
   };
 
@@ -68,7 +37,7 @@ export default function Header() {
         {user && (
           <div>
             <h2 className="text-xl font-semibold text-gray-800">
-              {user.tenant.name}
+              Energy Management
             </h2>
             <p className="text-sm text-gray-500">
               Energy Management System
@@ -96,7 +65,7 @@ export default function Header() {
             className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors"
           >
             <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-              {user?.name.charAt(0).toUpperCase()}
+              {user?.name?.charAt(0).toUpperCase() || 'U'}
             </div>
             <div className="text-left">
               <div className="text-sm font-medium text-gray-800">

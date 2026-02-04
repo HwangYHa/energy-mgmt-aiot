@@ -99,7 +99,7 @@ export async function verifyAuth(
           resourceId: userId,
           result: 'failure',
           errorMessage: `Token tampering: claimed tenant ${claimedTenantId} != actual tenant ${user.tenantId}`,
-          ipAddress: request.ip,
+          ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
         },
       }).catch((err) => console.error('Failed to log audit event:', err));
 
@@ -239,7 +239,7 @@ export function validateTenantMatch(
  * super_admin 권한 확인
  */
 export function isSuperAdmin(context: TenantContext | null): boolean {
-  return context?.role === UserRole.SUPER_ADMIN;
+  return context?.role === 'super_admin';
 }
 
 /**
@@ -247,5 +247,5 @@ export function isSuperAdmin(context: TenantContext | null): boolean {
  */
 export function isTenantAdmin(context: TenantContext | null): boolean {
   if (!context) return false;
-  return requireRoleOrHigher(context, UserRole.TENANT_ADMIN);
+  return requireRoleOrHigher(context, 'tenant_admin' as UserRole);
 }

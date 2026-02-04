@@ -69,18 +69,31 @@ export const authOptions: NextAuthOptions = {
       : []),
     // 2. Credentials (email/password login)
     CredentialsProvider({
+      id: 'credentials', // Explicit ID to match signIn('credentials', ...)
       name: 'Credentials',
       credentials: {
         email: { label: 'Email', type: 'email', placeholder: 'name@example.com' },
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials, req) {
+        // CRITICAL DEBUG: This MUST appear in logs
+        console.log('==========================================');
+        console.log('[NextAuth] AUTHORIZE FUNCTION CALLED');
+        console.log('[NextAuth] Credentials received:', {
+          hasEmail: !!credentials?.email,
+          hasPassword: !!credentials?.password,
+          email: credentials?.email,
+        });
+        console.log('==========================================');
+
         if (!credentials?.email || !credentials?.password) {
+          console.error('[NextAuth] Missing credentials');
           throw new Error('Missing email or password');
         }
 
         try {
           // 1. Find user in database
+          console.log('[NextAuth] Finding user:', credentials.email);
           const user = await prisma.user.findUnique({
             where: { email: credentials.email },
             select: {
@@ -97,28 +110,36 @@ export const authOptions: NextAuthOptions = {
           });
 
           if (!user) {
+            console.error('[NextAuth] User not found:', credentials.email);
             throw new Error('User not found');
           }
 
+          console.log('[NextAuth] User found:', { id: user.id, email: user.email, role: user.role });
+
           if (!user.passwordHash || user.passwordHash === 'OAUTH_USER') {
+            console.error('[NextAuth] OAuth-only account');
             throw new Error('OAuth-only account');
           }
 
           // 2. Account lock validation
           if (user.lockedUntil && new Date() < user.lockedUntil) {
+            console.error('[NextAuth] Account locked');
             throw new Error('Account is locked. Try again later.');
           }
 
           // 3. Active status validation
           if (!user.isActive) {
+            console.error('[NextAuth] Account inactive');
             throw new Error('User account is inactive');
           }
 
           // 4. Password validation
+          console.log('[NextAuth] Validating password');
           const passwordValid = await bcrypt.compare(
             credentials.password,
             user.passwordHash
           );
+          console.log('[NextAuth] Password valid:', passwordValid);
 
           if (!passwordValid) {
             // Security: Increment failure count
@@ -187,16 +208,16 @@ export const authOptions: NextAuthOptions = {
         hasProfile: !!profile,
       });
 
-      // OAuth login case
-      if (account?.provider === 'google') {
+      // OAuth login case (Google or Naver)
+      if (account?.provider === 'google' || account?.provider === 'naver') {
         try {
           const email = user.email;
           if (!email) {
-            console.error('[NextAuth] No email from Google profile');
+            console.error(`[NextAuth] No email from ${account.provider} profile`);
             return false;
           }
 
-          console.log('[NextAuth] Checking existing user:', email);
+          console.log(`[NextAuth] ${account.provider} login - Checking existing user:`, email);
 
           // Validate existing user
           let dbUser = await prisma.user.findUnique({
@@ -212,7 +233,7 @@ export const authOptions: NextAuthOptions = {
 
           // Create new user if not exists
           if (!dbUser) {
-            console.log('[NextAuth] Creating new Google user:', email);
+            console.log(`[NextAuth] Creating new ${account.provider} user:`, email);
 
             // Create default tenant
             const tenant = await prisma.tenant.create({
@@ -226,12 +247,14 @@ export const authOptions: NextAuthOptions = {
             console.log('[NextAuth] Tenant created:', tenant.id);
 
             // Create user
+            // First user (tenant creator) is admin, others are viewers
+            const isFirstUser = true; // Creating new tenant, so this is the first user
             dbUser = await prisma.user.create({
               data: {
                 email,
                 name: (user.name || email.split('@')[0]) as string,
                 tenantId: tenant.id,
-                role: 'tenant_admin', // Google login users are admins
+                role: isFirstUser ? 'tenant_admin' : 'viewer',
                 isActive: true,
                 isEmailVerified: true, // OAuth emails are verified
                 passwordHash: 'OAUTH_USER',
@@ -246,7 +269,7 @@ export const authOptions: NextAuthOptions = {
               },
             });
 
-            console.log('[NextAuth] Google user created:', dbUser.id);
+            console.log(`[NextAuth] ${account.provider} user created:`, dbUser.id);
           } else {
             console.log('[NextAuth] Existing user found:', dbUser.id);
 
@@ -273,7 +296,7 @@ export const authOptions: NextAuthOptions = {
 
           // Inactive account validation
           if (!dbUser.isActive) {
-            console.error('[NextAuth] Google user is inactive:', email);
+            console.error(`[NextAuth] ${account.provider} user is inactive:`, email);
             return false;
           }
 
@@ -282,7 +305,7 @@ export const authOptions: NextAuthOptions = {
           (user as any).tenantId = dbUser.tenantId;
           (user as any).role = dbUser.role;
 
-          console.log('[NextAuth] Google sign in successful:', {
+          console.log(`[NextAuth] ${account.provider} sign in successful:`, {
             email,
             userId: dbUser.id,
             tenantId: dbUser.tenantId,
@@ -291,7 +314,7 @@ export const authOptions: NextAuthOptions = {
 
           return true;
         } catch (error) {
-          console.error('[NextAuth] Google OAuth sign in error:', error);
+          console.error(`[NextAuth] ${account.provider} OAuth sign in error:`, error);
           return false;
         }
       }
@@ -401,10 +424,74 @@ export const authOptions: NextAuthOptions = {
     maxAge: 24 * 60 * 60,
   },
 
+  // 🔒 Secure Cookie Configuration
+  // CRITICAL: __Secure__ and __Host__ prefixes ONLY work with HTTPS
+  // In development (HTTP), use standard cookie names
+  cookies: process.env.NODE_ENV === 'production'
+    ? {
+        sessionToken: {
+          name: `__Secure-next-auth.session-token`,
+          options: {
+            httpOnly: true,
+            sameSite: 'lax',
+            path: '/',
+            secure: true,
+          },
+        },
+        callbackUrl: {
+          name: `__Secure-next-auth.callback-url`,
+          options: {
+            httpOnly: true,
+            sameSite: 'lax',
+            path: '/',
+            secure: true,
+          },
+        },
+        csrfToken: {
+          name: `__Host-next-auth.csrf-token`,
+          options: {
+            httpOnly: true,
+            sameSite: 'lax',
+            path: '/',
+            secure: true,
+          },
+        },
+      }
+    : {
+        // Development: Standard cookie names (no secure prefix)
+        sessionToken: {
+          name: `next-auth.session-token`,
+          options: {
+            httpOnly: true,
+            sameSite: 'lax',
+            path: '/',
+            secure: false,
+          },
+        },
+        callbackUrl: {
+          name: `next-auth.callback-url`,
+          options: {
+            httpOnly: true,
+            sameSite: 'lax',
+            path: '/',
+            secure: false,
+          },
+        },
+        csrfToken: {
+          name: `next-auth.csrf-token`,
+          options: {
+            httpOnly: true,
+            sameSite: 'lax',
+            path: '/',
+            secure: false,
+          },
+        },
+      },
+
   secret: NEXTAUTH_SECRET,
 
-  // CRITICAL: Enable debug logs (development environment)
-  debug: true, // Disable logs before deployment
+  // CRITICAL: Enable debug logs (development environment only)
+  debug: process.env.NODE_ENV === 'development',
 
   // CRITICAL: Event hooks (audit logs)
   events: {

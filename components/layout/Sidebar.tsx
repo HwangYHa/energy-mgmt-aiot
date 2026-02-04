@@ -1,165 +1,127 @@
 // app/web/components/layout/Sidebar.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
-  LayoutDashboard, 
-  Activity, 
-  Building2, 
-  Sliders, 
-  BarChart3, 
-  Leaf,
-  Shield,
-  Bell,
-  Zap,
-  Settings,
-  ChevronDown,
-  Star,
-  ShieldCheck,
-} from 'lucide-react';
+import { useSession } from 'next-auth/react';
+import { UserRole } from '@prisma/client';
+import { Zap, ChevronDown, Lock } from 'lucide-react';
+import { iconMap } from './icon-map';
 
 interface MenuItem {
   id: string;
   code: string;
   name: string;
-  icon: string;
-  path: string;
-  isFavorite: boolean;
+  icon: string | null;
+  path: string | null;
+  displayOrder: number;
+  minRole: UserRole;
+  badgeType?: string;
+  badgeColor?: string | null;
 }
 
 interface MenuGroup {
   id: string;
   code: string;
   name: string;
-  icon: string;
+  icon: string | null;
   displayOrder: number;
+  minRole: UserRole;
   items: MenuItem[];
 }
 
-// 아이콘 매핑
-const iconMap: Record<string, any> = {
-  LayoutDashboard,
-  Activity,
-  Building2,
-  Sliders,
-  BarChart3,
-  Leaf,
-  Shield,
-  Bell,
-  Zap,
-  Settings,
-  ShieldCheck,
-  Gauge: Activity,
-  Building: Building2,
-  Cpu: Activity,
-  Hand: Sliders,
-  Calendar: Activity,
-  DollarSign: BarChart3,
-  Calculator: BarChart3,
-  Target: BarChart3,
-  Database: Activity,
-  Layers: BarChart3,
-  FileText: Shield,
-  CheckSquare: Shield,
-  FileSearch: Shield,
-  History: Activity,
-  MessageSquare: Bell,
-  User: Settings,
-  Users: Settings,
-  CreditCard: Settings,
-  Plug: Settings,
-};
-
 export default function Sidebar() {
   const pathname = usePathname();
+  const { data: session, status } = useSession();
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    new Set(['대시보드'])
+  );
   const [menuGroups, setMenuGroups] = useState<MenuGroup[]>([]);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  const userRole = (session?.user?.role as UserRole) || ('viewer' as UserRole);
+
+  // API에서 메뉴 조회
   useEffect(() => {
-    fetchMenu();
-  }, []);
+    console.log('[Sidebar] useEffect triggered:', {
+      status,
+      hasSession: !!session,
+      hasUser: !!session?.user,
+      userRole: session?.user?.role,
+    });
 
-  const fetchMenu = async () => {
-    try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('http://localhost:4000/api/menu', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+    async function fetchMenus() {
+      console.log('[Sidebar] fetchMenus called');
+      try {
+        setIsLoading(true);
+        setError(null);
 
-      if (response.ok) {
-        const data = await response.json();
-        setMenuGroups(data);
-        
-        // 현재 경로가 속한 그룹 자동 확장
-        const currentGroup = data.find((group: MenuGroup) =>
-          group.items.some((item: MenuItem) => pathname.startsWith(item.path))
-        );
-        if (currentGroup) {
-          setExpandedGroups(new Set([currentGroup.code]));
+        const response = await fetch('/api/menus');
+        console.log('[Sidebar] API response:', response.status);
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            throw new Error('인증이 필요합니다. 다시 로그인해주세요.');
+          }
+          throw new Error(`메뉴를 불러올 수 없습니다 (${response.status})`);
         }
-      }
-    } catch (error) {
-      console.error('Failed to fetch menu:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  const toggleGroup = (groupCode: string) => {
+        const data = await response.json();
+        console.log('[Sidebar] API data:', data);
+
+        if (!data.success || !data.data) {
+          throw new Error('잘못된 응답 형식입니다.');
+        }
+
+        setMenuGroups(data.data);
+        console.log('[Sidebar] Menus set successfully');
+      } catch (error) {
+        console.error('[Sidebar] Failed to fetch menus:', error);
+        setError(error instanceof Error ? error.message : '메뉴를 불러올 수 없습니다.');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    // 세션 로딩 중
+    if (status === 'loading') {
+      console.log('[Sidebar] Status is loading, waiting...');
+      setIsLoading(true);
+      return;
+    }
+
+    // 세션 없음 또는 미인증
+    if (status === 'unauthenticated' || !session || !session.user) {
+      console.log('[Sidebar] Not authenticated or no session/user');
+      setIsLoading(false);
+      setError('로그인이 필요합니다.');
+      return;
+    }
+
+    // 인증됨 - 메뉴 조회
+    if (status === 'authenticated' && session && session.user) {
+      console.log('[Sidebar] Authenticated, fetching menus...');
+      fetchMenus();
+    }
+  }, [session, status]);
+
+  const toggleGroup = (groupName: string) => {
     setExpandedGroups((prev) => {
       const newSet = new Set(prev);
-      if (newSet.has(groupCode)) {
-        newSet.delete(groupCode);
+      if (newSet.has(groupName)) {
+        newSet.delete(groupName);
       } else {
-        newSet.add(groupCode);
+        newSet.add(groupName);
       }
       return newSet;
     });
   };
 
-  const toggleFavorite = async (menuItemId: string, isFavorite: boolean) => {
-    try {
-      const token = localStorage.getItem('accessToken');
-      const method = isFavorite ? 'DELETE' : 'POST';
-      
-      await fetch(`http://localhost:4000/api/menu/favorites/${menuItemId}`, {
-        method,
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      // 메뉴 새로고침
-      fetchMenu();
-    } catch (error) {
-      console.error('Failed to toggle favorite:', error);
-    }
-  };
-
   const getIcon = (iconName: string) => {
-    const Icon = iconMap[iconName] || Activity;
-    return Icon;
+    return iconMap[iconName] || iconMap.Activity;
   };
-
-  if (isLoading) {
-    return (
-      <div className="w-64 bg-gray-900 text-white p-4">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-700 rounded mb-4"></div>
-          <div className="space-y-2">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-10 bg-gray-700 rounded"></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="w-64 bg-gray-900 text-white h-screen overflow-y-auto">
@@ -171,45 +133,89 @@ export default function Sidebar() {
         </Link>
       </div>
 
+      {/* 역할 뱃지 */}
+      <div className="p-4 border-b border-gray-700">
+        <div className="flex items-center gap-2 text-sm">
+          {userRole === 'viewer' && (
+            <>
+              <Lock className="w-4 h-4 text-gray-400" />
+              <span className="text-gray-400">읽기 전용</span>
+            </>
+          )}
+          {userRole === 'operator' && (
+            <span className="px-2 py-1 bg-blue-600 rounded text-xs">운영자</span>
+          )}
+          {userRole === 'site_manager' && (
+            <span className="px-2 py-1 bg-green-600 rounded text-xs">
+              사이트 관리자
+            </span>
+          )}
+          {userRole === 'tenant_admin' && (
+            <span className="px-2 py-1 bg-purple-600 rounded text-xs">
+              테넌트 관리자
+            </span>
+          )}
+          {userRole === 'super_admin' && (
+            <span className="px-2 py-1 bg-red-600 rounded text-xs">
+              슈퍼 관리자
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* 메뉴 그룹 */}
       <div className="p-4 space-y-2">
-        {menuGroups.map((group) => {
-          const isExpanded = expandedGroups.has(group.code);
-          const GroupIcon = getIcon(group.icon);
+        {isLoading ? (
+          <div className="text-center text-gray-400 py-8">메뉴 로딩 중...</div>
+        ) : error ? (
+          <div className="text-center text-red-400 py-8 px-4">
+            <p className="text-sm mb-2">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="text-xs text-blue-400 hover:text-blue-300 underline"
+            >
+              새로고침
+            </button>
+          </div>
+        ) : menuGroups.length === 0 ? (
+          <div className="text-center text-gray-400 py-8 px-4">
+            <p className="text-sm">메뉴가 없습니다.</p>
+          </div>
+        ) : (
+          menuGroups.map((group) => {
+            const isExpanded = expandedGroups.has(group.name);
+            const GroupIcon = getIcon(group.icon || 'Activity');
 
-          return (
-            <div key={group.id}>
-              {/* 그룹 헤더 */}
-              <button
-                onClick={() => toggleGroup(group.code)}
-                className="w-full flex items-center justify-between p-2 rounded hover:bg-gray-800 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <GroupIcon className="w-5 h-5" />
-                  <span className="font-medium">{group.name}</span>
-                </div>
-                <ChevronDown
-                  className={`w-4 h-4 transition-transform ${
-                    isExpanded ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
+            return (
+              <div key={group.id}>
+                {/* 그룹 헤더 */}
+                <button
+                  onClick={() => toggleGroup(group.name)}
+                  className="w-full flex items-center justify-between p-2 rounded hover:bg-gray-800 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <GroupIcon className="w-5 h-5" />
+                    <span className="font-medium">{group.name}</span>
+                  </div>
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform ${
+                      isExpanded ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
 
-              {/* 메뉴 아이템 */}
-              {isExpanded && (
-                <div className="ml-4 mt-1 space-y-1">
-                  {group.items.map((item) => {
-                    const isActive = pathname === item.path;
-                    const ItemIcon = getIcon(item.icon);
+                {/* 메뉴 아이템 */}
+                {isExpanded && (
+                  <div className="ml-4 mt-1 space-y-1">
+                    {group.items.map((item) => {
+                      const isActive = pathname === item.path;
+                      const ItemIcon = getIcon(item.icon || 'Activity');
 
-                    return (
-                      <div
-                        key={item.id}
-                        className="flex items-center gap-1"
-                      >
+                      return (
                         <Link
-                          href={item.path}
-                          className={`flex-1 flex items-center gap-2 p-2 rounded text-sm transition-colors ${
+                          key={item.id}
+                          href={item.path || '#'}
+                          className={`flex items-center gap-2 p-2 rounded text-sm transition-colors ${
                             isActive
                               ? 'bg-blue-600 text-white'
                               : 'text-gray-300 hover:bg-gray-800'
@@ -217,29 +223,20 @@ export default function Sidebar() {
                         >
                           <ItemIcon className="w-4 h-4" />
                           <span>{item.name}</span>
-                        </Link>
-
-                        {/* 즐겨찾기 버튼 */}
-                        <button
-                          onClick={() => toggleFavorite(item.id, item.isFavorite)}
-                          className="p-1 rounded hover:bg-gray-800"
-                        >
-                          <Star
-                            className={`w-4 h-4 ${
-                              item.isFavorite
-                                ? 'fill-yellow-400 text-yellow-400'
-                                : 'text-gray-500'
-                            }`}
-                          />
-                        </button>
-                      </div>
+                          {item.badgeType && item.badgeType !== 'none' && (
+                            <span className="ml-auto px-1.5 py-0.5 bg-green-500 text-xs rounded">
+                              {item.badgeType}
+                            </span>
+                          )}
+                      </Link>
                     );
                   })}
                 </div>
               )}
             </div>
           );
-        })}
+        })
+        )}
       </div>
     </div>
   );

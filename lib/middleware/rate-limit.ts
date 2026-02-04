@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
-import env from '@/lib/env';
 import { logSecurityEvent } from '@/lib/logger';
 
 /**
@@ -75,7 +74,6 @@ export async function checkRateLimit(config: RateLimitConfig): Promise<{
 }> {
   const { key, limit, windowMs } = config;
   const now = Date.now();
-  const windowStart = now - windowMs;
 
   try {
     if (redis) {

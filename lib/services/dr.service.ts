@@ -55,17 +55,17 @@ export class DRService {
     };
   }
 
-  static async cancelEvent(eventId: string): Promise<void> {
+  static async cancelEvent(_eventId: string): Promise<void> {
     // TODO: 이벤트 취소 로직
   }
 
-  static async getEventStatus(eventId: string): Promise<DREvent | null> {
+  static async getEventStatus(_eventId: string): Promise<DREvent | null> {
     return null;
   }
 
   static async getEventHistory(
-    tenantId: string,
-    days: number = 30
+    _tenantId: string,
+    _days: number = 30
   ): Promise<DREvent[]> {
     return [];
   }
@@ -86,7 +86,7 @@ export class DROptimizer {
   static optimizeDeviceSelection(
     availableDevices: Array<{ id: string; reduction_capacity: number }>,
     targetReduction: number,
-    priority: string = 'cost_effective'
+    _priority: string = 'cost_effective'
   ): string[] {
     const sortedDevices = availableDevices.sort((a, b) =>
       b.reduction_capacity - a.reduction_capacity

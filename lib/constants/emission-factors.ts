@@ -308,8 +308,8 @@ export function getCurrentEmissionFactor(
   category: string,
   sourceType: string
 ): EmissionFactor | undefined {
-  const today = new Date().toISOString().split('T')[0];
-  
+  const today = new Date().toISOString().split('T')[0]!; // ISO date string always has T separator
+
   const factors = ALL_EMISSION_FACTORS.filter(
     (f) =>
       f.category === category &&

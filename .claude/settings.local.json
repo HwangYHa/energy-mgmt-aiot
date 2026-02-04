@@ -17,7 +17,15 @@
       "Bash(rename:*)",
       "Bash(ren docker-compose.yml docker-compose.yml.bak)",
       "Bash(head:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "Bash(for file in lib/services/control.service.ts lib/services/device.service.ts lib/services/schedule.service.ts lib/services/site.service.ts lib/services/tenant.service.ts)",
+      "Bash(do mv \"$file\" \"$file.bak\")",
+      "Bash(done)",
+      "Bash(tail:*)",
+      "Bash(npx tsx:*)",
+      "Bash(tee:*)",
+      "Bash(timeout:*)"
     ],
     "deny": [
       "Bash(sudo:*)",

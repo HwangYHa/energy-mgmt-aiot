@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-interface EnergyGaugeProps {
+export interface EnergyGaugeProps {
   current: number;
   max: number;
   unit?: string;

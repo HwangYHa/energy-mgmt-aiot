@@ -142,7 +142,7 @@ export function maskSensitiveData(obj: any, model?: string): any {
   }
 
   const masked = { ...obj };
-  const sensitiveFields = model ? SENSITIVE_FIELDS[model as any] || [] : [];
+  const sensitiveFields = model ? (SENSITIVE_FIELDS as any)[model] || [] : [];
 
   // 자동으로 민감한 필드 마스킹
   [
@@ -163,9 +163,9 @@ export function maskSensitiveData(obj: any, model?: string): any {
   });
 
   // 모델별 민감한 필드 마스킹
-  sensitiveFields.forEach((field) => {
+  sensitiveFields.forEach((field: string) => {
     if (field in masked) {
-      masked[field] = '***MASKED***';
+      (masked as any)[field] = '***MASKED***';
     }
   });
 
@@ -205,10 +205,10 @@ export function cleanResponseData(data: any, model?: string): any {
   }
 
   const cleaned = { ...data };
-  const fieldsToRemove = model ? SENSITIVE_FIELDS[model as any] || [] : [];
+  const fieldsToRemove = model ? (SENSITIVE_FIELDS as any)[model] || [] : [];
 
-  fieldsToRemove.forEach((field) => {
-    delete cleaned[field];
+  fieldsToRemove.forEach((field: string) => {
+    delete (cleaned as any)[field];
   });
 
   return cleaned;

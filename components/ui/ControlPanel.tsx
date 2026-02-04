@@ -15,7 +15,7 @@ interface Device {
   }>;
 }
 
-interface ControlPanelProps {
+export interface ControlPanelProps {
   title: string;
   devices: Device[];
   onDeviceClick?: (deviceId: string) => void;
@@ -94,7 +94,7 @@ export function ControlPanel({
             )}
 
             {/* Last Update Info */}
-            <p className="text-xs text-slate-500 mt-3">
+            <p className="text-xs text-slate-500 mt-3" suppressHydrationWarning>
               업데이트: {device.lastUpdate.toLocaleTimeString('ko-KR')}
             </p>
           </div>

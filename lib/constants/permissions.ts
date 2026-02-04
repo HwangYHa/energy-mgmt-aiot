@@ -138,7 +138,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   /**
    * super_admin: 시스템 전체 관리자 (모든 권한)
    */
-  [UserRole.SUPER_ADMIN]: [
+  ['super_admin']: [
     // 테넌트
     Permissions.TENANT_CREATE,
     Permissions.TENANT_READ,
@@ -197,7 +197,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   /**
    * tenant_admin: 테넌트 관리자 (테넌트 내 모든 권한, super_admin 전용 제외)
    */
-  [UserRole.TENANT_ADMIN]: [
+  ['tenant_admin']: [
     // 테넌트 (자기 테넌트만 조회/수정 가능)
     Permissions.TENANT_READ,
     Permissions.TENANT_UPDATE,
@@ -252,7 +252,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   /**
    * site_manager: 사이트 관리자 (사이트 및 디바이스 관리)
    */
-  [UserRole.SITE_MANAGER]: [
+  ['site_manager']: [
     // 테넌트 (조회만)
     Permissions.TENANT_READ,
     // 사용자 (조회만)
@@ -292,7 +292,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   /**
    * operator: 운영자 (디바이스 제어 및 모니터링)
    */
-  [UserRole.OPERATOR]: [
+  ['operator']: [
     // 테넌트 (조회만)
     Permissions.TENANT_READ,
     // 사용자 (조회만)
@@ -322,7 +322,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   /**
    * viewer: 조회 전용 사용자 (읽기만 가능)
    */
-  [UserRole.VIEWER]: [
+  ['viewer']: [
     // 테넌트 (조회만)
     Permissions.TENANT_READ,
     // 사용자 (조회만)

@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient, UserRole, BadgeType } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -242,7 +242,7 @@ async function main() {
       displayOrder: 4,
       minRole: 'site_manager' as UserRole,
       featureRequired: 'ai_forecast',
-      badgeType: 'new',
+      badgeType: 'new' as BadgeType,
     },
     {
       code: 'control-history',
@@ -607,18 +607,22 @@ async function main() {
   
   for (const item of menuItems) {
     const { menuGroupCode, ...itemData } = item;
-    
+
     const menuGroup = createdGroups.find(g => g.code === menuGroupCode);
-    
+
+    if (!menuGroup) {
+      throw new Error(`Menu group not found: ${menuGroupCode}`);
+    }
+
     await prisma.menuItem.upsert({
       where: { code: item.code },
       update: {
         ...itemData,
-        menuGroupId: menuGroup?.id,
+        menuGroupId: menuGroup.id,
       },
       create: {
         ...itemData,
-        menuGroupId: menuGroup?.id,
+        menuGroupId: menuGroup.id,
       },
     });
   }

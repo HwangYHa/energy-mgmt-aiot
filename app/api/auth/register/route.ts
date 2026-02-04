@@ -118,17 +118,20 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // 2. 비밀번호 해싱
-      const passwordHash = await bcrypt.hash(validated.password, 12);
+      // 2. 비밀번호 해싱 (개발 환경에서는 라운드 수를 낮춤)
+      const bcryptRounds = process.env.NODE_ENV === 'production' ? 12 : 10;
+      const passwordHash = await bcrypt.hash(validated.password, bcryptRounds);
 
       // 3. User 생성
+      // First user (tenant creator) is admin, consistent with OAuth logic
+      const isFirstUser = true; // Creating new tenant, so this is the first user
       const user = await tx.user.create({
         data: {
           email: validated.email,
           name: validated.name,
           tenantId: tenant.id,
           passwordHash,
-          role: 'tenant_admin', // ⭐ 첫 사용자는 관리자
+          role: isFirstUser ? 'tenant_admin' : 'viewer',
           isActive: true,
           isEmailVerified: false, // 이메일 인증은 나중에
         },
@@ -226,7 +229,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(
-      { error: 'Registration failed' },
+      { error: '등록 실패' },
       { status: 500 }
     );
   }

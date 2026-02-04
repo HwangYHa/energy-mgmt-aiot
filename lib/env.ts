@@ -50,6 +50,10 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   NAVER_CLIENT_ID: z.string().optional(),
   NAVER_CLIENT_SECRET: z.string().optional(),
+
+  // Payment (Iamport)
+  IAMPORT_API_KEY: z.string().optional(),
+  IAMPORT_API_SECRET: z.string().optional(),
 });
 
 type Env = z.infer<typeof envSchema>;

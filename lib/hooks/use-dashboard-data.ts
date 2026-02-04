@@ -26,15 +26,32 @@ export function useDashboardData(refreshInterval: number = 5000): UseDashboardDa
     try {
       setError(null);
 
+      // JWT 토큰 가져오기
+      const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // 토큰이 있으면 Authorization 헤더 추가
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch('/api/dashboard/overview', {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
+        credentials: 'include', // 세션 쿠키 포함 (폴백용)
         cache: 'no-store',
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          // 인증 오류 - 조용히 처리 (로그인 페이지로 리디렉션은 middleware가 처리)
+          setError('인증이 필요합니다. 로그인 페이지로 이동합니다.');
+          setIsLoading(false);
+          return;
+        }
         throw new Error(`API 요청 실패: ${response.status}`);
       }
 

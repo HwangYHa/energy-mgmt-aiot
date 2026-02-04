@@ -127,7 +127,7 @@ export const API_ENDPOINTS = {
     },
   },
 
-  'GET /api/auth/csrf': {
+  'GET /api/security/csrf': {
     summary: 'CSRF 토큰 발급',
     description: 'CSRF 공격 방지를 위한 토큰을 발급합니다.',
     tags: ['Authentication'],
@@ -448,6 +448,7 @@ export function generateOpenAPISchema() {
     },
     paths: Object.entries(API_ENDPOINTS).reduce((acc, [path, endpoint]) => {
       const [method, pathname] = path.split(' ');
+      if (!pathname || !method) return acc; // Skip if pathname or method is undefined
       if (!acc[pathname]) {
         acc[pathname] = {};
       }

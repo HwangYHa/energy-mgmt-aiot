@@ -106,12 +106,14 @@ export async function GET(request: NextRequest) {
 
       console.log('[Naver OAuth] Tenant created:', tenant.id);
 
+      // First user (tenant creator) is admin, others are viewers
+      const isFirstUser = true; // Creating new tenant, so this is the first user
       user = await prisma.user.create({
         data: {
           email: naverUser.email,
           name: naverUser.name || naverUser.email.split('@')[0],
           tenantId: tenant.id,
-          role: 'tenant_admin', // Naver 로그인 사용자는 관리자 (Google과 동일)
+          role: isFirstUser ? 'tenant_admin' : 'viewer',
           isActive: true,
           isEmailVerified: true, // OAuth는 이메일 검증됨
           passwordHash: 'OAUTH_USER', // OAuth 전용 표시 (Google과 동일)

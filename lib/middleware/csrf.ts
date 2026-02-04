@@ -57,7 +57,7 @@ export function verifyCsrfToken(token: string, storedToken: string): boolean {
  * CSRF 검증이 제외되는 경로 목록
  */
 const CSRF_EXEMPT_PATHS = [
-  '/api/auth/csrf', // CSRF 토큰 발급 엔드포인트
+  '/api/security/csrf', // CSRF 토큰 발급 엔드포인트
   '/api/auth/[...nextauth]', // NextAuth 엔드포인트
   '/api/auth/login', // NextAuth를 사용하므로 제외
   '/api/auth/callback', // OAuth 콜백

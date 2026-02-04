@@ -11,7 +11,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import { logPerformance } from '@/lib/logger';
+import { dbLogger } from '@/lib/logger/database';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -54,12 +54,13 @@ function initializePrisma(): PrismaClient {
     client.$on('query', (event) => {
       if (event.duration > 1000) {
         // 1초 이상 걸린 쿼리
-        console.warn(`⚠️  Slow Query (${event.duration}ms): ${event.query}`);
+        dbLogger.logQuery(event.query, event.duration);
       }
     });
 
     client.$on('error', (event) => {
-      console.error('❌ Prisma Error:', event);
+      const error = new Error(event.message);
+      dbLogger.logQueryError('Unknown query', error);
     });
 
     client.$on('warn', (event) => {
@@ -79,11 +80,9 @@ function initializePrisma(): PrismaClient {
 
       // 느린 쿼리 기록 (500ms 이상)
       if (duration > 500) {
-        logPerformance({
-          operation: `Prisma ${params.model}.${params.action}`,
-          duration,
-          tenantId: undefined, // 컨텍스트에서 추출 가능
-        });
+        console.warn(
+          `[Performance] Slow query detected: ${params.model}.${params.action} took ${duration}ms`
+        );
       }
 
       return result;
@@ -122,11 +121,12 @@ export const prisma: PrismaClient =
 // ========================================
 export async function checkDatabaseConnection(): Promise<boolean> {
   try {
+    dbLogger.logConnectionAttempt();
     await prisma.$queryRaw`SELECT 1`;
-    console.log('✅ Database connection successful');
+    dbLogger.logConnectionSuccess();
     return true;
   } catch (error) {
-    console.error('❌ Database connection failed:', error);
+    dbLogger.logConnectionFailure(error as Error);
     return false;
   }
 }

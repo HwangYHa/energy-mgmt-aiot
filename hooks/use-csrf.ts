@@ -12,7 +12,7 @@ export function useCsrfToken() {
   useEffect(() => {
     async function fetchCsrfToken() {
       try {
-        const res = await fetch('/api/auth/csrf');
+        const res = await fetch('/api/security/csrf');
         if (res.ok) {
           const data = await res.json();
           setCsrfToken(data.csrfToken);
@@ -38,7 +38,7 @@ export async function fetchWithCsrf(
   options: RequestInit = {}
 ): Promise<Response> {
   // CSRF 토큰 가져오기
-  const csrfRes = await fetch('/api/auth/csrf');
+  const csrfRes = await fetch('/api/security/csrf');
   const csrfData = await csrfRes.json();
   const csrfToken = csrfData.csrfToken;
 

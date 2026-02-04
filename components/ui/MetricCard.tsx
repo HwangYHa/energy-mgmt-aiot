@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 import React from 'react';
 
-interface MetricCardProps {
+export interface MetricCardProps {
   label: string;
   value: string | number;
   unit?: string;

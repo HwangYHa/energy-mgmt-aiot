@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -10,7 +10,7 @@ import { AuthInput } from '@/components/auth/AuthInput';
 import { AuthButton } from '@/components/auth/AuthButton';
 import { SocialButton } from '@/components/auth/SocialButton';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session, status } = useSession();
@@ -94,7 +94,7 @@ export default function LoginPage() {
 
       if (result?.ok) {
         console.log('[Login Page] Login successful, redirecting to:', callbackUrl);
-        
+
         // 성공 시 콜백 URL로 리디렉션
         router.push(callbackUrl);
         router.refresh();
@@ -288,5 +288,21 @@ export default function LoginPage() {
         </div>
       </AuthCard>
     </AuthBackground>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <AuthBackground>
+        <AuthCard title="로딩 중..." subtitle="잠시만 기다려주세요">
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-neon-blue"></div>
+          </div>
+        </AuthCard>
+      </AuthBackground>
+    }>
+      <LoginPageContent />
+    </Suspense>
   );
 }

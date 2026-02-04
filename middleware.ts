@@ -7,21 +7,43 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const method = request.method;
 
-  // ✅ 인증 제외 경로
-  if (
-    pathname.startsWith('/login') ||
-    pathname.startsWith('/register') ||
-    pathname.startsWith('/api/auth') ||
-    pathname.startsWith('/_next') ||
-    pathname === '/'
-  ) {
+  // ✅ 인증 제외 경로 (public routes)
+  const publicRoutes = [
+    '/login',
+    '/register',
+    '/forgot-password',
+    '/api/auth',
+    '/_next',
+    '/api/docs', // API 문서는 public
+    '/pricing', // 가격 페이지
+    '/features', // 기능 소개
+    '/about', // 회사 소개
+  ];
+
+  // 정확히 매칭되는 공개 경로
+  const exactPublicRoutes = [
+    '/', // 랜딩 페이지
+  ];
+
+  const isPublicRoute =
+    publicRoutes.some(route => pathname.startsWith(route)) ||
+    exactPublicRoutes.includes(pathname);
+
+  if (isPublicRoute) {
     return securityHeadersMiddleware(NextResponse.next());
   }
 
   // ✅ NextAuth 토큰 검증 (Google OAuth 등)
+  // CRITICAL: 개발환경에서는 쿠키 이름이 다름 (__Secure- 접두사 없음)
+  const cookieName =
+    process.env.NODE_ENV === 'production'
+      ? '__Secure-next-auth.session-token'
+      : 'next-auth.session-token';
+
   const token = await getToken({
     req: request,
     secret: process.env.NEXTAUTH_SECRET!,
+    cookieName,
   });
 
   // ✅ Naver OAuth 토큰 확인 (별도 JWT)
@@ -37,7 +59,7 @@ export async function middleware(request: NextRequest) {
   // 🔒 CSRF 토큰 검증 (POST, PUT, DELETE, PATCH 요청만)
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
     // CSRF 토큰 발급 엔드포인트는 제외
-    if (pathname === '/api/auth/csrf') {
+    if (pathname === '/api/security/csrf') {
       return securityHeadersMiddleware(NextResponse.next());
     }
 
@@ -71,7 +93,7 @@ export async function middleware(request: NextRequest) {
         pathname,
         method,
         userId: token?.id || 'unknown',
-        ip: request.headers.get('x-forwarded-for') || request.ip,
+        ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
       });
 
       return NextResponse.json(

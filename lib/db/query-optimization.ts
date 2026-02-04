@@ -287,7 +287,7 @@ export async function searchDevices(
         ],
       }),
       // 상태 필터
-      ...(status && { status }),
+      ...(status && { status: status as any }),
     },
     select: {
       id: true,
@@ -372,6 +372,8 @@ export async function createSiteWithDevices(
         ...device,
         tenantId,
         siteId: site.id,
+        protocol: 'modbus' as any, // Default protocol
+        connectionConfig: {} as any, // Default empty config
       })),
     });
 

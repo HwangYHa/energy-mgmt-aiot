@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-interface StatusBadgeProps {
+export interface StatusBadgeProps {
   status:
     | 'active'
     | 'peak-hours'

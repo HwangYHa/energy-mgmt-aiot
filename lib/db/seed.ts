@@ -615,11 +615,11 @@ async function main() {
       update: {
         ...itemData,
         menuGroupId: menuGroup?.id,
-      },
+      } as any,
       create: {
         ...itemData,
         menuGroupId: menuGroup?.id,
-      },
+      } as any,
     });
   }
 
