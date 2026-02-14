@@ -13,11 +13,21 @@ export async function middleware(request: NextRequest) {
     '/register',
     '/forgot-password',
     '/api/auth',
+    '/api/security/csrf', // CSRF 토큰 발급 (회원가입 등 비로그인 상태에서도 필요)
+    '/api/csp-report',    // CSP 위반 리포트 (브라우저 자동 전송, 인증 불필요)
     '/_next',
-    '/api/docs', // API 문서는 public
-    '/pricing', // 가격 페이지
-    '/features', // 기능 소개
-    '/about', // 회사 소개
+    '/api/docs',
+    '/pricing',
+    '/features',
+    '/about',
+    '/legal',        // 개인정보처리방침, 이용약관, 보안정책
+    '/faq',          // FAQ
+    '/solutions',    // 솔루션 (제조업, 빌딩, 데이터센터, 산업단지)
+    '/docs',         // 문서
+    '/community',    // 커뮤니티
+    '/support',      // 고객센터
+    '/demo',         // 데모
+    '/trial',        // 무료 체험
   ];
 
   // 정확히 매칭되는 공개 경로
@@ -77,7 +87,7 @@ export async function middleware(request: NextRequest) {
 
       return NextResponse.json(
         {
-          error: 'CSRF token validation failed',
+          error: 'CSRF 토큰 유효성 검사에 실패했습니다.',
           code: 'CSRF_TOKEN_MISSING',
           message: 'CSRF 토큰이 누락되었습니다. 페이지를 새로고침해주세요.',
         },
@@ -89,7 +99,7 @@ export async function middleware(request: NextRequest) {
     const isValid = verifyCsrfToken(csrfTokenFromHeader, csrfTokenFromCookie);
 
     if (!isValid) {
-      console.error('[Security] CSRF token validation failed:', {
+      console.error('[보안] CSRF 토큰 유효성 검사 실패:', {
         pathname,
         method,
         userId: token?.id || 'unknown',
@@ -98,7 +108,7 @@ export async function middleware(request: NextRequest) {
 
       return NextResponse.json(
         {
-          error: 'CSRF token validation failed',
+          error: 'CSRF 토큰 유효성 검사에 실패했습니다.',
           code: 'CSRF_TOKEN_INVALID',
           message: 'CSRF 토큰 검증에 실패했습니다. 페이지를 새로고침해주세요.',
         },

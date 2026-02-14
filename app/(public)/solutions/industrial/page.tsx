@@ -17,9 +17,13 @@ import {
  * 중공업, 화학, 제철 등 에너지 집약 산업 최적화
  */
 export const metadata = {
-  title: '산업 에너지 관리 솔루션 - EnergyAI',
+  title: '산업단지 에너지 관리 솔루션 - EnergyAI',
   description:
-    '중공업, 화학, 제철 등 에너지 집약 산업의 에너지 효율을 극대화하고 탄소 배출을 저감',
+    '중공업, 화학, 제철 등 에너지 집약 산업의 에너지 효율을 극대화하고 탄소 배출을 저감. 산업단지 통합 에너지 관리.',
+  openGraph: {
+    title: '산업단지 에너지 관리 - EnergyAI',
+    description: '에너지 집약 산업의 효율 극대화 및 탄소 배출 저감',
+  },
 };
 
 export default function IndustrialSolutionPage() {

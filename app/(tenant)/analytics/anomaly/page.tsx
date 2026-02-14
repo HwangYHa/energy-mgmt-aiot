@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { AlertTriangle, Zap, TrendingDown, Loader2 } from 'lucide-react';
+import { fetchWithCsrf } from '@/hooks/use-csrf';
 
 interface Anomaly {
   index: number;
@@ -37,9 +38,8 @@ export default function AnomalyDetectionPage() {
   const detectAnomalies = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/ai/anomaly', {
+      const response = await fetchWithCsrf('/api/ai/anomaly', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sensitivity: 0.1 }),
       });
 

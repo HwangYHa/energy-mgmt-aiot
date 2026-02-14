@@ -3,7 +3,12 @@
  */
 export const metadata = {
   title: 'FAQ - EnergyAI',
-  description: 'EnergyAI에 대해 자주 묻는 질문과 답변',
+  description:
+    'EnergyAI 에너지 관리 플랫폼에 대해 자주 묻는 질문과 답변. 시작하기, 요금, AI 기능, 보안 등 카테고리별 FAQ.',
+  openGraph: {
+    title: '자주 묻는 질문 (FAQ) - EnergyAI',
+    description: 'EnergyAI 에너지 관리 플랫폼 FAQ',
+  },
 };
 
 const faqs = [

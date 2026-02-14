@@ -77,7 +77,7 @@ if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
 
   if (!csrfTokenFromHeader || !csrfTokenFromCookie) {
     return NextResponse.json(
-      { error: 'CSRF token validation failed', code: 'CSRF_TOKEN_MISSING' },
+      { error: 'CSRF 토큰 유효성 검사에 실패했습니다.', code: 'CSRF_TOKEN_MISSING' },
       { status: 403 }
     );
   }

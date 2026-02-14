@@ -10,6 +10,7 @@ import { AuthInput } from '@/components/auth/AuthInput';
 import { AuthButton } from '@/components/auth/AuthButton';
 import { SocialButton } from '@/components/auth/SocialButton';
 import { fetchWithCsrf } from '@/hooks/use-csrf';
+import { LegalModal } from '@/components/landing/LegalModal';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -18,9 +19,12 @@ export default function RegisterPage() {
     email: '',
     password: '',
     confirmPassword: '',
+    organizationName: '',
+    industryType: 'manufacturing',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -72,7 +76,7 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      // ✅ CSRF 토큰을 포함한 요청 (tenantId 제거)
+      // ✅ CSRF 토큰을 포함한 요청
       const res = await fetchWithCsrf('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -80,7 +84,8 @@ export default function RegisterPage() {
           email: formData.email,
           password: formData.password,
           name: formData.name,
-          // ⭐ tenantId 필드 제거 (서버에서 자동 생성)
+          organizationName: formData.organizationName || undefined,
+          industryType: formData.industryType,
         }),
       });
 
@@ -104,7 +109,6 @@ export default function RegisterPage() {
       router.push('/login?registered=true');
     } catch (err) {
       setErrors({ submit: '요청 중 오류가 발생했습니다.' });
-      console.error('Register error:', err);
     } finally {
       setLoading(false);
     }
@@ -123,7 +127,6 @@ export default function RegisterPage() {
       }
     } catch (err) {
       setErrors({ submit: `${provider === 'google' ? '구글' : '네이버'} 로그인에 실패했습니다.` });
-      console.error(err);
     }
   };
 
@@ -154,13 +157,44 @@ export default function RegisterPage() {
           />
 
           <AuthInput
+            id="organizationName"
+            label="회사/조직명"
+            type="text"
+            name="organizationName"
+            value={formData.organizationName}
+            onChange={handleChange}
+            placeholder="ABC 에너지 (선택사항)"
+            error={errors.organizationName}
+            autoComplete="organization"
+          />
+
+          <div>
+            <label htmlFor="industryType" className="block text-sm font-medium text-gray-300 mb-1.5">
+              산업 분류
+            </label>
+            <select
+              id="industryType"
+              name="industryType"
+              value={formData.industryType}
+              onChange={(e) => setFormData((prev) => ({ ...prev, industryType: e.target.value }))}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/30 transition-all"
+            >
+              <option value="manufacturing">제조업</option>
+              <option value="building">빌딩/건물</option>
+              <option value="industrial_complex">산업단지</option>
+              <option value="datacenter">데이터센터</option>
+              <option value="other">기타</option>
+            </select>
+          </div>
+
+          <AuthInput
             id="email"
             label="이메일"
             type="email"
             name="email"
             value={formData.email}
             onChange={handleChange}
-            placeholder="user@example.com"
+            placeholder="user@company.com"
             required
             error={errors.email}
             autoComplete="email"
@@ -202,13 +236,21 @@ export default function RegisterPage() {
               className="mt-1 w-4 h-4 rounded border-white/20 bg-white/5 text-neon-blue focus:ring-neon-blue/50"
             />
             <label htmlFor="terms" className="text-sm text-gray-400">
-              <Link href="/terms" className="text-neon-blue hover:underline">
+              <button
+                type="button"
+                onClick={() => setLegalModal('terms')}
+                className="text-neon-blue hover:underline"
+              >
                 이용약관
-              </Link>
+              </button>
               과{' '}
-              <Link href="/privacy" className="text-neon-blue hover:underline">
+              <button
+                type="button"
+                onClick={() => setLegalModal('privacy')}
+                className="text-neon-blue hover:underline"
+              >
                 개인정보처리방침
-              </Link>
+              </button>
               에 동의합니다.
             </label>
           </div>
@@ -279,6 +321,14 @@ export default function RegisterPage() {
           </p>
         </div>
       </AuthCard>
+
+      {legalModal && (
+        <LegalModal
+          type={legalModal}
+          isOpen={true}
+          onClose={() => setLegalModal(null)}
+        />
+      )}
     </AuthBackground>
   );
 }

@@ -6,7 +6,6 @@ import {
   Star,
   TrendingUp,
   ArrowRight,
-  ExternalLink,
 } from 'lucide-react';
 
 /**
@@ -14,7 +13,12 @@ import {
  */
 export const metadata = {
   title: '커뮤니티 - EnergyAI',
-  description: 'EnergyAI 사용자 커뮤니티',
+  description:
+    '12,000+ 에너지 전문가가 활동하는 EnergyAI 커뮤니티. 사용 팁, Q&A, 성공 사례를 공유하고 함께 성장하세요.',
+  openGraph: {
+    title: 'EnergyAI 커뮤니티 - 에너지 전문가 네트워크',
+    description: '12,000+ 에너지 전문가와 함께하는 지식 공유 커뮤니티',
+  },
 };
 
 export default function CommunityPage() {
@@ -76,13 +80,17 @@ export default function CommunityPage() {
             전문가와 사용자들이 함께 성장하는 공간
           </p>
           <div className="flex gap-4 justify-center">
-            <Button size="lg" className="bg-emerald-500 hover:bg-emerald-600">
-              <MessageSquare className="mr-2 w-5 h-5" />
-              게시글 작성
-            </Button>
-            <Button size="lg" variant="outline">
-              회원가입
-            </Button>
+            <Link href="/login?callbackUrl=/community">
+              <Button size="lg" className="bg-emerald-500 hover:bg-emerald-600">
+                <MessageSquare className="mr-2 w-5 h-5" />
+                게시글 작성
+              </Button>
+            </Link>
+            <Link href="/register">
+              <Button size="lg" variant="outline">
+                회원가입
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
@@ -140,10 +148,12 @@ export default function CommunityPage() {
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-3xl font-bold text-white">최근 게시글</h2>
-            <Button variant="outline">
-              전체 보기
-              <ArrowRight className="ml-2 w-4 h-4" />
-            </Button>
+            <Link href="/login?callbackUrl=/community">
+              <Button variant="outline">
+                전체 보기
+                <ArrowRight className="ml-2 w-4 h-4" />
+              </Button>
+            </Link>
           </div>
           <div className="space-y-4">
             {recentPosts.map((post, index) => (
@@ -176,39 +186,16 @@ export default function CommunityPage() {
         </div>
       </section>
 
-      {/* External Links Section */}
+      {/* TODO: 소셜 채널 섹션 - 운영 준비 후 활성화 예정
       <section className="py-12 px-4">
         <div className="max-w-7xl mx-auto">
-          <h2 className="text-3xl font-bold text-white mb-8 text-center">
-            소셜 채널
-          </h2>
+          <h2 className="text-3xl font-bold text-white mb-8 text-center">소셜 채널</h2>
           <div className="grid md:grid-cols-4 gap-6">
-            {[
-              { name: 'Discord', icon: '💬', members: '5.2K' },
-              { name: 'Slack', icon: '💼', members: '3.8K' },
-              { name: 'GitHub', icon: '⭐', members: '2.1K' },
-              { name: 'LinkedIn', icon: '🔗', members: '8.5K' },
-            ].map((social, index) => (
-              <div
-                key={index}
-                className="bg-slate-800 border border-slate-700 rounded-xl p-6 text-center hover:border-emerald-500/50 transition-all cursor-pointer group"
-              >
-                <div className="text-5xl mb-4">{social.icon}</div>
-                <h3 className="text-lg font-semibold text-white mb-2 group-hover:text-emerald-400 transition-colors">
-                  {social.name}
-                </h3>
-                <p className="text-slate-400 text-sm mb-4">
-                  {social.members} 멤버
-                </p>
-                <Button size="sm" variant="outline" className="w-full">
-                  참여하기
-                  <ExternalLink className="ml-2 w-4 h-4" />
-                </Button>
-              </div>
-            ))}
+            Discord, Slack, GitHub, LinkedIn 카드
           </div>
         </div>
       </section>
+      */}
 
       {/* CTA Section */}
       <section className="py-12 px-4 bg-slate-800/30">

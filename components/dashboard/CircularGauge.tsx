@@ -20,11 +20,11 @@ const sizeConfig = {
 };
 
 const colorConfig = {
-  cyan: { stroke: '#06b6d4', glow: 'drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]' },
-  green: { stroke: '#10b981', glow: 'drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]' },
-  yellow: { stroke: '#eab308', glow: 'drop-shadow-[0_0_10px_rgba(234,179,8,0.5)]' },
-  red: { stroke: '#ef4444', glow: 'drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]' },
-  purple: { stroke: '#a855f7', glow: 'drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]' },
+  cyan: { stroke: '#06b6d4', labelClass: 'text-cyan-400', glow: 'drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]' },
+  green: { stroke: '#10b981', labelClass: 'text-emerald-400', glow: 'drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]' },
+  yellow: { stroke: '#eab308', labelClass: 'text-yellow-400', glow: 'drop-shadow-[0_0_10px_rgba(234,179,8,0.5)]' },
+  red: { stroke: '#ef4444', labelClass: 'text-red-400', glow: 'drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]' },
+  purple: { stroke: '#a855f7', labelClass: 'text-purple-400', glow: 'drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]' },
 };
 
 export function CircularGauge({
@@ -37,7 +37,7 @@ export function CircularGauge({
   showPercentage = true,
 }: CircularGaugeProps) {
   const { width, strokeWidth, fontSize, labelSize } = sizeConfig[size];
-  const { stroke, glow } = colorConfig[color];
+  const { stroke, glow, labelClass } = colorConfig[color];
 
   const percentage = Math.min((value / maxValue) * 100, 100);
   const radius = (width - strokeWidth) / 2;
@@ -83,7 +83,7 @@ export function CircularGauge({
         </div>
       </div>
       {label && (
-        <span className={cn('mt-2 text-cyan-400 font-medium text-center', labelSize)}>
+        <span className={cn('mt-2 font-medium text-center', labelClass, labelSize)}>
           {label}
         </span>
       )}

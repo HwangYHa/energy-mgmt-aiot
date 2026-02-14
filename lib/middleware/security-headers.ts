@@ -168,14 +168,15 @@ export function securityHeadersMiddleware(
   // ==========================================
   // 8. Cross-Origin 정책
   // ==========================================
-  // Cross-Origin-Embedder-Policy: 교차 출처 리소스 격리
-  response.headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+  // Cross-Origin-Embedder-Policy: unsafe-none (OAuth, 외부 이미지/CDN 허용)
+  // require-corp은 Google OAuth, 외부 프로필 이미지 등을 차단하므로 SaaS에 부적합
+  response.headers.set('Cross-Origin-Embedder-Policy', 'unsafe-none');
 
-  // Cross-Origin-Opener-Policy: 창 격리
-  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+  // Cross-Origin-Opener-Policy: same-origin-allow-popups (OAuth 팝업/리다이렉트 허용)
+  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
 
-  // Cross-Origin-Resource-Policy: 리소스 공유 제한
-  response.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+  // Cross-Origin-Resource-Policy: cross-origin (외부 리소스 로드 허용)
+  response.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
 
   // ==========================================
   // 9. 캐시 제어 (민감한 데이터 방지)

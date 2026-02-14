@@ -1,229 +1,313 @@
-// app/web/app/(tenant)/alerts/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { 
-  AlertTriangle, 
-  AlertCircle, 
-  Info, 
-  CheckCircle,
-  Plus,
-  Filter,
+import {
+  AlertTriangle,
+  AlertCircle,
+  Info,
+  CheckCircle2,
+  Bell,
+  Settings,
+  Loader2,
+  Clock,
+  Shield,
 } from 'lucide-react';
 
-interface AlertStats {
-  total: number;
-  bySeverity: {
-    critical: number;
-    warning: number;
-    info: number;
-  };
-  recentAlerts: Alert[];
-}
-
-interface Alert {
+interface AlertItem {
   id: string;
-  severity: string;
-  message: string;
-  createdAt: string;
+  channel: string;
+  subject: string;
+  body: string;
   status: string;
+  sentAt: string | null;
+  createdAt: string;
   rule: {
     name: string;
+    category: string;
+    severity: string;
   };
 }
 
 export default function AlertsPage() {
-  const [stats, setStats] = useState<AlertStats | null>(null);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [filter, setFilter] = useState<string>('all');
 
-  useEffect(() => {
-    fetchAlertStats();
-  }, []);
-
-  const fetchAlertStats = async () => {
+  const fetchAlerts = useCallback(async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('http://localhost:4000/api/alert-rules/stats?days=7', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data);
+      const res = await fetch('/api/notifications/logs');
+      const json = await res.json();
+      if (json.success) {
+        setAlerts(json.data || []);
       }
-    } catch (error) {
-      console.error('Failed to fetch alert stats:', error);
+    } catch {
+      // 알림 로그 조회 실패 - 빈 목록으로 표시
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    fetchAlerts();
+  }, [fetchAlerts]);
+
+  // 통계 계산
+  const stats = {
+    total: alerts.length,
+    critical: alerts.filter((a) => a.rule?.severity === 'critical').length,
+    warning: alerts.filter((a) => a.rule?.severity === 'warning').length,
+    info: alerts.filter((a) => a.rule?.severity === 'info').length,
   };
+
+  const filteredAlerts =
+    filter === 'all'
+      ? alerts
+      : alerts.filter((a) => a.rule?.severity === filter);
 
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
       case 'critical':
-        return <AlertTriangle className="w-5 h-5 text-red-500" />;
+        return <AlertTriangle className="w-5 h-5 text-red-400" />;
       case 'warning':
-        return <AlertCircle className="w-5 h-5 text-yellow-500" />;
+        return <AlertCircle className="w-5 h-5 text-amber-400" />;
       case 'info':
-        return <Info className="w-5 h-5 text-blue-500" />;
+        return <Info className="w-5 h-5 text-blue-400" />;
       default:
-        return <CheckCircle className="w-5 h-5 text-gray-500" />;
+        return <Bell className="w-5 h-5 text-slate-400" />;
     }
   };
 
   const getSeverityBadge = (severity: string) => {
     const styles: Record<string, string> = {
-      critical: 'bg-red-100 text-red-800',
-      warning: 'bg-yellow-100 text-yellow-800',
-      info: 'bg-blue-100 text-blue-800',
+      critical: 'bg-red-500/10 text-red-400 border-red-500/30',
+      warning: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+      info: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+    };
+    const labels: Record<string, string> = {
+      critical: '긴급',
+      warning: '경고',
+      info: '정보',
     };
 
     return (
-      <span className={`px-2 py-1 rounded text-xs font-medium ${styles[severity] || 'bg-gray-100 text-gray-800'}`}>
-        {severity.toUpperCase()}
+      <span
+        className={`px-2 py-0.5 rounded border text-xs font-medium ${
+          styles[severity] || 'bg-slate-500/10 text-slate-400 border-slate-500/30'
+        }`}
+      >
+        {labels[severity] || severity}
+      </span>
+    );
+  };
+
+  const getStatusBadge = (status: string) => {
+    const styles: Record<string, string> = {
+      sent: 'text-emerald-400',
+      failed: 'text-red-400',
+      pending: 'text-amber-400',
+    };
+    const labels: Record<string, string> = {
+      sent: '전송됨',
+      failed: '실패',
+      pending: '대기',
+    };
+
+    return (
+      <span className={`text-xs ${styles[status] || 'text-slate-400'}`}>
+        {labels[status] || status}
       </span>
     );
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-lg">로딩 중...</div>
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6">
       {/* 헤더 */}
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">알람 현황</h1>
-          <p className="text-gray-600 mt-1">최근 7일간의 알람 통계</p>
+          <h1 className="text-2xl font-bold flex items-center gap-3">
+            <div className="p-2 bg-amber-500/10 rounded-lg">
+              <Bell className="w-6 h-6 text-amber-400" />
+            </div>
+            알림 현황
+          </h1>
+          <p className="text-slate-400 mt-1">시스템 알림 및 알람 로그</p>
         </div>
-        <div className="flex gap-3">
-          <Link href="/alerts/rules">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-              <Filter className="w-4 h-4" />
-              <span>알람 규칙</span>
-            </button>
-          </Link>
-          <Link href="/alerts/rules/create">
-            <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-              <Plus className="w-4 h-4" />
-              <span>새 규칙</span>
-            </button>
-          </Link>
-        </div>
+        <Link href="/settings/notifications">
+          <button className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 border border-slate-700 hover:border-cyan-500/30 rounded-lg text-sm transition">
+            <Settings className="w-4 h-4 text-cyan-400" />
+            알림 설정
+          </button>
+        </Link>
       </div>
 
       {/* 통계 카드 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">전체 알람</p>
-              <p className="text-3xl font-bold text-gray-800 mt-1">
-                {stats?.total || 0}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
-              <AlertTriangle className="w-6 h-6 text-gray-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">긴급</p>
-              <p className="text-3xl font-bold text-red-600 mt-1">
-                {stats?.bySeverity.critical || 0}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-              <AlertTriangle className="w-6 h-6 text-red-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">경고</p>
-              <p className="text-3xl font-bold text-yellow-600 mt-1">
-                {stats?.bySeverity.warning || 0}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
-              <AlertCircle className="w-6 h-6 text-yellow-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">정보</p>
-              <p className="text-3xl font-bold text-blue-600 mt-1">
-                {stats?.bySeverity.info || 0}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-              <Info className="w-6 h-6 text-blue-600" />
-            </div>
-          </div>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <StatCard
+          label="전체"
+          value={stats.total}
+          icon={<Bell className="w-5 h-5 text-slate-400" />}
+          bgColor="bg-slate-500/10"
+          borderColor="border-slate-700/50"
+          active={filter === 'all'}
+          onClick={() => setFilter('all')}
+        />
+        <StatCard
+          label="긴급"
+          value={stats.critical}
+          icon={<AlertTriangle className="w-5 h-5 text-red-400" />}
+          bgColor="bg-red-500/10"
+          borderColor="border-red-500/30"
+          valueColor="text-red-400"
+          active={filter === 'critical'}
+          onClick={() => setFilter(filter === 'critical' ? 'all' : 'critical')}
+        />
+        <StatCard
+          label="경고"
+          value={stats.warning}
+          icon={<AlertCircle className="w-5 h-5 text-amber-400" />}
+          bgColor="bg-amber-500/10"
+          borderColor="border-amber-500/30"
+          valueColor="text-amber-400"
+          active={filter === 'warning'}
+          onClick={() => setFilter(filter === 'warning' ? 'all' : 'warning')}
+        />
+        <StatCard
+          label="정보"
+          value={stats.info}
+          icon={<Info className="w-5 h-5 text-blue-400" />}
+          bgColor="bg-blue-500/10"
+          borderColor="border-blue-500/30"
+          valueColor="text-blue-400"
+          active={filter === 'info'}
+          onClick={() => setFilter(filter === 'info' ? 'all' : 'info')}
+        />
       </div>
 
-      {/* 최근 알람 */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-semibold">최근 알람</h3>
-          <Link href="/alerts/history">
-            <button className="text-blue-600 hover:underline text-sm">
-              전체 보기
-            </button>
-          </Link>
+      {/* 알림 목록 */}
+      <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between">
+          <h2 className="font-semibold flex items-center gap-2">
+            <Clock className="w-4 h-4 text-cyan-400" />
+            최근 알림
+            {filter !== 'all' && (
+              <span className="text-xs text-slate-400 ml-2">
+                ({filteredAlerts.length}건)
+              </span>
+            )}
+          </h2>
         </div>
-        <div className="divide-y divide-gray-200">
-          {stats?.recentAlerts && stats.recentAlerts.length > 0 ? (
-            stats.recentAlerts.map((alert) => (
-              <div key={alert.id} className="p-4 hover:bg-gray-50">
-                <div className="flex items-start gap-3">
-                  {getSeverityIcon(alert.severity)}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      {getSeverityBadge(alert.severity)}
-                      <span className="text-sm text-gray-500">
-                        {new Date(alert.createdAt).toLocaleString('ko-KR')}
+
+        {filteredAlerts.length > 0 ? (
+          <div className="divide-y divide-slate-700/30">
+            {filteredAlerts.map((alert) => (
+              <div
+                key={alert.id}
+                className="px-6 py-4 hover:bg-slate-700/20 transition"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="mt-0.5">
+                    {getSeverityIcon(alert.rule?.severity)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      {getSeverityBadge(alert.rule?.severity)}
+                      <span className="text-xs text-slate-500">
+                        {alert.rule?.name}
+                      </span>
+                      <span className="text-xs text-slate-600">|</span>
+                      <span className="text-xs text-slate-500">
+                        {alert.createdAt
+                          ? new Date(alert.createdAt).toLocaleString('ko-KR')
+                          : '-'}
                       </span>
                     </div>
-                    <p className="text-sm font-medium text-gray-800">
-                      {alert.rule.name}
+                    <p className="text-sm text-white font-medium">
+                      {alert.subject}
                     </p>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {alert.message}
-                    </p>
+                    {alert.body && (
+                      <p className="text-sm text-slate-400 mt-1 line-clamp-2">
+                        {alert.body}
+                      </p>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">
-                      {alert.status}
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className="text-xs text-slate-500 px-2 py-0.5 bg-slate-700/50 rounded">
+                      {alert.channel}
                     </span>
+                    {getStatusBadge(alert.status)}
                   </div>
                 </div>
               </div>
-            ))
-          ) : (
-            <div className="p-8 text-center text-gray-500">
-              최근 알람이 없습니다.
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-16 text-center">
+            <Shield className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+            <p className="text-slate-400 mb-2">
+              {filter === 'all'
+                ? '알림 내역이 없습니다'
+                : '해당 심각도의 알림이 없습니다'}
+            </p>
+            <p className="text-sm text-slate-500">
+              알림 규칙을 설정하면 조건 충족 시 자동으로 알림이 발송됩니다
+            </p>
+            <Link href="/settings/notifications">
+              <button className="mt-4 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-sm transition">
+                알림 규칙 설정
+              </button>
+            </Link>
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  icon,
+  bgColor,
+  borderColor,
+  valueColor = 'text-white',
+  active,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  bgColor: string;
+  borderColor: string;
+  valueColor?: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`${bgColor} border ${
+        active ? 'border-cyan-500/50 ring-1 ring-cyan-500/20' : borderColor
+      } rounded-xl p-4 text-left hover:border-cyan-500/30 transition-all`}
+    >
+      <div className="flex items-center justify-between mb-2">
+        {icon}
+        <CheckCircle2
+          className={`w-4 h-4 transition ${
+            active ? 'text-cyan-400' : 'text-transparent'
+          }`}
+        />
+      </div>
+      <div className={`text-2xl font-bold ${valueColor}`}>{value}</div>
+      <div className="text-xs text-slate-400 mt-0.5">{label}</div>
+    </button>
   );
 }

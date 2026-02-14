@@ -9,7 +9,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, validateTenantMatch, requireRole } from '@/lib/auth/verify';
+import { verifyAuth, validateTenantMatch, requireRoleOrHigher } from '@/lib/auth/verify';
+import { UserRole } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { deviceCreateSchema, formatValidationError } from '@/lib/validation/schemas';
 import { z } from 'zod';
@@ -85,8 +86,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ 권한 검증 (기기 생성은 site_manager 이상만)
-    if (!requireRole(auth, ['site_manager', 'tenant_admin'])) {
+    // ✅ 권한 검증 (기기 생성은 operator 이상)
+    if (!requireRoleOrHigher(auth, 'operator' as UserRole)) {
       return NextResponse.json(
         { error: 'Insufficient permissions' },
         { status: 403 }

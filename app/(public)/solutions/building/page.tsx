@@ -19,7 +19,11 @@ import {
 export const metadata = {
   title: '빌딩 에너지 관리 솔루션 - EnergyAI',
   description:
-    '상업용 빌딩의 냉난방, 조명, 환기 시스템을 최적화하여 에너지 비용을 최대 40% 절감',
+    '상업용 빌딩의 냉난방, 조명, 환기 시스템을 AI로 최적화하여 에너지 비용을 최대 40% 절감. BEMS 스마트 빌딩 솔루션.',
+  openGraph: {
+    title: '빌딩 에너지 관리 (BEMS) - EnergyAI',
+    description: 'AI로 상업용 빌딩 에너지 비용 최대 40% 절감',
+  },
 };
 
 export default function BuildingSolutionPage() {

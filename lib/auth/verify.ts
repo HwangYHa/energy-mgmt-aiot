@@ -4,10 +4,16 @@
  * 모든 API 라우트에서 사용:
  * const auth = await verifyAuth(request);
  * if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+ *
+ * 지원 인증 방식:
+ * 1. NextAuth 세션 (Google OAuth) - 쿠키 기반
+ * 2. Bearer JWT 토큰 (Naver OAuth, API 호출)
+ * 3. auth-token 쿠키 (Naver OAuth)
  */
 
 import { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
+import { getToken } from 'next-auth/jwt';
 import { prisma } from '@/lib/db/prisma';
 import { TenantContext } from '@/lib/context/tenant-context';
 import env from '@/lib/env';
@@ -17,9 +23,9 @@ import { Permission, hasPermission, hasAnyPermission, hasAllPermissions } from '
 const secret = new TextEncoder().encode(env.JWT_SECRET);
 
 /**
- * 요청에서 JWT 토큰 추출
+ * 요청에서 JWT 토큰 추출 (Authorization 헤더)
  */
-function extractToken(request: NextRequest): string | null {
+function extractBearerToken(request: NextRequest): string | null {
   const authHeader = request.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     return null;
@@ -28,30 +34,89 @@ function extractToken(request: NextRequest): string | null {
 }
 
 /**
- * JWT 토큰 검증 및 사용자 정보 조회
- * 
- * ⭐ CRITICAL: 3중 검증
- * 1. JWT 서명 검증
- * 2. DB에서 사용자 존재 확인
- * 3. JWT 클레임 vs DB 테넌트 ID 비교
+ * 요청에서 auth-token 쿠키 추출 (Naver OAuth)
  */
-export async function verifyAuth(
-  request: NextRequest
-): Promise<TenantContext | null> {
+function extractCookieToken(request: NextRequest): string | null {
+  return request.cookies.get('auth-token')?.value || null;
+}
+
+/**
+ * NextAuth 세션에서 인증 정보 추출
+ */
+async function verifyNextAuthSession(request: NextRequest): Promise<TenantContext | null> {
   try {
-    // 1. 토큰 추출
-    const token = extractToken(request);
+    // 개발환경과 프로덕션에서 쿠키 이름이 다름
+    const cookieName =
+      process.env.NODE_ENV === 'production'
+        ? '__Secure-next-auth.session-token'
+        : 'next-auth.session-token';
+
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET || env.NEXTAUTH_SECRET,
+      cookieName,
+    });
+
     if (!token) {
       return null;
     }
 
-    // 2. JWT 서명 검증
+    // NextAuth 세션에서 사용자 정보 추출
+    const userId = token.id as string || token.sub as string;
+    const tenantId = token.tenantId as string;
+
+    if (!userId || !tenantId) {
+      console.warn('[Auth] NextAuth 세션에 필수 정보 누락:', { userId, tenantId });
+      return null;
+    }
+
+    // DB에서 사용자 확인 (활성 상태)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        tenantId: true,
+        role: true,
+        isActive: true,
+      },
+    });
+
+    if (!user || !user.isActive) {
+      console.warn(`[Auth] 사용자 없음 또는 비활성: userId=${userId}`);
+      return null;
+    }
+
+    // 테넌트 ID 검증
+    if (tenantId !== user.tenantId) {
+      console.error(`[보안] 세션 테넌트 불일치: session=${tenantId}, db=${user.tenantId}`);
+      return null;
+    }
+
+    return {
+      tenantId: user.tenantId,
+      userId: user.id,
+      role: user.role as UserRole,
+      email: user.email,
+    };
+  } catch (error) {
+    console.error('[Auth] NextAuth 세션 검증 오류:', error);
+    return null;
+  }
+}
+
+/**
+ * JWT 토큰 검증 (Bearer 또는 쿠키)
+ */
+async function verifyJwtToken(token: string, request: NextRequest): Promise<TenantContext | null> {
+  try {
+    // JWT 서명 검증
     let payload;
     try {
       const verified = await jwtVerify(token, secret);
       payload = verified.payload;
     } catch (error) {
-      console.error('JWT verification failed:', error);
+      console.error('[Auth] JWT 서명 검증 실패:', error);
       return null;
     }
 
@@ -63,7 +128,7 @@ export async function verifyAuth(
       return null;
     }
 
-    // 3. DB에서 사용자 조회 (⭐ 검증 포인트)
+    // DB에서 사용자 조회
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -77,22 +142,20 @@ export async function verifyAuth(
     });
 
     if (!user || !user.isActive) {
-      // 보안 이벤트: 사용자 없음 또는 비활성
-      console.warn(`AUTH_FAILED: User not found or inactive. userId=${userId}`);
+      console.warn(`[Auth] 사용자 없음 또는 비활성: userId=${userId}`);
       return null;
     }
 
-    // 4. JWT 클레임의 tenantId와 DB의 tenantId 비교 (⭐ CRITICAL 검증)
+    // 테넌트 ID 검증 (⭐ CRITICAL)
     if (claimedTenantId !== user.tenantId) {
-      // 보안 이벤트: 토큰 조작 의심
       console.error(
-        `SECURITY_TOKEN_TAMPERING: Tenant mismatch. claimed=${claimedTenantId}, actual=${user.tenantId}, userId=${userId}`
+        `[보안] 토큰 조작 의심: claimed=${claimedTenantId}, actual=${user.tenantId}`
       );
 
       // 감사 로그 기록
       await prisma.auditLog.create({
         data: {
-          tenantId: user.tenantId, // 실제 테넌트
+          tenantId: user.tenantId,
           userId,
           action: 'SECURITY_TOKEN_TAMPERING_DETECTED',
           resourceType: 'USER',
@@ -101,28 +164,68 @@ export async function verifyAuth(
           errorMessage: `Token tampering: claimed tenant ${claimedTenantId} != actual tenant ${user.tenantId}`,
           ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
         },
-      }).catch((err) => console.error('Failed to log audit event:', err));
+      }).catch((err) => console.error('[Auth] 감사 로그 기록 실패:', err));
 
       return null;
     }
 
-    // 5. 역할 검증 (토큰의 역할과 DB의 역할 일치)
+    // 역할 검증
     if (claimedRole !== user.role) {
-      console.warn(
-        `ROLE_MISMATCH: claimed=${claimedRole}, actual=${user.role}, userId=${userId}`
-      );
+      console.warn(`[Auth] 역할 불일치: claimed=${claimedRole}, actual=${user.role}`);
       return null;
     }
 
-    // ✅ 모든 검증 통과
     return {
       tenantId: user.tenantId,
       userId: user.id,
-      role: user.role as any,
+      role: user.role as UserRole,
       email: user.email,
     };
   } catch (error) {
-    console.error('Auth verification error:', error);
+    console.error('[Auth] JWT 토큰 검증 오류:', error);
+    return null;
+  }
+}
+
+/**
+ * 통합 인증 검증 함수
+ *
+ * 우선순위:
+ * 1. Authorization: Bearer 토큰 (API 호출)
+ * 2. auth-token 쿠키 (Naver OAuth)
+ * 3. NextAuth 세션 (Google OAuth)
+ *
+ * ⭐ 3중 검증:
+ * 1. 토큰/세션 서명 검증
+ * 2. DB에서 사용자 존재 및 활성 상태 확인
+ * 3. 토큰 클레임과 DB 테넌트 ID 비교
+ */
+export async function verifyAuth(
+  request: NextRequest
+): Promise<TenantContext | null> {
+  try {
+    // 1. Authorization: Bearer 토큰 확인
+    const bearerToken = extractBearerToken(request);
+    if (bearerToken) {
+      const result = await verifyJwtToken(bearerToken, request);
+      if (result) return result;
+    }
+
+    // 2. auth-token 쿠키 확인 (Naver OAuth)
+    const cookieToken = extractCookieToken(request);
+    if (cookieToken) {
+      const result = await verifyJwtToken(cookieToken, request);
+      if (result) return result;
+    }
+
+    // 3. NextAuth 세션 확인 (Google OAuth)
+    const sessionResult = await verifyNextAuthSession(request);
+    if (sessionResult) return sessionResult;
+
+    // 모든 인증 방식 실패
+    return null;
+  } catch (error) {
+    console.error('[Auth] 인증 검증 오류:', error);
     return null;
   }
 }

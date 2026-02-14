@@ -1,79 +1,62 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   DashboardPanel,
+  DashboardHeader,
   EnergyBarChart,
   EnergyLineChart,
   CircularGauge,
+  ImageGauge,
   StatDisplay,
 } from '@/components/dashboard';
+import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 
-// Sample data for charts
-const monthlyConsumptionData = [
-  { name: 'Jan', consumption: 4200, target: 4000 },
-  { name: 'Feb', consumption: 3800, target: 4000 },
-  { name: 'Mar', consumption: 4100, target: 4000 },
-  { name: 'Apr', consumption: 3600, target: 3800 },
-  { name: 'May', consumption: 3900, target: 3800 },
-  { name: 'Jun', consumption: 4500, target: 4200 },
-  { name: 'Jul', consumption: 5200, target: 4500 },
-  { name: 'Aug', consumption: 5100, target: 4500 },
-  { name: 'Sep', consumption: 4300, target: 4200 },
-  { name: 'Oct', consumption: 3800, target: 4000 },
-  { name: 'Nov', consumption: 3600, target: 3800 },
-  { name: 'Dec', consumption: 4000, target: 4000 },
-];
+// 대시보드 통계 데이터 타입
+interface DashboardStats {
+  kpis: {
+    totalConsumption: number;
+    consumptionUnit: string;
+    consumptionTrend: { value: number; direction: 'up' | 'down' };
+    efficiency: number;
+    equipmentRate: number;
+    drParticipation: number;
+    carbonGoal: number;
+  };
+  realtime: {
+    currentPower: number;
+    dailyUsage: number;
+    peakRatio: number;
+    estimatedCost: number;
+  };
+  monthlyConsumption: Array<{ name: string; consumption: number; target: number }>;
+  weeklyTrend: Array<{ name: string; current: number; previous: number }>;
+  hourlyLoad: Array<{ name: string; load: number; peak: number }>;
+  costAnalysis: Array<{ name: string; cost: number; savings: number }>;
+  efficiencyTrend: Array<{ name: string; efficiency: number; target: number }>;
+  carbonEmission: Array<{ name: string; emission: number; limit: number }>;
+  costSavings: Array<{ name: string; profit: number; target: number }>;
+  renewableEnergy: Array<{ name: string; solar: number; wind: number; ess: number }>;
+  peakHourAnalysis: Array<{ name: string; value: number; avg: number }>;
+}
 
-const weeklyTrendData = [
-  { name: 'Mon', current: 680, previous: 720 },
-  { name: 'Tue', current: 720, previous: 700 },
-  { name: 'Wed', current: 750, previous: 680 },
-  { name: 'Thu', current: 690, previous: 750 },
-  { name: 'Fri', current: 630, previous: 690 },
-  { name: 'Sat', current: 420, previous: 480 },
-  { name: 'Sun', current: 380, previous: 450 },
-];
+// 숫자 포맷팅 함수
+const formatNumber = (num: number): string => {
+  return num.toLocaleString('ko-KR');
+};
 
-const hourlyLoadData = [
-  { name: '00', load: 120, peak: 200 },
-  { name: '04', load: 100, peak: 200 },
-  { name: '08', load: 280, peak: 300 },
-  { name: '12', load: 350, peak: 350 },
-  { name: '16', load: 320, peak: 350 },
-  { name: '20', load: 250, peak: 300 },
-];
-
-const costAnalysisData = [
-  { name: 'Jan', cost: 12500, savings: 1800 },
-  { name: 'Feb', cost: 11200, savings: 2100 },
-  { name: 'Mar', cost: 12800, savings: 1500 },
-  { name: 'Apr', cost: 10800, savings: 2400 },
-  { name: 'May', cost: 11500, savings: 2000 },
-  { name: 'Jun', cost: 13200, savings: 1200 },
-];
-
-const efficiencyTrendData = [
-  { name: 'W1', efficiency: 82, target: 85 },
-  { name: 'W2', efficiency: 84, target: 85 },
-  { name: 'W3', efficiency: 86, target: 85 },
-  { name: 'W4', efficiency: 88, target: 85 },
-  { name: 'W5', efficiency: 85, target: 85 },
-  { name: 'W6', efficiency: 87, target: 85 },
-];
-
-const carbonEmissionData = [
-  { name: 'Jan', emission: 2800, limit: 3000 },
-  { name: 'Feb', emission: 2600, limit: 3000 },
-  { name: 'Mar', emission: 2900, limit: 3000 },
-  { name: 'Apr', emission: 2400, limit: 2800 },
-  { name: 'May', emission: 2500, limit: 2800 },
-  { name: 'Jun', emission: 3100, limit: 3200 },
-];
+const formatCurrency = (num: number): string => {
+  return `₩${num.toLocaleString('ko-KR')}`;
+};
 
 export default function DashboardPage() {
   const [currentTime, setCurrentTime] = useState<string>('');
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  // 시간 업데이트
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -94,121 +77,239 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, []);
 
-  return (
-    <div className="min-h-screen bg-[#051225] p-4 md:p-6">
-      {/* Header */}
-      <div className="text-center mb-6">
-        <h1
-          className="text-2xl md:text-3xl font-bold text-cyan-400 tracking-wider"
-          style={{ textShadow: '0 0 20px rgba(6, 182, 212, 0.5)' }}
-        >
-          Energy Operation and Management
-        </h1>
-        <p className="text-slate-500 text-sm mt-1" suppressHydrationWarning>
-          {currentTime}
-        </p>
-      </div>
+  // 대시보드 데이터 조회
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      setError(null);
+      const response = await fetch('/api/dashboard/stats');
 
-      {/* Main Grid Layout */}
-      <div className="grid grid-cols-12 gap-4">
-        {/* Left Column - Charts */}
-        <div className="col-span-12 lg:col-span-3 space-y-4">
-          {/* Monthly Consumption */}
-          <DashboardPanel title="월별 에너지 소비량">
+      if (!response.ok) {
+        throw new Error('데이터를 불러올 수 없습니다');
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        setStats(result.data);
+        setLastUpdated(new Date());
+      } else {
+        throw new Error(result.error || '데이터 조회 실패');
+      }
+    } catch (err) {
+      console.error('대시보드 데이터 조회 오류:', err);
+      setError(err instanceof Error ? err.message : '알 수 없는 오류');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // 초기 로드 및 자동 새로고침 (30초마다)
+  useEffect(() => {
+    fetchDashboardData();
+    const interval = setInterval(fetchDashboardData, 30000);
+    return () => clearInterval(interval);
+  }, [fetchDashboardData]);
+
+  // 로딩 상태
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#051225] flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-16 h-16 text-cyan-400 animate-spin mx-auto" />
+          <p className="mt-4 text-slate-400 text-lg">대시보드 로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 오류 상태
+  if (error && !stats) {
+    return (
+      <div className="min-h-screen bg-[#051225] flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <AlertCircle className="w-16 h-16 text-red-400 mx-auto" />
+          <h2 className="mt-4 text-xl font-semibold text-white">데이터 로드 실패</h2>
+          <p className="mt-2 text-slate-400">{error}</p>
+          <button
+            onClick={fetchDashboardData}
+            className="mt-6 px-6 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg flex items-center gap-2 mx-auto transition-colors"
+          >
+            <RefreshCw className="w-5 h-5" />
+            다시 시도
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 데이터가 없는 경우 기본값 사용
+  const data = stats || getDefaultStats();
+
+  return (
+    <div className="min-h-screen bg-[#051225] p-2 md:p-3 lg:p-4">
+      {/* 헤더 배너 */}
+      <DashboardHeader
+        title="에너지 운영 관리 시스템"
+        subtitle={currentTime}
+      />
+
+      {/* 오류 알림 (데이터는 있지만 새로고침 실패 시) */}
+      {error && stats && (
+        <div className="mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-center justify-between">
+          <span className="text-yellow-400 text-sm">데이터 새로고침 실패. 이전 데이터를 표시합니다.</span>
+          <button
+            onClick={fetchDashboardData}
+            className="text-yellow-400 hover:text-yellow-300 text-sm flex items-center gap-1"
+          >
+            <RefreshCw className="w-4 h-4" />
+            재시도
+          </button>
+        </div>
+      )}
+
+      {/* 메인 그리드 레이아웃 - 3컬럼 */}
+      <div className="grid grid-cols-12 gap-2 md:gap-3">
+        {/* ==================== 좌측 컬럼 ==================== */}
+        <div className="col-span-12 lg:col-span-3 space-y-2 md:space-y-3">
+          {/* 월별 에너지 소비량 */}
+          <DashboardPanel title="월별 에너지 소비량" variant="frame">
             <EnergyBarChart
-              data={monthlyConsumptionData}
+              data={data.monthlyConsumption}
               bars={[
                 { dataKey: 'consumption', color: '#22d3ee', name: '소비량' },
                 { dataKey: 'target', color: '#4ade80', name: '목표' },
               ]}
-              height={160}
+              height={130}
               showLegend={false}
             />
           </DashboardPanel>
 
-          {/* Weekly Trend */}
-          <DashboardPanel title="주간 소비 추이">
+          {/* 주간 소비 추이 */}
+          <DashboardPanel title="주간 소비 추이" variant="frame">
             <EnergyBarChart
-              data={weeklyTrendData}
+              data={data.weeklyTrend}
               bars={[
                 { dataKey: 'current', color: '#06b6d4', name: '이번주' },
                 { dataKey: 'previous', color: '#0891b2', name: '지난주' },
               ]}
-              height={140}
+              height={110}
               showLegend={false}
             />
           </DashboardPanel>
 
-          {/* Hourly Load */}
-          <DashboardPanel title="시간대별 부하">
+          {/* 설비별 에너지 사용 */}
+          <DashboardPanel title="시간대별 부하" variant="frame">
             <EnergyBarChart
-              data={hourlyLoadData}
+              data={data.hourlyLoad}
               bars={[
                 { dataKey: 'load', color: '#22d3ee', name: '현재 부하' },
                 { dataKey: 'peak', color: '#f59e0b', name: '피크' },
               ]}
-              height={140}
+              height={110}
+              showLegend={false}
+            />
+          </DashboardPanel>
+
+          {/* 피크 시간대 분석 */}
+          <DashboardPanel title="피크 시간대 분석" variant="frame">
+            <EnergyBarChart
+              data={data.peakHourAnalysis}
+              bars={[
+                { dataKey: 'value', color: '#fbbf24', name: '사용량' },
+                { dataKey: 'avg', color: '#6366f1', name: '평균' },
+              ]}
+              height={110}
               showLegend={false}
             />
           </DashboardPanel>
         </div>
 
-        {/* Center Column - Main Stats */}
-        <div className="col-span-12 lg:col-span-6 space-y-4">
-          {/* Main Stats Display */}
-          <DashboardPanel className="py-8">
-            <StatDisplay
-              value={153123461}
-              label="Total Energy Consumption"
-              sublabel="kWh (Year to Date)"
-              size="xl"
-              trend={{ value: 8.5, direction: 'down' }}
-            />
+        {/* ==================== 중앙 컬럼 ==================== */}
+        <div className="col-span-12 lg:col-span-6 space-y-2 md:space-y-3">
+          {/* 메인 통계 표시 */}
+          <DashboardPanel variant="frame" className="py-4 md:py-6">
+            <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-10">
+              <StatDisplay
+                value={data.kpis.totalConsumption}
+                label="총 에너지 소비량"
+                sublabel={`${data.kpis.consumptionUnit} (연간 누계)`}
+                size="xl"
+                trend={{
+                  value: data.kpis.consumptionTrend.value,
+                  direction: data.kpis.consumptionTrend.direction,
+                }}
+              />
+              <div className="hidden md:block h-20 w-px bg-gradient-to-b from-transparent via-cyan-500/30 to-transparent" />
+              <ImageGauge
+                value={data.kpis.efficiency}
+                label="효율"
+                size="lg"
+              />
+            </div>
           </DashboardPanel>
 
-          {/* Cost Analysis */}
-          <DashboardPanel title="비용 분석 (천원)">
-            <EnergyBarChart
-              data={costAnalysisData}
-              bars={[
-                { dataKey: 'cost', color: '#f97316', name: '비용' },
-                { dataKey: 'savings', color: '#22c55e', name: '절감' },
-              ]}
-              height={180}
-              showLegend
-            />
-          </DashboardPanel>
+          {/* 비용 분석 행 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
+            <DashboardPanel title="비용 분석 (천원)" variant="frame">
+              <EnergyBarChart
+                data={data.costAnalysis}
+                bars={[
+                  { dataKey: 'cost', color: '#f97316', name: '비용' },
+                  { dataKey: 'savings', color: '#22c55e', name: '절감' },
+                ]}
+                height={150}
+                showLegend
+              />
+            </DashboardPanel>
 
-          {/* Bottom Circular Gauges */}
-          <div className="grid grid-cols-4 gap-3">
-            <DashboardPanel className="py-4" glowColor="green">
+            <DashboardPanel title="분기별 신재생 에너지" variant="frame">
+              <EnergyBarChart
+                data={data.renewableEnergy}
+                bars={[
+                  { dataKey: 'solar', color: '#fbbf24', name: '태양광' },
+                  { dataKey: 'wind', color: '#22d3ee', name: '풍력' },
+                  { dataKey: 'ess', color: '#a78bfa', name: 'ESS' },
+                ]}
+                height={150}
+                showLegend
+              />
+            </DashboardPanel>
+          </div>
+
+          {/* 하단 원형 게이지 */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+            <DashboardPanel variant="glow" className="py-3 md:py-4">
               <CircularGauge
-                value={94}
+                value={data.kpis.equipmentRate}
                 label="설비 가동률"
+                sublabel="Equipment"
                 color="green"
                 size="sm"
               />
             </DashboardPanel>
-            <DashboardPanel className="py-4" glowColor="cyan">
+            <DashboardPanel variant="glow" className="py-3 md:py-4">
               <CircularGauge
-                value={87}
+                value={data.kpis.efficiency}
                 label="에너지 효율"
+                sublabel="Efficiency"
                 color="cyan"
                 size="sm"
               />
             </DashboardPanel>
-            <DashboardPanel className="py-4" glowColor="yellow">
+            <DashboardPanel variant="glow" className="py-3 md:py-4">
               <CircularGauge
-                value={76}
+                value={data.kpis.drParticipation}
                 label="DR 참여율"
+                sublabel="Demand Response"
                 color="yellow"
                 size="sm"
               />
             </DashboardPanel>
-            <DashboardPanel className="py-4" glowColor="purple">
+            <DashboardPanel variant="glow" className="py-3 md:py-4">
               <CircularGauge
-                value={92}
+                value={data.kpis.carbonGoal}
                 label="탄소 목표"
+                sublabel="Carbon Goal"
                 color="purple"
                 size="sm"
               />
@@ -216,75 +317,161 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Right Column - Additional Charts */}
-        <div className="col-span-12 lg:col-span-3 space-y-4">
-          {/* Efficiency Trend */}
-          <DashboardPanel title="효율성 추이">
+        {/* ==================== 우측 컬럼 ==================== */}
+        <div className="col-span-12 lg:col-span-3 space-y-2 md:space-y-3">
+          {/* 효율성 추이 */}
+          <DashboardPanel title="효율성 추이" variant="frame">
             <EnergyLineChart
-              data={efficiencyTrendData}
+              data={data.efficiencyTrend}
               lines={[
                 { dataKey: 'efficiency', color: '#22d3ee', name: '효율' },
                 { dataKey: 'target', color: '#f59e0b', name: '목표', dot: false },
               ]}
-              height={160}
+              height={130}
               showLegend={false}
             />
           </DashboardPanel>
 
-          {/* Carbon Emission */}
-          <DashboardPanel title="탄소 배출량 (tCO2)">
+          {/* 비용 절감 추이 */}
+          <DashboardPanel title="비용 절감 추이" variant="frame">
+            <EnergyLineChart
+              data={data.costSavings}
+              lines={[
+                { dataKey: 'profit', color: '#4ade80', name: '절감액' },
+                { dataKey: 'target', color: '#f97316', name: '목표', dot: false },
+              ]}
+              height={110}
+              showLegend={false}
+            />
+          </DashboardPanel>
+
+          {/* 탄소 배출량 */}
+          <DashboardPanel title="탄소 배출량 (tCO₂)" variant="frame">
             <EnergyBarChart
-              data={carbonEmissionData}
+              data={data.carbonEmission}
               bars={[
                 { dataKey: 'emission', color: '#a78bfa', name: '배출량' },
                 { dataKey: 'limit', color: '#ef4444', name: '한도' },
               ]}
-              height={140}
+              height={110}
               showLegend={false}
             />
           </DashboardPanel>
 
-          {/* Quick Stats */}
-          <DashboardPanel title="실시간 현황">
-            <div className="space-y-3">
-              <div className="flex justify-between items-center p-2 bg-[#0d2847] rounded">
-                <span className="text-slate-400 text-sm">현재 전력</span>
-                <span className="text-cyan-400 font-bold">245.7 kW</span>
+          {/* 실시간 현황 */}
+          <DashboardPanel title="실시간 현황" variant="frame">
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center p-2.5 bg-[#0d2847]/50 rounded-lg border border-cyan-500/20 hover:border-cyan-500/40 transition-colors">
+                <span className="text-slate-400 text-xs">현재 전력</span>
+                <span className="text-cyan-400 font-bold text-sm tabular-nums">
+                  {formatNumber(data.realtime.currentPower)} kW
+                </span>
               </div>
-              <div className="flex justify-between items-center p-2 bg-[#0d2847] rounded">
-                <span className="text-slate-400 text-sm">금일 사용량</span>
-                <span className="text-green-400 font-bold">1,842 kWh</span>
+              <div className="flex justify-between items-center p-2.5 bg-[#0d2847]/50 rounded-lg border border-emerald-500/20 hover:border-emerald-500/40 transition-colors">
+                <span className="text-slate-400 text-xs">금일 사용량</span>
+                <span className="text-emerald-400 font-bold text-sm tabular-nums">
+                  {formatNumber(data.realtime.dailyUsage)} kWh
+                </span>
               </div>
-              <div className="flex justify-between items-center p-2 bg-[#0d2847] rounded">
-                <span className="text-slate-400 text-sm">피크 대비</span>
-                <span className="text-yellow-400 font-bold">72%</span>
+              <div className="flex justify-between items-center p-2.5 bg-[#0d2847]/50 rounded-lg border border-yellow-500/20 hover:border-yellow-500/40 transition-colors">
+                <span className="text-slate-400 text-xs">피크 대비</span>
+                <span className="text-yellow-400 font-bold text-sm tabular-nums">
+                  {data.realtime.peakRatio}%
+                </span>
               </div>
-              <div className="flex justify-between items-center p-2 bg-[#0d2847] rounded">
-                <span className="text-slate-400 text-sm">예상 요금</span>
-                <span className="text-orange-400 font-bold">₩284,500</span>
+              <div className="flex justify-between items-center p-2.5 bg-[#0d2847]/50 rounded-lg border border-orange-500/20 hover:border-orange-500/40 transition-colors">
+                <span className="text-slate-400 text-xs">예상 요금</span>
+                <span className="text-orange-400 font-bold text-sm tabular-nums">
+                  {formatCurrency(data.realtime.estimatedCost)}
+                </span>
               </div>
             </div>
           </DashboardPanel>
 
-          {/* Alerts Summary */}
-          <DashboardPanel title="알림 현황" glowColor="yellow">
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="p-2 bg-red-950/50 rounded border border-red-500/30">
-                <p className="text-2xl font-bold text-red-400">1</p>
-                <p className="text-[10px] text-red-300">긴급</p>
-              </div>
-              <div className="p-2 bg-yellow-950/50 rounded border border-yellow-500/30">
-                <p className="text-2xl font-bold text-yellow-400">3</p>
-                <p className="text-[10px] text-yellow-300">주의</p>
-              </div>
-              <div className="p-2 bg-emerald-950/50 rounded border border-emerald-500/30">
-                <p className="text-2xl font-bold text-emerald-400">12</p>
-                <p className="text-[10px] text-emerald-300">정보</p>
-              </div>
+          {/* 마지막 업데이트 시간 */}
+          {lastUpdated && (
+            <div className="text-center text-xs text-slate-500">
+              마지막 업데이트: {lastUpdated.toLocaleTimeString('ko-KR')}
             </div>
-          </DashboardPanel>
+          )}
         </div>
       </div>
     </div>
   );
+}
+
+// 기본 통계 데이터 (API 실패 시 폴백)
+function getDefaultStats(): DashboardStats {
+  const monthNames = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+  const weekdayNames = ['월', '화', '수', '목', '금', '토', '일'];
+
+  return {
+    kpis: {
+      totalConsumption: 153123461,
+      consumptionUnit: 'kWh',
+      consumptionTrend: { value: 8.5, direction: 'down' },
+      efficiency: 94,
+      equipmentRate: 81,
+      drParticipation: 76,
+      carbonGoal: 89,
+    },
+    realtime: {
+      currentPower: 245,
+      dailyUsage: 1842,
+      peakRatio: 72,
+      estimatedCost: 284500,
+    },
+    monthlyConsumption: monthNames.map((name, i) => ({
+      name,
+      consumption: 3500 + (i % 4) * 500,
+      target: 4000,
+    })),
+    weeklyTrend: weekdayNames.map((name) => ({
+      name,
+      current: 500 + Math.floor(Math.random() * 300),
+      previous: 500 + Math.floor(Math.random() * 300),
+    })),
+    hourlyLoad: [
+      { name: '00시', load: 120, peak: 200 },
+      { name: '04시', load: 100, peak: 200 },
+      { name: '08시', load: 280, peak: 300 },
+      { name: '12시', load: 350, peak: 350 },
+      { name: '16시', load: 320, peak: 350 },
+      { name: '20시', load: 250, peak: 300 },
+    ],
+    costAnalysis: monthNames.slice(0, 6).map((name) => ({
+      name,
+      cost: 10000 + Math.floor(Math.random() * 5000),
+      savings: 1500 + Math.floor(Math.random() * 1000),
+    })),
+    efficiencyTrend: Array.from({ length: 6 }, (_, i) => ({
+      name: `${i + 1}주`,
+      efficiency: 82 + i,
+      target: 85,
+    })),
+    carbonEmission: monthNames.slice(0, 6).map((name, i) => ({
+      name,
+      emission: 2500 + (i % 3) * 200,
+      limit: 3000,
+    })),
+    costSavings: monthNames.slice(0, 6).map((name, i) => ({
+      name,
+      profit: 850 + i * 50,
+      target: 800 + i * 50,
+    })),
+    renewableEnergy: ['1분기', '2분기', '3분기', '4분기'].map((name) => ({
+      name,
+      solar: 4500 + Math.floor(Math.random() * 2000),
+      wind: 3200 + Math.floor(Math.random() * 1000),
+      ess: 1800 + Math.floor(Math.random() * 700),
+    })),
+    peakHourAnalysis: [
+      { name: '06-09', value: 180, avg: 150 },
+      { name: '09-12', value: 320, avg: 280 },
+      { name: '12-15', value: 280, avg: 260 },
+      { name: '15-18', value: 350, avg: 300 },
+      { name: '18-21', value: 290, avg: 250 },
+      { name: '21-24', value: 150, avg: 120 },
+    ],
+  };
 }

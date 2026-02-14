@@ -39,7 +39,7 @@ class DatabaseLogger {
    * 데이터베이스 연결 성공 로그
    */
   logConnectionSuccess() {
-    this.status = '연결됨';
+    this.status = 'connected';
     console.log('\n' + '-'.repeat(60));
     console.log('✅ 데이터베이스 연결이 설정되었습니다');
     console.log('-'.repeat(60));

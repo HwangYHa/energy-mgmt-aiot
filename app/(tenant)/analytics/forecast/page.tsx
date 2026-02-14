@@ -13,12 +13,13 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { TrendingUp, Zap, Target, AlertCircle, Loader2 } from 'lucide-react';
+import { fetchWithCsrf } from '@/hooks/use-csrf';
 
 interface Prediction {
   timestamp: string;
   value: number;
-  lower: number;
-  upper: number;
+  lower?: number;
+  upper?: number;
 }
 
 interface ForecastData {
@@ -34,18 +35,15 @@ export default function ForecastPage() {
   const [accuracy, setAccuracy] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [charData, setChartData] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<any[]>([]);
 
   const handleForecast = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch('/api/ai/forecast', {
+      const response = await fetchWithCsrf('/api/ai/forecast', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ horizon }),
       });
 
@@ -62,12 +60,12 @@ export default function ForecastPage() {
         time: new Date(p.timestamp).getHours() + '시',
         actual: null,
         forecast: Math.round(p.value * 10) / 10,
-        lower: Math.round(p.lower * 10) / 10,
-        upper: Math.round(p.upper * 10) / 10,
+        lower: Math.round((p.lower ?? p.value * 0.85) * 10) / 10,
+        upper: Math.round((p.upper ?? p.value * 1.15) * 10) / 10,
       }));
       setChartData(chartData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(err instanceof Error ? err.message : '알 수 없는 오류');
     } finally {
       setIsLoading(false);
     }
@@ -169,7 +167,7 @@ export default function ForecastPage() {
       )}
 
       {/* 예측 차트 */}
-      {charData.length > 0 && (
+      {chartData.length > 0 && (
         <div className="bg-gray-800 rounded-lg p-6 mb-8">
           <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
             <LineChart className="w-6 h-6 text-blue-400" />
@@ -177,7 +175,7 @@ export default function ForecastPage() {
           </h2>
 
           <ResponsiveContainer width="100%" height={400}>
-            <AreaChart data={charData}>
+            <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="colorForecast" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8} />
@@ -268,8 +266,8 @@ export default function ForecastPage() {
                     <td className="text-right py-2 px-4 text-blue-400 font-semibold">
                       {p.value.toFixed(1)}
                     </td>
-                    <td className="text-right py-2 px-4 text-green-400">{p.lower.toFixed(1)}</td>
-                    <td className="text-right py-2 px-4 text-red-400">{p.upper.toFixed(1)}</td>
+                    <td className="text-right py-2 px-4 text-green-400">{(p.lower ?? p.value * 0.85).toFixed(1)}</td>
+                    <td className="text-right py-2 px-4 text-red-400">{(p.upper ?? p.value * 1.15).toFixed(1)}</td>
                   </tr>
                 ))}
               </tbody>

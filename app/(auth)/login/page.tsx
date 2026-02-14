@@ -21,17 +21,27 @@ function LoginPageContent() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState(urlError || '');
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<string | null>(null);
 
+  // 저장된 이메일 복원
+  useEffect(() => {
+    try {
+      const savedEmail = localStorage.getItem('ems_remember_email');
+      if (savedEmail) {
+        setEmail(savedEmail);
+        setRememberMe(true);
+      }
+    } catch {
+      // localStorage 접근 불가 시 무시
+    }
+  }, []);
+
   // 세션 확인 - 이미 로그인된 경우 대시보드로
   useEffect(() => {
-    console.log('[Login Page] Session status:', status);
-    console.log('[Login Page] Session data:', session);
-    
     if (status === 'authenticated' && session) {
-      console.log('[Login Page] Already authenticated, redirecting to dashboard');
       router.push('/dashboard');
     }
   }, [status, session, router]);
@@ -57,14 +67,10 @@ function LoginPageContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    console.log('[Login Page] Form submitted:', { email });
-    
     setError('');
     setLoading(true);
 
     try {
-      console.log('[Login Page] Calling signIn with credentials');
-      
       // NextAuth를 사용한 로그인
       const result = await signIn('credentials', {
         email,
@@ -72,11 +78,7 @@ function LoginPageContent() {
         redirect: false, // 수동 리디렉션 처리
       });
 
-      console.log('[Login Page] signIn result:', result);
-
       if (result?.error) {
-        console.error('[Login Page] Login error:', result.error);
-        
         // 에러 메시지 매핑
         const errorMessages: Record<string, string> = {
           'CredentialsSignin': '이메일 또는 비밀번호가 올바르지 않습니다.',
@@ -93,18 +95,25 @@ function LoginPageContent() {
       }
 
       if (result?.ok) {
-        console.log('[Login Page] Login successful, redirecting to:', callbackUrl);
+        // 로그인 정보 저장 처리
+        try {
+          if (rememberMe) {
+            localStorage.setItem('ems_remember_email', email);
+          } else {
+            localStorage.removeItem('ems_remember_email');
+          }
+        } catch {
+          // localStorage 접근 불가 시 무시
+        }
 
         // 성공 시 콜백 URL로 리디렉션
         router.push(callbackUrl);
         router.refresh();
       } else {
-        console.error('[Login Page] Login failed with unknown error');
         setError('로그인에 실패했습니다.');
         setLoading(false);
       }
-    } catch (err) {
-      console.error('[Login Page] Exception during login:', err);
+    } catch {
       setError('요청 중 오류가 발생했습니다.');
       setLoading(false);
     }
@@ -114,8 +123,6 @@ function LoginPageContent() {
     try {
       setSocialLoading(provider);
       setError('');
-
-      console.log('[Login Page] Social login:', provider);
 
       if (provider === 'google') {
         // Google OAuth 로그인
@@ -127,8 +134,7 @@ function LoginPageContent() {
         // Naver는 별도 엔드포인트 사용
         window.location.href = `/api/auth/oauth/naver?callbackUrl=${encodeURIComponent(callbackUrl)}`;
       }
-    } catch (err) {
-      console.error('[Login Page] Social login error:', err);
+    } catch {
       setError(`${provider === 'google' ? '구글' : '네이버'} 로그인에 실패했습니다.`);
       setSocialLoading(null);
     }
@@ -196,9 +202,11 @@ function LoginPageContent() {
           />
 
           <div className="flex items-center justify-between">
-            <label className="flex items-center gap-2 text-sm text-gray-400">
+            <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
               <input
                 type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
                 className="w-4 h-4 rounded border-white/20 bg-white/5 text-neon-blue focus:ring-neon-blue/50"
                 disabled={loading || socialLoading !== null}
               />

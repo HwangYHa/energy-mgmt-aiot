@@ -116,17 +116,28 @@ export async function POST(request: NextRequest) {
       take: 720, // 30일 * 24시간 (시간당 데이터)
     });
 
-    // 4. 데이터 검증
+    // 4. 데이터 검증 - 부족 시 시뮬레이션 폴백
     if (historicalData.length < MIN_DATA_POINTS) {
-      return NextResponse.json(
-        {
-          error: 'Insufficient data',
-          message: `최소 ${MIN_DATA_POINTS}시간의 데이터가 필요합니다 (현재: ${historicalData.length}시간)`,
-          required: MIN_DATA_POINTS,
-          current: historicalData.length,
+      logger.info('Insufficient data, generating simulated forecast', {
+        tenantId, siteId, current: historicalData.length, required: MIN_DATA_POINTS,
+      });
+
+      const simulatedPredictions = generateSimulatedPredictions(horizon);
+
+      return NextResponse.json({
+        success: true,
+        predictions: simulatedPredictions,
+        confidence: 0.3,
+        accuracy: null,
+        model: 'SIMULATED',
+        metadata: {
+          simulated: true,
+          reason: `측정 데이터 부족 (${historicalData.length}/${MIN_DATA_POINTS})`,
+          dataPoints: historicalData.length,
+          horizon,
+          siteId: siteId || 'all',
         },
-        { status: 400 }
-      );
+      });
     }
 
     // 5. 데이터 변환 (AI Engine 형식)
@@ -266,7 +277,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     // ✅ 서버 로그에 상세 정보 기록
     logger.error('Forecast generation failed', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : '알 수 없는 오류',
       stack: error instanceof Error ? error.stack : undefined,
       tenantId: auth?.tenantId,
       userId: auth?.userId,
@@ -335,7 +346,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     logger.error('Failed to fetch forecast history', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : '알 수 없는 오류',
       tenantId: auth?.tenantId,
     });
     
@@ -353,10 +364,10 @@ export async function GET(request: NextRequest) {
 function generateFallbackPredictions(
   historicalData: any[],
   horizon: string
-): Array<{ timestamp: string; value: number }> {
-  const hours = parseInt(horizon.replace('h', ''));
-  const recentData = historicalData.slice(-24); // 최근 24시간
-  
+): Array<{ timestamp: string; value: number; lower: number; upper: number; confidence: number }> {
+  const hours = parseHorizonToHours(horizon);
+  const recentData = historicalData.slice(-24);
+
   const averageValue = recentData.reduce(
     (sum, m) => sum + parseFloat(m.value.toString()),
     0
@@ -367,12 +378,70 @@ function generateFallbackPredictions(
 
   for (let i = 1; i <= hours; i++) {
     const futureTime = new Date(now.getTime() + i * 60 * 60 * 1000);
+    const roundedValue = Math.round(averageValue * 100) / 100;
     predictions.push({
       timestamp: futureTime.toISOString(),
-      value: Math.round(averageValue * 100) / 100,
+      value: roundedValue,
+      lower: Math.round(roundedValue * 0.8 * 100) / 100,
+      upper: Math.round(roundedValue * 1.2 * 100) / 100,
       confidence: 0.5,
     });
   }
 
   return predictions;
+}
+
+/**
+ * 시뮬레이션 예측 생성 (데이터 부족 시)
+ * 일반적인 산업 전력 패턴 기반
+ */
+function generateSimulatedPredictions(
+  horizon: string
+): Array<{ timestamp: string; value: number; lower: number; upper: number; confidence: number }> {
+  const hours = parseHorizonToHours(horizon);
+  const now = new Date();
+  const predictions = [];
+
+  // 시간대별 전력 사용 패턴 (상대값, kW 기준)
+  const hourlyPattern = [
+    0.4, 0.35, 0.3, 0.3, 0.35, 0.5,   // 00-05시
+    0.7, 0.85, 0.95, 1.0, 0.98, 0.95,  // 06-11시
+    0.8, 0.9, 0.95, 1.0, 0.95, 0.85,   // 12-17시
+    0.7, 0.6, 0.55, 0.5, 0.45, 0.42,   // 18-23시
+  ];
+
+  const baseLoad = 150; // 기본 부하 kW
+
+  for (let i = 1; i <= hours; i++) {
+    const futureTime = new Date(now.getTime() + i * 60 * 60 * 1000);
+    const hour = futureTime.getHours();
+    const dayOfWeek = futureTime.getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+    let value = baseLoad * (hourlyPattern[hour] ?? 0.5);
+    if (isWeekend) value *= 0.6; // 주말 감소
+    // 약간의 랜덤 변동 (+/- 5%)
+    value *= (0.95 + Math.random() * 0.1);
+
+    const roundedValue = Math.round(value * 100) / 100;
+    predictions.push({
+      timestamp: futureTime.toISOString(),
+      value: roundedValue,
+      lower: Math.round(roundedValue * 0.85 * 100) / 100,
+      upper: Math.round(roundedValue * 1.15 * 100) / 100,
+      confidence: 0.3,
+    });
+  }
+
+  return predictions;
+}
+
+/**
+ * horizon 문자열을 시간으로 변환
+ */
+function parseHorizonToHours(horizon: string): number {
+  if (horizon.endsWith('d')) {
+    return parseInt(horizon.replace('d', '')) * 24;
+  }
+  return parseInt(horizon.replace('h', ''));
 }

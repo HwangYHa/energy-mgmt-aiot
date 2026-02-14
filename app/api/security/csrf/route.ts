@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
 
     return response;
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    const errorMsg = error instanceof Error ? error.message : '알 수 없는 오류';
 
     logHttpResponse({
       requestId,

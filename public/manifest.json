@@ -1,0 +1,19 @@
+{
+  "name": "EnergyAI - AI 기반 에너지 관리 플랫폼",
+  "short_name": "EnergyAI",
+  "description": "AI 부하 예측, 실시간 이상 탐지, 자동 최적화로 에너지 비용 15% 절감",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "any",
+  "categories": ["business", "utilities"],
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ]
+}

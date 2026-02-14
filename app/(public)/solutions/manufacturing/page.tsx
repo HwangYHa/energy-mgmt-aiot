@@ -17,7 +17,11 @@ import {
 export const metadata = {
   title: '제조업 에너지 관리 솔루션 - EnergyAI',
   description:
-    '제조 현장의 에너지 비용을 최대 30% 절감하는 AI 기반 에너지 관리 솔루션',
+    '제조 현장의 에너지 비용을 최대 30% 절감하는 AI 기반 에너지 관리 솔루션. 스마트 팩토리 FEMS, 피크 관리, 설비 최적화.',
+  openGraph: {
+    title: '제조업 에너지 관리 (FEMS) - EnergyAI',
+    description: 'AI로 제조 현장 에너지 비용 최대 30% 절감',
+  },
 };
 
 export default function ManufacturingSolutionPage() {

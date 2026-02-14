@@ -52,9 +52,9 @@ export default function OptimizationPage() {
     setError(null);
 
     try {
-      const response = await fetch('/api/ai/optimize', {
+      const { fetchWithCsrf } = await import('@/hooks/use-csrf');
+      const response = await fetchWithCsrf('/api/ai/optimize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetReduction }),
       });
 
@@ -63,7 +63,7 @@ export default function OptimizationPage() {
       const data = await response.json();
       setResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(err instanceof Error ? err.message : '알 수 없는 오류');
     } finally {
       setIsLoading(false);
     }

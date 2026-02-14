@@ -130,22 +130,34 @@ export const siteCreateSchema = z.object({
     .string()
     .min(1, 'Name required')
     .max(200, 'Name too long'),
-  
+
   code: z.string().max(50).optional(),
-  
+
   address: z.string().max(500).optional(),
-  
+
   city: z.string().max(100).optional(),
-  
+
+  country: z.string().max(50).optional(),
+
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
-  
+
   siteType: siteTypeEnum.default('factory'),
-  
+
   areaSqm: z.number().positive().optional(),
-  
+
+  floors: z.number().int().positive().optional(),
+
   peakPowerKw: z.number().positive().optional(),
+
+  operatingHours: z.record(z.any()).optional(),
+
+  isActive: z.boolean().optional(),
+
+  managerId: z.string().uuid().optional().nullable(),
 });
+
+export const siteUpdateSchema = siteCreateSchema.partial();
 
 // ==========================================
 // DR Event Schemas
@@ -378,6 +390,43 @@ export const measurementCreateSchema = z.object({
 
 export const measurementBatchSchema = z.object({
   measurements: z.array(measurementCreateSchema).min(1, 'At least one measurement required'),
+});
+
+// ==========================================
+// User Schemas
+// ==========================================
+
+export const userRoleEnum = z.enum([
+  'viewer',
+  'operator',
+  'site_manager',
+  'tenant_admin',
+]);
+
+export const userCreateSchema = z.object({
+  email: emailSchema,
+  password: passwordSchema,
+  name: z
+    .string()
+    .min(1, 'Name required')
+    .max(100, 'Name too long')
+    .trim(),
+  phone: z.string().max(50).optional(),
+  role: userRoleEnum.default('viewer'),
+  isActive: z.boolean().default(true),
+});
+
+export const userUpdateSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  phone: z.string().max(50).optional().nullable(),
+  role: userRoleEnum.optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const userInviteSchema = z.object({
+  email: emailSchema,
+  name: z.string().min(1).max(100),
+  role: userRoleEnum.default('viewer'),
 });
 
 // ==========================================

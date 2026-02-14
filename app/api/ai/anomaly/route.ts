@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     logger.error('Anomaly detection failed', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : '알 수 없는 오류',
       stack: error instanceof Error ? error.stack : undefined,
       tenantId: auth?.tenantId,
     });

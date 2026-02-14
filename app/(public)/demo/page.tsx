@@ -12,6 +12,16 @@ import {
   TrendingUp,
 } from 'lucide-react';
 
+export const metadata = {
+  title: '데모 보기 - EnergyAI',
+  description:
+    'EnergyAI 에너지 관리 플랫폼의 실시간 데모를 체험하세요. AI 부하 예측, 이상 탐지, 에너지 최적화 대시보드를 직접 확인할 수 있습니다.',
+  openGraph: {
+    title: '데모 보기 - EnergyAI',
+    description: 'AI 기반 에너지 관리 플랫폼 실시간 데모 체험',
+  },
+};
+
 export default function DemoPage() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">

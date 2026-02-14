@@ -1,4 +1,12 @@
-// app/web/components/layout/Sidebar.tsx
+/**
+ * HMI Style Sidebar Component
+ *
+ * 산업용 HMI + 현대적 SaaS UI/UX 결합
+ * - 논리적 메뉴 그룹화
+ * - 아이콘 + 텍스트 병행
+ * - 접힘/펼침 상태에서도 기능 인지 가능
+ * - 현재 위치가 명확히 드러나는 강조 처리
+ */
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,8 +14,22 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { UserRole } from '@prisma/client';
-import { Zap, ChevronDown, Lock } from 'lucide-react';
+import {
+  Zap,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Lock,
+  Shield,
+  User,
+  Crown,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+} from 'lucide-react';
 import { iconMap } from './icon-map';
+import { cn } from '@/lib/utils';
+import { hasRoleOrHigher } from '@/lib/constants/roles';
 
 interface MenuItem {
   id: string;
@@ -31,7 +53,54 @@ interface MenuGroup {
   items: MenuItem[];
 }
 
-export default function Sidebar() {
+interface SidebarProps {
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
+  className?: string;
+}
+
+// 역할별 스타일 설정
+const roleStyles: Record<
+  string,
+  { label: string; icon: typeof Lock; bg: string; text: string }
+> = {
+  viewer: {
+    label: '조회자',
+    icon: Lock,
+    bg: 'bg-slate-600/20',
+    text: 'text-slate-400',
+  },
+  operator: {
+    label: '운영자',
+    icon: User,
+    bg: 'bg-blue-500/20',
+    text: 'text-blue-400',
+  },
+  site_manager: {
+    label: '사이트 관리자',
+    icon: Shield,
+    bg: 'bg-emerald-500/20',
+    text: 'text-emerald-400',
+  },
+  tenant_admin: {
+    label: '테넌트 관리자',
+    icon: Crown,
+    bg: 'bg-purple-500/20',
+    text: 'text-purple-400',
+  },
+  super_admin: {
+    label: '슈퍼 관리자',
+    icon: Crown,
+    bg: 'bg-red-500/20',
+    text: 'text-red-400',
+  },
+};
+
+export default function Sidebar({
+  collapsed = false,
+  onCollapsedChange,
+  className,
+}: SidebarProps) {
   const pathname = usePathname();
   const { data: session, status } = useSession();
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
@@ -42,72 +111,68 @@ export default function Sidebar() {
   const [error, setError] = useState<string | null>(null);
 
   const userRole = (session?.user?.role as UserRole) || ('viewer' as UserRole);
+  const roleStyle = roleStyles[userRole] ?? roleStyles.viewer;
+  const RoleIcon = roleStyle?.icon ?? Lock;
+
+  // RBAC: 역할 기반 메뉴 필터링
+  const filteredGroups = menuGroups
+    .filter((g) => hasRoleOrHigher(userRole, g.minRole))
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((i) => hasRoleOrHigher(userRole, i.minRole)),
+    }))
+    .filter((g) => g.items.length > 0);
 
   // API에서 메뉴 조회
   useEffect(() => {
-    console.log('[Sidebar] useEffect triggered:', {
-      status,
-      hasSession: !!session,
-      hasUser: !!session?.user,
-      userRole: session?.user?.role,
-    });
-
     async function fetchMenus() {
-      console.log('[Sidebar] fetchMenus called');
       try {
         setIsLoading(true);
         setError(null);
 
         const response = await fetch('/api/menus');
-        console.log('[Sidebar] API response:', response.status);
 
         if (!response.ok) {
           if (response.status === 401) {
-            throw new Error('인증이 필요합니다. 다시 로그인해주세요.');
+            throw new Error('인증이 필요합니다.');
           }
-          throw new Error(`메뉴를 불러올 수 없습니다 (${response.status})`);
+          throw new Error(`메뉴를 불러올 수 없습니다`);
         }
 
         const data = await response.json();
-        console.log('[Sidebar] API data:', data);
 
         if (!data.success || !data.data) {
           throw new Error('잘못된 응답 형식입니다.');
         }
 
         setMenuGroups(data.data);
-        console.log('[Sidebar] Menus set successfully');
       } catch (error) {
-        console.error('[Sidebar] Failed to fetch menus:', error);
-        setError(error instanceof Error ? error.message : '메뉴를 불러올 수 없습니다.');
+        setError(
+          error instanceof Error ? error.message : '메뉴를 불러올 수 없습니다.'
+        );
       } finally {
         setIsLoading(false);
       }
     }
 
-    // 세션 로딩 중
     if (status === 'loading') {
-      console.log('[Sidebar] Status is loading, waiting...');
       setIsLoading(true);
       return;
     }
 
-    // 세션 없음 또는 미인증
     if (status === 'unauthenticated' || !session || !session.user) {
-      console.log('[Sidebar] Not authenticated or no session/user');
       setIsLoading(false);
       setError('로그인이 필요합니다.');
       return;
     }
 
-    // 인증됨 - 메뉴 조회
     if (status === 'authenticated' && session && session.user) {
-      console.log('[Sidebar] Authenticated, fetching menus...');
       fetchMenus();
     }
   }, [session, status]);
 
   const toggleGroup = (groupName: string) => {
+    if (collapsed) return;
     setExpandedGroups((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(groupName)) {
@@ -124,120 +189,226 @@ export default function Sidebar() {
   };
 
   return (
-    <div className="w-64 bg-gray-900 text-white h-screen overflow-y-auto">
-      {/* 로고 */}
-      <div className="p-4 border-b border-gray-700">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <Zap className="w-8 h-8 text-blue-500" />
-          <span className="text-xl font-bold">EMS</span>
+    <aside
+      className={cn(
+        'h-screen bg-slate-900 border-r border-slate-700/50 flex flex-col transition-all duration-300',
+        collapsed ? 'w-16' : 'w-64',
+        className
+      )}
+    >
+      {/* 로고 영역 */}
+      <div
+        className={cn(
+          'h-16 border-b border-slate-700/50 flex items-center',
+          collapsed ? 'justify-center px-2' : 'px-4'
+        )}
+      >
+        <Link href="/dashboard" className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/20">
+            <Zap className="w-6 h-6 text-white" />
+          </div>
+          {!collapsed && (
+            <div>
+              <h1 className="text-lg font-bold text-white">EMS</h1>
+              <p className="text-[10px] text-slate-500 -mt-0.5">
+                Energy Management
+              </p>
+            </div>
+          )}
         </Link>
       </div>
 
       {/* 역할 뱃지 */}
-      <div className="p-4 border-b border-gray-700">
-        <div className="flex items-center gap-2 text-sm">
-          {userRole === 'viewer' && (
-            <>
-              <Lock className="w-4 h-4 text-gray-400" />
-              <span className="text-gray-400">읽기 전용</span>
-            </>
-          )}
-          {userRole === 'operator' && (
-            <span className="px-2 py-1 bg-blue-600 rounded text-xs">운영자</span>
-          )}
-          {userRole === 'site_manager' && (
-            <span className="px-2 py-1 bg-green-600 rounded text-xs">
-              사이트 관리자
+      {!collapsed && roleStyle && (
+        <div className="px-4 py-3 border-b border-slate-700/50">
+          <div
+            className={cn(
+              'flex items-center gap-2 px-3 py-2 rounded-lg',
+              roleStyle.bg
+            )}
+          >
+            <RoleIcon className={cn('w-4 h-4', roleStyle.text)} />
+            <span className={cn('text-sm font-medium', roleStyle.text)}>
+              {roleStyle.label}
             </span>
-          )}
-          {userRole === 'tenant_admin' && (
-            <span className="px-2 py-1 bg-purple-600 rounded text-xs">
-              테넌트 관리자
-            </span>
-          )}
-          {userRole === 'super_admin' && (
-            <span className="px-2 py-1 bg-red-600 rounded text-xs">
-              슈퍼 관리자
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* 메뉴 그룹 */}
-      <div className="p-4 space-y-2">
-        {isLoading ? (
-          <div className="text-center text-gray-400 py-8">메뉴 로딩 중...</div>
-        ) : error ? (
-          <div className="text-center text-red-400 py-8 px-4">
-            <p className="text-sm mb-2">{error}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="text-xs text-blue-400 hover:text-blue-300 underline"
-            >
-              새로고침
-            </button>
           </div>
-        ) : menuGroups.length === 0 ? (
-          <div className="text-center text-gray-400 py-8 px-4">
-            <p className="text-sm">메뉴가 없습니다.</p>
+        </div>
+      )}
+
+      {/* 메뉴 영역 */}
+      <nav className="flex-1 overflow-y-auto py-4 px-2">
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center h-32 text-slate-500">
+            <Loader2 className="w-6 h-6 animate-spin mb-2" />
+            {!collapsed && <span className="text-sm">로딩 중...</span>}
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center h-32 text-slate-500 px-4">
+            <AlertCircle className="w-6 h-6 text-red-400 mb-2" />
+            {!collapsed && (
+              <>
+                <p className="text-xs text-center text-red-400 mb-2">{error}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  새로고침
+                </button>
+              </>
+            )}
+          </div>
+        ) : filteredGroups.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-32 text-slate-500">
+            {!collapsed && <p className="text-sm">메뉴가 없습니다.</p>}
           </div>
         ) : (
-          menuGroups.map((group) => {
-            const isExpanded = expandedGroups.has(group.name);
-            const GroupIcon = getIcon(group.icon || 'Activity');
+          <div className="space-y-1">
+            {filteredGroups.map((group, index) => {
+              const isExpanded = expandedGroups.has(group.name);
+              const GroupIcon = getIcon(group.icon || 'Activity');
+              const hasActiveItem = group.items.some(
+                (item) => pathname === item.path
+              );
 
-            return (
-              <div key={group.id}>
-                {/* 그룹 헤더 */}
-                <button
-                  onClick={() => toggleGroup(group.name)}
-                  className="w-full flex items-center justify-between p-2 rounded hover:bg-gray-800 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <GroupIcon className="w-5 h-5" />
-                    <span className="font-medium">{group.name}</span>
+              // 모니터링 / 관리 섹션 구분
+              const monitoringCodes = ['dashboard', 'monitoring', 'analytics', 'carbon'];
+              const isMonitoring = monitoringCodes.includes(group.code);
+              const prevGroup = index > 0 ? filteredGroups[index - 1] : null;
+              const prevIsMonitoring = prevGroup ? monitoringCodes.includes(prevGroup.code) : true;
+              const showSectionDivider = !isMonitoring && prevIsMonitoring && index > 0;
+              const showMonitoringLabel = isMonitoring && index === 0;
+
+              return (
+                <div key={group.id}>
+                  {/* 모니터링 섹션 라벨 */}
+                  {showMonitoringLabel && !collapsed && (
+                    <div className="mb-2 mx-2">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-px bg-slate-700/50" />
+                        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">모니터링</span>
+                        <div className="flex-1 h-px bg-slate-700/50" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 섹션 구분선: 모니터링 → 관리 */}
+                  {showSectionDivider && !collapsed && (
+                    <div className="my-3 mx-2">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-px bg-slate-700/50" />
+                        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">관리</span>
+                        <div className="flex-1 h-px bg-slate-700/50" />
+                      </div>
+                    </div>
+                  )}
+                  {showSectionDivider && collapsed && (
+                    <div className="my-2 mx-2 h-px bg-slate-700/50" />
+                  )}
+
+                  <div className="mb-2">
+                  {/* 그룹 헤더 */}
+                  <button
+                    onClick={() => toggleGroup(group.name)}
+                    className={cn(
+                      'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all',
+                      collapsed ? 'justify-center' : 'justify-between',
+                      hasActiveItem
+                        ? 'bg-cyan-500/10 text-cyan-400'
+                        : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                    )}
+                    title={collapsed ? group.name : undefined}
+                  >
+                    <div className="flex items-center gap-3">
+                      <GroupIcon
+                        className={cn(
+                          'w-5 h-5 flex-shrink-0',
+                          hasActiveItem ? 'text-cyan-400' : ''
+                        )}
+                      />
+                      {!collapsed && (
+                        <span className="font-medium text-sm">{group.name}</span>
+                      )}
+                    </div>
+                    {!collapsed && (
+                      <ChevronDown
+                        className={cn(
+                          'w-4 h-4 transition-transform',
+                          isExpanded ? 'rotate-180' : ''
+                        )}
+                      />
+                    )}
+                  </button>
+
+                  {/* 메뉴 아이템 */}
+                  {!collapsed && isExpanded && (
+                    <div className="mt-1 ml-3 pl-3 border-l border-slate-700/50 space-y-0.5">
+                      {group.items.map((item) => {
+                        const isActive = pathname === item.path;
+                        const ItemIcon = getIcon(item.icon || 'Activity');
+
+                        return (
+                          <Link
+                            key={item.id}
+                            href={item.path || '#'}
+                            className={cn(
+                              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all group',
+                              isActive
+                                ? 'bg-cyan-500/20 text-cyan-400 font-medium'
+                                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                            )}
+                          >
+                            <ItemIcon
+                              className={cn(
+                                'w-4 h-4 flex-shrink-0',
+                                isActive ? 'text-cyan-400' : 'text-slate-500 group-hover:text-slate-400'
+                              )}
+                            />
+                            <span className="truncate">{item.name}</span>
+                            {item.badgeType && item.badgeType !== 'none' && (
+                              <span
+                                className={cn(
+                                  'ml-auto px-1.5 py-0.5 text-[10px] rounded font-medium',
+                                  item.badgeColor === 'red'
+                                    ? 'bg-red-500/20 text-red-400'
+                                    : item.badgeColor === 'yellow'
+                                    ? 'bg-amber-500/20 text-amber-400'
+                                    : 'bg-emerald-500/20 text-emerald-400'
+                                )}
+                              >
+                                {item.badgeType}
+                              </span>
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
                   </div>
-                  <ChevronDown
-                    className={`w-4 h-4 transition-transform ${
-                      isExpanded ? 'rotate-180' : ''
-                    }`}
-                  />
-                </button>
-
-                {/* 메뉴 아이템 */}
-                {isExpanded && (
-                  <div className="ml-4 mt-1 space-y-1">
-                    {group.items.map((item) => {
-                      const isActive = pathname === item.path;
-                      const ItemIcon = getIcon(item.icon || 'Activity');
-
-                      return (
-                        <Link
-                          key={item.id}
-                          href={item.path || '#'}
-                          className={`flex items-center gap-2 p-2 rounded text-sm transition-colors ${
-                            isActive
-                              ? 'bg-blue-600 text-white'
-                              : 'text-gray-300 hover:bg-gray-800'
-                          }`}
-                        >
-                          <ItemIcon className="w-4 h-4" />
-                          <span>{item.name}</span>
-                          {item.badgeType && item.badgeType !== 'none' && (
-                            <span className="ml-auto px-1.5 py-0.5 bg-green-500 text-xs rounded">
-                              {item.badgeType}
-                            </span>
-                          )}
-                      </Link>
-                    );
-                  })}
                 </div>
-              )}
-            </div>
-          );
-        })
+              );
+            })}
+          </div>
         )}
+      </nav>
+
+      {/* 하단: 접기/펴기 버튼 */}
+      <div className="border-t border-slate-700/50 p-2">
+        <button
+          onClick={() => onCollapsedChange?.(!collapsed)}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
+          title={collapsed ? '펼치기' : '접기'}
+        >
+          {collapsed ? (
+            <ChevronRight className="w-5 h-5" />
+          ) : (
+            <>
+              <ChevronLeft className="w-5 h-5" />
+              <span className="text-sm">접기</span>
+            </>
+          )}
+        </button>
       </div>
-    </div>
+    </aside>
   );
 }

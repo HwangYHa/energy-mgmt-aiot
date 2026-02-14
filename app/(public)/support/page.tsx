@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
+import { ContactForm } from '@/components/support/ContactForm';
 import {
   Headphones,
   Mail,
@@ -10,6 +11,7 @@ import {
   ArrowRight,
   Book,
   HelpCircle,
+  Send,
 } from 'lucide-react';
 
 /**
@@ -217,8 +219,29 @@ export default function SupportPage() {
         </div>
       </section>
 
+      {/* Contact Form Section */}
+      <section id="chat" className="py-12 px-4">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 rounded-full mb-4">
+              <Send className="w-4 h-4 text-emerald-400" />
+              <span className="text-emerald-400 font-semibold text-sm">
+                Contact Us
+              </span>
+            </div>
+            <h2 className="text-3xl font-bold text-white mb-2">문의하기</h2>
+            <p className="text-slate-400">
+              아래 양식을 작성해주시면 24시간 이내에 답변 드리겠습니다
+            </p>
+          </div>
+          <div className="bg-slate-800 border border-slate-700 rounded-xl p-8">
+            <ContactForm />
+          </div>
+        </div>
+      </section>
+
       {/* Resources Section */}
-      <section className="py-12 px-4">
+      <section className="py-12 px-4 bg-slate-800/30">
         <div className="max-w-5xl mx-auto">
           <h2 className="text-3xl font-bold text-white mb-8 text-center">
             추가 리소스
@@ -248,10 +271,12 @@ export default function SupportPage() {
           <p className="text-xl text-slate-300 mb-8">
             언제든지 문의해주세요. 최대한 빠르게 도와드리겠습니다
           </p>
-          <Button size="lg" className="bg-emerald-500 hover:bg-emerald-600">
-            <Mail className="mr-2 w-5 h-5" />
-            문의하기
-          </Button>
+          <Link href="#chat">
+            <Button size="lg" className="bg-emerald-500 hover:bg-emerald-600">
+              <Mail className="mr-2 w-5 h-5" />
+              문의하기
+            </Button>
+          </Link>
         </div>
       </section>
     </div>

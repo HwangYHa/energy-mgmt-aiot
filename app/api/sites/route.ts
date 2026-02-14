@@ -1,6 +1,6 @@
 /**
  * /api/sites - 사이트 관리 API
- * 
+ *
  * 보안:
  * ✅ 인증 필수
  * ✅ 테넌트 검증
@@ -8,12 +8,20 @@
  * ✅ 권한 검증
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, requireRole } from '@/lib/auth/verify';
+import { NextRequest } from 'next/server';
+import { verifyAuth, requireRoleOrHigher } from '@/lib/auth/verify';
+import { UserRole } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { siteCreateSchema, formatValidationError } from '@/lib/validation/schemas';
 import { z } from 'zod';
 import logger from '@/lib/logger';
+import {
+  successResponse,
+  unauthorizedResponse,
+  forbiddenResponse,
+  validationErrorResponse,
+  serverErrorResponse,
+} from '@/lib/api/response';
 
 export async function GET(request: NextRequest) {
   let auth: Awaited<ReturnType<typeof verifyAuth>> | undefined;
@@ -21,10 +29,7 @@ export async function GET(request: NextRequest) {
     // ✅ 인증 검증
     auth = await verifyAuth(request);
     if (!auth) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return unauthorizedResponse();
     }
 
     // 쿼리 파라미터 처리
@@ -34,11 +39,11 @@ export async function GET(request: NextRequest) {
     const siteType = searchParams.get('siteType');
 
     // ✅ 사이트 조회 (tenantId 필터 자동 포함)
-    const where: any = {
-      tenantId: auth!.tenantId,
+    const where: Record<string, unknown> = {
+      tenantId: auth.tenantId,
       deletedAt: null,
     };
-    
+
     if (siteType) {
       where.siteType = siteType;
     }
@@ -65,26 +70,16 @@ export async function GET(request: NextRequest) {
       where,
     });
 
-    return NextResponse.json({
-      success: true,
-      data: sites,
-      pagination: {
-        skip,
-        take,
-        total,
-        hasMore: skip + take < total,
-      },
+    return successResponse(sites, {
+      pagination: { skip, take, total, hasMore: skip + take < total },
     });
   } catch (error) {
-    logger.error('Site fetch error', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+    logger.error('사이트 조회 오류', {
+      error: error instanceof Error ? error.message : '알 수 없는 오류',
       stack: error instanceof Error ? error.stack : undefined,
     });
 
-    return NextResponse.json(
-      { error: 'Failed to fetch sites' },
-      { status: 500 }
-    );
+    return serverErrorResponse();
   }
 }
 
@@ -94,18 +89,12 @@ export async function POST(request: NextRequest) {
     // ✅ 인증 검증
     auth = await verifyAuth(request);
     if (!auth) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return unauthorizedResponse();
     }
 
-    // ✅ 권한 검증 (사이트 생성은 site_manager 이상만)
-    if (!requireRole(auth, ['site_manager', 'tenant_admin'])) {
-      return NextResponse.json(
-        { error: 'Insufficient permissions' },
-        { status: 403 }
-      );
+    // ✅ 권한 검증 (사이트 생성은 operator 이상)
+    if (!requireRoleOrHigher(auth, 'operator' as UserRole)) {
+      return forbiddenResponse({ requiredRoles: ['operator', 'site_manager', 'tenant_admin'] });
     }
 
     const body = await request.json();
@@ -116,13 +105,7 @@ export async function POST(request: NextRequest) {
       validated = siteCreateSchema.parse(body);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return NextResponse.json(
-          {
-            error: 'Validation failed',
-            details: formatValidationError(error),
-          },
-          { status: 400 }
-        );
+        return validationErrorResponse({ fields: formatValidationError(error) });
       }
       throw error;
     }
@@ -162,24 +145,21 @@ export async function POST(request: NextRequest) {
       return site;
     });
 
-    logger.info('Site created', {
+    logger.info('사이트 생성 완료', {
       siteId: result.id,
       tenantId: auth!.tenantId,
       userId: auth!.userId,
     });
 
-    return NextResponse.json(result, { status: 201 });
+    return successResponse(result, { status: 201 });
   } catch (error) {
-    logger.error('Site creation error', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+    logger.error('사이트 생성 오류', {
+      error: error instanceof Error ? error.message : '알 수 없는 오류',
       stack: error instanceof Error ? error.stack : undefined,
       tenantId: auth?.tenantId,
       userId: auth?.userId,
     });
 
-    return NextResponse.json(
-      { error: 'Failed to create site' },
-      { status: 500 }
-    );
+    return serverErrorResponse();
   }
 }

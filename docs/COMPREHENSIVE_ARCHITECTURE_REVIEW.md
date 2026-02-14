@@ -567,7 +567,7 @@ catch (error) {
   return NextResponse.json(
     {
       error: 'Failed to generate forecast',
-      message: error instanceof Error ? error.message : 'Unknown error',
+      message: error instanceof Error ? error.message : '알 수 없는 오류',
       details: process.env.NODE_ENV === 'development' ? error : undefined, // ⚠️ 조건부
     },
     { status: 500 }
@@ -595,7 +595,7 @@ catch (error) {
   // ✅ 서버 로그에 상세 정보 기록
   logError({
     message: 'Forecast generation failed',
-    error: error instanceof Error ? error.message : 'Unknown error',
+    error: error instanceof Error ? error.message : '알 수 없는 오류',
     stack: error instanceof Error ? error.stack : undefined,
     tenantId: auth?.tenantId,
     userId: auth?.userId,

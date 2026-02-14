@@ -1,7 +1,6 @@
-// app/web/app/(tenant)/dashboard/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   Zap,
   TrendingUp,
@@ -10,30 +9,18 @@ import {
   Leaf,
   Target,
   Activity,
+  Radio,
+  MonitorSmartphone,
+  CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 
-interface DashboardData {
+interface MonitoringData {
   realtime: {
-    power: number;           // 현재 전력 (kW)
-    powerTrend: 'up' | 'down' | 'stable';
-    status: 'normal' | 'warning' | 'critical';
-    utilization: number;     // 목표 대비 사용률 (%)
-  };
-  today: {
-    energy: number;          // 금일 누적 (kWh)
-    target: number;          // 금일 목표 (kWh)
-    cost: number;            // 금일 비용 (원)
-    comparison: number;      // 전일 대비 (%)
-  };
-  carbon: {
-    emission: number;        // 금일 배출량 (tCO2)
-    target: number;          // 목표 배출량 (tCO2)
-    reduction: number;       // 절감량 (%)
-  };
-  alerts: {
-    critical: number;
-    warning: number;
-    info: number;
+    currentPower: number;
+    dailyUsage: number;
+    peakRatio: number;
+    estimatedCost: number;
   };
   devices: {
     total: number;
@@ -41,250 +28,298 @@ interface DashboardData {
     offline: number;
     error: number;
   };
+  sensors: {
+    total: number;
+    online: number;
+    types: Array<{ type: string; count: number }>;
+  };
+  kpis: {
+    equipmentRate: number;
+    carbonGoal: number;
+  };
+  dataSource: 'db' | 'simulation';
 }
 
-export default function HMIDashboard() {
-  const [data, setData] = useState<DashboardData | null>(null);
+const SENSOR_TYPE_LABELS: Record<string, string> = {
+  power_meter: '전력계',
+  energy_meter: '전력량계',
+  temperature: '온도',
+  humidity: '습도',
+  pressure: '압력',
+  flow_meter: '유량',
+  vibration: '진동',
+  gas: '가스',
+  co2: 'CO2',
+  light: '조도',
+};
+
+export default function MonitoringPage() {
+  const [data, setData] = useState<MonitoringData | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshInterval, setRefreshInterval] = useState(10);
 
-  useEffect(() => {
-    fetchDashboardData();
-    const interval = setInterval(() => {
-      setCurrentTime(new Date());
-      fetchDashboardData();
-    }, 5000); // 5초마다 갱신
-
-    return () => clearInterval(interval);
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/dashboard/stats');
+      const json = await res.json();
+      if (json.success) {
+        setData({
+          realtime: json.data.realtime,
+          devices: json.data.devices,
+          sensors: json.data.sensors,
+          kpis: {
+            equipmentRate: json.data.kpis.equipmentRate,
+            carbonGoal: json.data.kpis.carbonGoal,
+          },
+          dataSource: json.data.dataSource,
+        });
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  const fetchDashboardData = async () => {
-    // TODO: API 연동
-    setData({
-      realtime: {
-        power: 847.3,
-        powerTrend: 'up',
-        status: 'warning',
-        utilization: 84.7,
-      },
-      today: {
-        energy: 18543.2,
-        target: 20000,
-        cost: 2781480,
-        comparison: -5.3,
-      },
-      carbon: {
-        emission: 8.2,
-        target: 10.0,
-        reduction: 18.0,
-      },
-      alerts: {
-        critical: 2,
-        warning: 5,
-        info: 12,
-      },
-      devices: {
-        total: 25,
-        online: 22,
-        offline: 2,
-        error: 1,
-      },
-    });
+  useEffect(() => {
+    fetchData();
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+      fetchData();
+    }, refreshInterval * 1000);
+    return () => clearInterval(timer);
+  }, [fetchData, refreshInterval]);
+
+  const getSystemStatus = () => {
+    if (!data) return { status: 'normal', label: '로딩 중', color: 'bg-gray-600' };
+    if (data.devices.error > 0) return { status: 'critical', label: '위험', color: 'bg-red-600' };
+    if (data.devices.offline > 2 || data.realtime.peakRatio > 90) return { status: 'warning', label: '주의', color: 'bg-amber-500' };
+    return { status: 'normal', label: '정상', color: 'bg-green-600' };
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'critical':
-        return 'bg-red-600';
-      case 'warning':
-        return 'bg-yellow-500';
-      default:
-        return 'bg-green-600';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'critical':
-        return '위험';
-      case 'warning':
-        return '주의';
-      default:
-        return '정상';
-    }
-  };
-
-  if (!data) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-900">
-        <div className="text-white text-xl">시스템 로딩 중...</div>
+      <div className="flex items-center justify-center h-96 bg-slate-900">
+        <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
       </div>
     );
   }
 
+  if (!data) return null;
+
+  const systemStatus = getSystemStatus();
+  const carbonEmission = data.realtime.dailyUsage * 0.4567;
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6 space-y-4">
-      {/* 상태 배너 (L1 - 최우선) */}
-      <div className={`${getStatusColor(data.realtime.status)} rounded-lg p-4 flex items-center justify-between shadow-lg`}>
+    <div className="min-h-screen bg-slate-900 text-white p-6 space-y-4">
+      {/* 상태 배너 */}
+      <div className={`${systemStatus.color} rounded-lg p-4 flex items-center justify-between shadow-lg`}>
         <div className="flex items-center gap-4">
-          <AlertTriangle className="w-8 h-8" />
+          {systemStatus.status === 'normal' ? (
+            <CheckCircle2 className="w-8 h-8" />
+          ) : (
+            <AlertTriangle className="w-8 h-8" />
+          )}
           <div>
-            <div className="text-2xl font-bold">{getStatusText(data.realtime.status)}</div>
+            <div className="text-2xl font-bold">{systemStatus.label}</div>
             <div className="text-sm opacity-90">
-              {data.alerts.critical > 0 && `긴급 ${data.alerts.critical}건`}
-              {data.alerts.warning > 0 && ` / 경고 ${data.alerts.warning}건`}
+              디바이스 {data.devices.online}/{data.devices.total} 가동 중
+              {data.devices.error > 0 && ` · 오류 ${data.devices.error}건`}
             </div>
           </div>
         </div>
-        <div className="text-right">
-          <div className="text-sm opacity-75">마지막 업데이트</div>
-          <div className="text-lg font-mono">
-            {currentTime.toLocaleTimeString('ko-KR')}
+        <div className="flex items-center gap-4">
+          {data.dataSource === 'simulation' && (
+            <span className="text-xs bg-white/20 px-2 py-1 rounded">시뮬레이션</span>
+          )}
+          <div className="text-right">
+            <div className="text-sm opacity-75">마지막 업데이트</div>
+            <div className="text-lg font-mono">{currentTime.toLocaleTimeString('ko-KR')}</div>
           </div>
+          <select
+            value={refreshInterval}
+            onChange={(e) => setRefreshInterval(Number(e.target.value))}
+            className="bg-white/20 border border-white/30 rounded px-2 py-1 text-sm"
+          >
+            <option value={5}>5초</option>
+            <option value={10}>10초</option>
+            <option value={30}>30초</option>
+            <option value={60}>1분</option>
+          </select>
         </div>
       </div>
 
-      {/* 핵심 지표 (L1 - 최우선) */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* 핵심 지표 */}
+      <div className="grid grid-cols-4 gap-4">
         {/* 실시간 전력 */}
-        <div className="bg-gray-800 rounded-lg p-6 border-2 border-yellow-500 shadow-lg">
-          <div className="flex items-start justify-between mb-4">
+        <div className="bg-slate-800 rounded-lg p-5 border-2 border-amber-500/50 shadow-lg">
+          <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Zap className="w-6 h-6 text-yellow-400" />
-              <span className="text-sm text-gray-400">실시간 전력</span>
+              <Zap className="w-5 h-5 text-amber-400" />
+              <span className="text-xs text-gray-400">실시간 전력</span>
             </div>
-            {data.realtime.powerTrend === 'up' ? (
-              <TrendingUp className="w-5 h-5 text-red-400" />
+            {data.realtime.peakRatio > 70 ? (
+              <TrendingUp className="w-4 h-4 text-red-400" />
             ) : (
-              <TrendingDown className="w-5 h-5 text-green-400" />
+              <TrendingDown className="w-4 h-4 text-green-400" />
             )}
           </div>
-          <div className="text-6xl font-bold text-yellow-400 mb-2">
-            {data.realtime.power.toLocaleString()}
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl text-gray-400">kW</span>
-            <span className={`text-sm ${data.realtime.utilization > 90 ? 'text-red-400' : 'text-gray-400'}`}>
-              (목표 대비 {data.realtime.utilization}%)
-            </span>
-          </div>
-          
-          {/* 진행 바 */}
-          <div className="mt-4 h-3 bg-gray-700 rounded-full overflow-hidden">
-            <div 
-              className={`h-full ${data.realtime.utilization > 90 ? 'bg-red-500' : 'bg-yellow-400'} transition-all duration-500`}
-              style={{ width: `${Math.min(data.realtime.utilization, 100)}%` }}
+          <div className="text-4xl font-bold text-amber-400">{data.realtime.currentPower.toLocaleString()}</div>
+          <div className="text-sm text-gray-400 mt-1">kW</div>
+          <div className="mt-3 h-2 bg-slate-700 rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all duration-500 ${data.realtime.peakRatio > 90 ? 'bg-red-500' : data.realtime.peakRatio > 70 ? 'bg-amber-400' : 'bg-green-400'}`}
+              style={{ width: `${Math.min(data.realtime.peakRatio, 100)}%` }}
             />
           </div>
+          <div className="text-xs text-gray-500 mt-1">피크 대비 {data.realtime.peakRatio}%</div>
         </div>
 
         {/* 금일 사용량 */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg">
-          <div className="flex items-center gap-2 mb-4">
-            <Activity className="w-6 h-6 text-blue-400" />
-            <span className="text-sm text-gray-400">금일 사용량</span>
+        <div className="bg-slate-800 rounded-lg p-5 border border-slate-700 shadow-lg">
+          <div className="flex items-center gap-2 mb-3">
+            <Activity className="w-5 h-5 text-blue-400" />
+            <span className="text-xs text-gray-400">금일 사용량</span>
           </div>
-          <div className="text-5xl font-bold text-blue-400 mb-2">
-            {(data.today.energy / 1000).toFixed(1)}
+          <div className="text-4xl font-bold text-blue-400">
+            {data.realtime.dailyUsage >= 1000
+              ? (data.realtime.dailyUsage / 1000).toFixed(1)
+              : data.realtime.dailyUsage}
           </div>
-          <div className="flex items-baseline gap-2 mb-4">
-            <span className="text-xl text-gray-400">MWh</span>
-            <span className="text-sm text-gray-500">
-              / 목표 {(data.today.target / 1000).toFixed(1)} MWh
-            </span>
+          <div className="text-sm text-gray-400 mt-1">
+            {data.realtime.dailyUsage >= 1000 ? 'MWh' : 'kWh'}
           </div>
-          
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-400">전일 대비</span>
-            <span className={`font-bold ${data.today.comparison < 0 ? 'text-green-400' : 'text-red-400'}`}>
-              {data.today.comparison > 0 ? '+' : ''}{data.today.comparison}%
-            </span>
-          </div>
-          
-          {/* 비용 */}
-          <div className="mt-3 pt-3 border-t border-gray-700">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-400">금일 전력비</span>
-              <span className="text-lg font-bold text-white">
-                ₩{(data.today.cost / 1000000).toFixed(2)}M
+          <div className="mt-3 pt-3 border-t border-slate-700">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-400">예상 전력비</span>
+              <span className="text-white font-medium">
+                {data.realtime.estimatedCost >= 1000000
+                  ? `₩${(data.realtime.estimatedCost / 1000000).toFixed(1)}M`
+                  : `₩${data.realtime.estimatedCost.toLocaleString()}`}
               </span>
             </div>
           </div>
         </div>
 
+        {/* 설비 가동률 */}
+        <div className="bg-slate-800 rounded-lg p-5 border border-slate-700 shadow-lg">
+          <div className="flex items-center gap-2 mb-3">
+            <MonitorSmartphone className="w-5 h-5 text-cyan-400" />
+            <span className="text-xs text-gray-400">설비 가동률</span>
+          </div>
+          <div className={`text-4xl font-bold ${data.kpis.equipmentRate > 80 ? 'text-green-400' : data.kpis.equipmentRate > 50 ? 'text-amber-400' : 'text-red-400'}`}>
+            {data.kpis.equipmentRate}%
+          </div>
+          <div className="text-sm text-gray-400 mt-1">{data.devices.online}대 / {data.devices.total}대</div>
+          <div className="mt-3 h-2 bg-slate-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-cyan-400 transition-all duration-500"
+              style={{ width: `${data.kpis.equipmentRate}%` }}
+            />
+          </div>
+        </div>
+
         {/* 탄소 배출 */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-green-700 shadow-lg">
-          <div className="flex items-center gap-2 mb-4">
-            <Leaf className="w-6 h-6 text-green-400" />
-            <span className="text-sm text-gray-400">탄소 배출</span>
+        <div className="bg-slate-800 rounded-lg p-5 border border-green-700/50 shadow-lg">
+          <div className="flex items-center gap-2 mb-3">
+            <Leaf className="w-5 h-5 text-green-400" />
+            <span className="text-xs text-gray-400">금일 탄소 배출</span>
           </div>
-          <div className="text-5xl font-bold text-green-400 mb-2">
-            {data.carbon.emission.toFixed(1)}
+          <div className="text-4xl font-bold text-green-400">{carbonEmission.toFixed(1)}</div>
+          <div className="text-sm text-gray-400 mt-1">tCO₂</div>
+          <div className="mt-3 flex items-center gap-2">
+            <Target className="w-4 h-4 text-green-400" />
+            <span className="text-xs text-green-300">목표 달성률 {data.kpis.carbonGoal}%</span>
           </div>
-          <div className="flex items-baseline gap-2 mb-4">
-            <span className="text-xl text-gray-400">tCO₂</span>
-            <span className="text-sm text-gray-500">
-              / 목표 {data.carbon.target.toFixed(1)} tCO₂
-            </span>
+        </div>
+      </div>
+
+      {/* 설비 & 센서 현황 */}
+      <div className="grid grid-cols-2 gap-4">
+        {/* 설비 상태 */}
+        <div className="bg-slate-800 rounded-lg p-5 border border-slate-700">
+          <h3 className="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
+            <MonitorSmartphone className="w-4 h-4 text-cyan-400" />
+            설비 현황
+          </h3>
+          <div className="grid grid-cols-4 gap-3">
+            <DeviceStatBlock label="전체" value={data.devices.total} color="text-white" dotColor="bg-white" />
+            <DeviceStatBlock label="운전 중" value={data.devices.online} color="text-green-400" dotColor="bg-green-400" />
+            <DeviceStatBlock label="정지" value={data.devices.offline} color="text-gray-400" dotColor="bg-gray-400" />
+            <DeviceStatBlock label="오류" value={data.devices.error} color="text-red-400" dotColor="bg-red-400" />
           </div>
-          
-          <div className="flex items-center gap-2 p-3 bg-green-900/30 rounded border border-green-700">
-            <Target className="w-5 h-5 text-green-400" />
+        </div>
+
+        {/* 센서 현황 */}
+        <div className="bg-slate-800 rounded-lg p-5 border border-slate-700">
+          <h3 className="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
+            <Radio className="w-4 h-4 text-cyan-400" />
+            센서 현황
+          </h3>
+          <div className="flex items-center gap-8 mb-4">
             <div>
-              <div className="text-xs text-gray-400">절감률</div>
-              <div className="text-2xl font-bold text-green-400">
-                {data.carbon.reduction}%
-              </div>
+              <div className="text-3xl font-bold">{data.sensors.total}</div>
+              <div className="text-xs text-gray-400">전체</div>
+            </div>
+            <div>
+              <div className="text-3xl font-bold text-green-400">{data.sensors.online}</div>
+              <div className="text-xs text-gray-400">온라인</div>
+            </div>
+            <div>
+              <div className="text-3xl font-bold text-gray-500">{data.sensors.total - data.sensors.online}</div>
+              <div className="text-xs text-gray-400">오프라인</div>
             </div>
           </div>
+          {data.sensors.types.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {data.sensors.types.map((t) => (
+                <span key={t.type} className="text-xs bg-slate-700 px-2 py-1 rounded text-gray-300">
+                  {SENSOR_TYPE_LABELS[t.type] || t.type}: {t.count}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 설비 상태 (L2) */}
-      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-        <h3 className="text-lg font-semibold mb-4">설비 현황</h3>
-        <div className="grid grid-cols-4 gap-4">
-          <div className="text-center">
-            <div className="text-3xl font-bold text-white mb-1">
-              {data.devices.total}
-            </div>
-            <div className="text-sm text-gray-400">전체</div>
-          </div>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-green-400 mb-1">
-              {data.devices.online}
-            </div>
-            <div className="text-sm text-gray-400">운전 중</div>
-          </div>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-gray-500 mb-1">
-              {data.devices.offline}
-            </div>
-            <div className="text-sm text-gray-400">정지</div>
-          </div>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-red-400 mb-1">
-              {data.devices.error}
-            </div>
-            <div className="text-sm text-gray-400">이상</div>
-          </div>
-        </div>
+      {/* 빠른 액션 */}
+      <div className="grid grid-cols-4 gap-3">
+        <a href="/control/manual" className="bg-blue-600 hover:bg-blue-700 p-4 rounded-lg font-bold text-center transition-colors">
+          수동 제어
+        </a>
+        <a href="/sensors" className="bg-cyan-600 hover:bg-cyan-700 p-4 rounded-lg font-bold text-center transition-colors">
+          센서 관리
+        </a>
+        <a href="/analytics/energy" className="bg-green-600 hover:bg-green-700 p-4 rounded-lg font-bold text-center transition-colors">
+          에너지 분석
+        </a>
+        <a href="/analytics/forecast" className="bg-purple-600 hover:bg-purple-700 p-4 rounded-lg font-bold text-center transition-colors">
+          AI 예측
+        </a>
       </div>
+    </div>
+  );
+}
 
-      {/* 빠른 액션 (L1 - 긴급 제어) */}
-      <div className="grid grid-cols-4 gap-4">
-        <button className="bg-red-600 hover:bg-red-700 p-4 rounded-lg font-bold text-lg transition-colors">
-          ⚠️ 긴급 정지
-        </button>
-        <button className="bg-blue-600 hover:bg-blue-700 p-4 rounded-lg font-bold text-lg transition-colors">
-          🎛️ 수동 제어
-        </button>
-        <button className="bg-green-600 hover:bg-green-700 p-4 rounded-lg font-bold text-lg transition-colors">
-          📊 상세 분석
-        </button>
-        <button className="bg-gray-700 hover:bg-gray-600 p-4 rounded-lg font-bold text-lg transition-colors">
-          📄 보고서
-        </button>
+function DeviceStatBlock({
+  label,
+  value,
+  color,
+  dotColor,
+}: {
+  label: string;
+  value: number;
+  color: string;
+  dotColor: string;
+}) {
+  return (
+    <div className="text-center">
+      <div className="flex items-center justify-center gap-1.5 mb-1">
+        <div className={`w-2 h-2 rounded-full ${dotColor}`} />
       </div>
+      <div className={`text-2xl font-bold ${color}`}>{value}</div>
+      <div className="text-xs text-gray-400">{label}</div>
     </div>
   );
 }

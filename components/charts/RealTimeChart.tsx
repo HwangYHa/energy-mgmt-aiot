@@ -41,9 +41,6 @@ export default function RealTimeChart({
 
   useEffect(() => {
     // TODO: Implement socket.io connection when package is installed
-    console.log('RealTimeChart: socket.io-client not installed, skipping WebSocket connection');
-    console.log('Device ID:', deviceId, 'Metric Key:', metricKey);
-
     // Stub: Set disconnected state
     setIsConnected(false);
     setSocket(null);

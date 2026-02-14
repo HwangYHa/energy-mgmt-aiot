@@ -1,264 +1,204 @@
-// app/web/app/(tenant)/alerts/rules/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { Plus, Edit, Trash2, Power, PowerOff } from 'lucide-react';
+import {
+  ArrowLeft,
+  Bell,
+  Mail,
+  MessageSquare,
+  Smartphone,
+  Loader2,
+  Shield,
+} from 'lucide-react';
 
-interface AlertRule {
+interface NotificationRule {
   id: string;
   name: string;
-  description?: string;
+  description: string | null;
   category: string;
   severity: string;
-  isActive: boolean;
-  condition: {
-    operator: string;
-    threshold: number;
-  };
-  metric?: {
-    id: string;
-    key: string;
-    name: string;
-    unit: string;
-  };
-  device?: {
-    id: string;
-    name: string;
-  };
-  site?: {
-    id: string;
-    name: string;
-  };
-  triggerCount: number;
-  lastTriggeredAt?: string;
+  emailEnabled: boolean;
+  smsEnabled: boolean;
+  pushEnabled: boolean;
+  enabled: boolean;
+  createdAt: string;
 }
 
 export default function AlertRulesPage() {
-  const [rules, setRules] = useState<AlertRule[]>([]);
+  const [rules, setRules] = useState<NotificationRule[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    fetchRules();
-  }, []);
-
-  const fetchRules = async () => {
+  const fetchRules = useCallback(async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch('http://localhost:4000/api/alert-rules?page=1&pageSize=50', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setRules(data.data || []);
+      const res = await fetch('/api/notifications/rules');
+      const json = await res.json();
+      if (json.success) {
+        setRules(json.data || []);
       }
-    } catch (error) {
-      console.error('Failed to fetch alert rules:', error);
+    } catch {
+      // 규칙 조회 실패
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const toggleRule = async (ruleId: string, currentStatus: boolean) => {
-    try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`http://localhost:4000/api/alert-rules/${ruleId}/toggle`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          isActive: !currentStatus,
-        }),
-      });
+  useEffect(() => {
+    fetchRules();
+  }, [fetchRules]);
 
-      if (response.ok) {
-        // 목록 새로고침
-        fetchRules();
-      }
-    } catch (error) {
-      console.error('Failed to toggle rule:', error);
-    }
-  };
-
-  const deleteRule = async (ruleId: string) => {
-    if (!confirm('이 알람 규칙을 삭제하시겠습니까?')) {
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`http://localhost:4000/api/alert-rules/${ruleId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        fetchRules();
-      }
-    } catch (error) {
-      console.error('Failed to delete rule:', error);
-    }
-  };
-
-  const getSeverityColor = (severity: string) => {
-    const colors: Record<string, string> = {
-      critical: 'bg-red-100 text-red-800',
-      warning: 'bg-yellow-100 text-yellow-800',
-      info: 'bg-blue-100 text-blue-800',
+  const getSeverityBadge = (severity: string) => {
+    const styles: Record<string, string> = {
+      critical: 'bg-red-500/10 text-red-400 border-red-500/30',
+      warning: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+      info: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
     };
-    return colors[severity] || 'bg-gray-100 text-gray-800';
-  };
-
-  const getOperatorLabel = (operator: string) => {
     const labels: Record<string, string> = {
-      '>': '초과',
-      '<': '미만',
-      '>=': '이상',
-      '<=': '이하',
-      '==': '같음',
-      '!=': '다름',
+      critical: '긴급',
+      warning: '경고',
+      info: '정보',
     };
-    return labels[operator] || operator;
+
+    return (
+      <span
+        className={`px-2 py-0.5 rounded border text-xs font-medium ${
+          styles[severity] || 'bg-slate-500/10 text-slate-400 border-slate-500/30'
+        }`}
+      >
+        {labels[severity] || severity}
+      </span>
+    );
+  };
+
+  const getCategoryLabel = (category: string) => {
+    const labels: Record<string, string> = {
+      energy: '에너지',
+      equipment: '설비',
+      security: '보안',
+      system: '시스템',
+    };
+    return labels[category] || category;
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-lg">로딩 중...</div>
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6">
+      {/* 뒤로 가기 */}
+      <Link
+        href="/alerts"
+        className="inline-flex items-center gap-2 text-slate-400 hover:text-cyan-400 transition-colors mb-6"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        알림 현황으로 돌아가기
+      </Link>
+
       {/* 헤더 */}
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">알람 규칙</h1>
-          <p className="text-gray-600 mt-1">알람 조건을 설정하고 관리합니다</p>
+          <h1 className="text-2xl font-bold flex items-center gap-3">
+            <div className="p-2 bg-amber-500/10 rounded-lg">
+              <Bell className="w-6 h-6 text-amber-400" />
+            </div>
+            알림 규칙
+          </h1>
+          <p className="text-slate-400 mt-1">알림 조건 및 채널 설정</p>
         </div>
-        <Link href="/alerts/rules/create">
-          <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-            <Plus className="w-4 h-4" />
-            <span>새 규칙</span>
+        <Link href="/settings/notifications">
+          <button className="flex items-center gap-2 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-sm font-medium transition">
+            알림 설정으로 이동
           </button>
         </Link>
       </div>
 
       {/* 규칙 목록 */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                상태
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                규칙명
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                심각도
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                조건
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                대상
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                트리거 횟수
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                작업
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {rules.length > 0 ? (
-              rules.map((rule) => (
-                <tr key={rule.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <button
-                      onClick={() => toggleRule(rule.id, rule.isActive)}
-                      className={`p-2 rounded ${
-                        rule.isActive
-                          ? 'text-green-600 hover:bg-green-50'
-                          : 'text-gray-400 hover:bg-gray-50'
-                      }`}
-                    >
-                      {rule.isActive ? (
-                        <Power className="w-5 h-5" />
-                      ) : (
-                        <PowerOff className="w-5 h-5" />
-                      )}
-                    </button>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{rule.name}</p>
-                      {rule.description && (
-                        <p className="text-sm text-gray-500">{rule.description}</p>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${getSeverityColor(rule.severity)}`}>
-                      {rule.severity.toUpperCase()}
+      {rules.length > 0 ? (
+        <div className="space-y-3">
+          {rules.map((rule) => (
+            <div
+              key={rule.id}
+              className={`bg-slate-800/50 border rounded-xl p-5 transition ${
+                rule.enabled
+                  ? 'border-slate-700/50'
+                  : 'border-slate-700/30 opacity-60'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="font-semibold text-white">{rule.name}</h3>
+                    {getSeverityBadge(rule.severity)}
+                    <span className="text-xs text-slate-500 px-2 py-0.5 bg-slate-700/50 rounded">
+                      {getCategoryLabel(rule.category)}
                     </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm text-gray-900">
-                      {rule.metric?.name} {getOperatorLabel(rule.condition.operator)} {rule.condition.threshold}
-                      {rule.metric?.unit && ` ${rule.metric.unit}`}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
-                      {rule.device?.name || rule.site?.name || '-'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{rule.triggerCount}회</div>
-                    {rule.lastTriggeredAt && (
-                      <div className="text-xs text-gray-500">
-                        {new Date(rule.lastTriggeredAt).toLocaleString('ko-KR')}
-                      </div>
+                    {!rule.enabled && (
+                      <span className="text-xs text-slate-500 px-2 py-0.5 bg-slate-700/50 rounded">
+                        비활성
+                      </span>
                     )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end gap-2">
-                      <Link href={`/alerts/rules/edit/${rule.id}`}>
-                        <button className="text-blue-600 hover:text-blue-900">
-                          <Edit className="w-4 h-4" />
-                        </button>
-                      </Link>
-                      <button
-                        onClick={() => deleteRule(rule.id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                  등록된 알람 규칙이 없습니다.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                  </div>
+                  {rule.description && (
+                    <p className="text-sm text-slate-400">{rule.description}</p>
+                  )}
+                </div>
+
+                {/* 채널 아이콘 */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <div
+                    className={`p-1.5 rounded ${
+                      rule.emailEnabled
+                        ? 'bg-blue-500/10 text-blue-400'
+                        : 'bg-slate-700/30 text-slate-600'
+                    }`}
+                    title="이메일"
+                  >
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <div
+                    className={`p-1.5 rounded ${
+                      rule.smsEnabled
+                        ? 'bg-emerald-500/10 text-emerald-400'
+                        : 'bg-slate-700/30 text-slate-600'
+                    }`}
+                    title="SMS"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                  </div>
+                  <div
+                    className={`p-1.5 rounded ${
+                      rule.pushEnabled
+                        ? 'bg-purple-500/10 text-purple-400'
+                        : 'bg-slate-700/30 text-slate-600'
+                    }`}
+                    title="푸시"
+                  >
+                    <Smartphone className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl py-16 text-center">
+          <Shield className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+          <p className="text-slate-400 mb-2">등록된 알림 규칙이 없습니다</p>
+          <p className="text-sm text-slate-500 mb-4">
+            알림 설정에서 새로운 규칙을 추가하세요
+          </p>
+          <Link href="/settings/notifications">
+            <button className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-sm transition">
+              알림 규칙 설정
+            </button>
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

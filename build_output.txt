@@ -1,0 +1,142 @@
+   ▲ Next.js 15.5.11
+   - Environments: .env.local, .env.production, .env
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 5.6s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/106) ...
+   Generating static pages (26/106) 
+   Generating static pages (52/106) 
+   Generating static pages (79/106) 
+ ✓ Generating static pages (106/106)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                       Size  First Load JS
+┌ ƒ /                                            664 B         119 kB
+├ ○ /_not-found                                  295 B         103 kB
+├ ○ /admin/tenants                             4.89 kB         107 kB
+├ ○ /admin/users                               8.83 kB         111 kB
+├ ○ /alerts                                    2.73 kB         108 kB
+├ ○ /alerts/rules                              3.06 kB         109 kB
+├ ○ /analytics/anomaly                         2.84 kB         208 kB
+├ ○ /analytics/carbon                          4.71 kB         226 kB
+├ ○ /analytics/cost                            2.76 kB         215 kB
+├ ○ /analytics/energy                          3.07 kB         212 kB
+├ ○ /analytics/forecast                        7.64 kB         217 kB
+├ ƒ /api/admin/tenants                           295 B         103 kB
+├ ƒ /api/admin/tenants/[id]                      295 B         103 kB
+├ ƒ /api/admin/tenants/menu-config               295 B         103 kB
+├ ƒ /api/admin/users                             295 B         103 kB
+├ ƒ /api/admin/users/[id]                        295 B         103 kB
+├ ƒ /api/ai/anomaly                              295 B         103 kB
+├ ƒ /api/ai/forecast                             295 B         103 kB
+├ ƒ /api/ai/optimize                             295 B         103 kB
+├ ƒ /api/analytics/carbon/emissions              295 B         103 kB
+├ ƒ /api/analytics/carbon/footprint              295 B         103 kB
+├ ƒ /api/analytics/carbon/register-fuel          295 B         103 kB
+├ ƒ /api/analytics/carbon/register-transport     295 B         103 kB
+├ ƒ /api/analytics/energy                        295 B         103 kB
+├ ƒ /api/auth/[...nextauth]                      295 B         103 kB
+├ ƒ /api/auth/forgot-password                    295 B         103 kB
+├ ƒ /api/auth/login                              295 B         103 kB
+├ ƒ /api/auth/oauth/naver                        295 B         103 kB
+├ ƒ /api/auth/oauth/naver/callback               295 B         103 kB
+├ ƒ /api/auth/register                           295 B         103 kB
+├ ƒ /api/auth/token                              295 B         103 kB
+├ ƒ /api/compliance/audit-trail                  295 B         103 kB
+├ ƒ /api/compliance/calc-engine                  295 B         103 kB
+├ ƒ /api/compliance/emission-factors             295 B         103 kB
+├ ƒ /api/control/dr-events                       295 B         103 kB
+├ ƒ /api/control/dr-events/[id]                  295 B         103 kB
+├ ƒ /api/control/dr-events/[id]/execute          295 B         103 kB
+├ ƒ /api/control/optimization/ess-schedule       295 B         103 kB
+├ ƒ /api/control/optimization/recommendations    295 B         103 kB
+├ ƒ /api/control/schedules                       295 B         103 kB
+├ ƒ /api/dashboard/overview                      295 B         103 kB
+├ ƒ /api/dashboard/realtime                      295 B         103 kB
+├ ƒ /api/dashboard/stats                         295 B         103 kB
+├ ƒ /api/data-collection/generate                295 B         103 kB
+├ ƒ /api/devices                                 295 B         103 kB
+├ ƒ /api/devices/[id]                            295 B         103 kB
+├ ƒ /api/docs                                    295 B         103 kB
+├ ƒ /api/dr                                      295 B         103 kB
+├ ƒ /api/menus                                   295 B         103 kB
+├ ƒ /api/notifications/logs                      295 B         103 kB
+├ ƒ /api/notifications/rules                     295 B         103 kB
+├ ƒ /api/payment/complete                        295 B         103 kB
+├ ƒ /api/payment/history                         295 B         103 kB
+├ ƒ /api/payment/stripe/checkout                 295 B         103 kB
+├ ƒ /api/payment/stripe/webhook                  295 B         103 kB
+├ ƒ /api/payment/webhook                         295 B         103 kB
+├ ƒ /api/plans                                   295 B         103 kB
+├ ƒ /api/realtime                                295 B         103 kB
+├ ƒ /api/reports/download/[filename]             295 B         103 kB
+├ ƒ /api/reports/generate                        295 B         103 kB
+├ ƒ /api/reports/regulation                      295 B         103 kB
+├ ƒ /api/security/csrf                           295 B         103 kB
+├ ƒ /api/sensors                                 295 B         103 kB
+├ ƒ /api/sensors/[id]                            295 B         103 kB
+├ ƒ /api/sites                                   295 B         103 kB
+├ ƒ /api/sites/[id]                              295 B         103 kB
+├ ƒ /api/subscriptions                           295 B         103 kB
+├ ƒ /api/subscriptions/usage                     295 B         103 kB
+├ ƒ /api/system-settings                         295 B         103 kB
+├ ƒ /api/users/[userId]/role                     295 B         103 kB
+├ ○ /community                                 1.18 kB         115 kB
+├ ○ /compliance/audit-trail                    3.53 kB         106 kB
+├ ○ /compliance/emission-factors               4.14 kB         106 kB
+├ ○ /compliance/reports                        3.64 kB         106 kB
+├ ○ /control/dr                                4.97 kB         107 kB
+├ ○ /control/manual                            6.71 kB         109 kB
+├ ○ /control/optimization                      4.13 kB         213 kB
+├ ○ /control/schedule                          5.46 kB         108 kB
+├ ○ /dashboard                                 6.55 kB         224 kB
+├ ○ /dashboard/realtime                        5.78 kB         108 kB
+├ ○ /dashboard/viewer                          4.72 kB         115 kB
+├ ○ /demo                                      1.18 kB         115 kB
+├ ○ /devices                                   7.75 kB         122 kB
+├ ○ /devices/new                                 295 B         103 kB
+├ ○ /digital-twin                              5.84 kB         108 kB
+├ ○ /docs                                      1.18 kB         115 kB
+├ ○ /docs/api                                  1.18 kB         115 kB
+├ ○ /docs/getting-started                      1.18 kB         115 kB
+├ ○ /faq                                         295 B         103 kB
+├ ○ /features                                    295 B         103 kB
+├ ○ /forgot-password                           4.24 kB         110 kB
+├ ○ /legal/privacy                               295 B         103 kB
+├ ○ /legal/security                              295 B         103 kB
+├ ○ /legal/terms                                 295 B         103 kB
+├ ○ /login                                     5.61 kB         120 kB
+├ ○ /monitoring                                4.29 kB         107 kB
+├ ƒ /payment                                   4.88 kB         107 kB
+├ ○ /payment/cancel                            1.18 kB         115 kB
+├ ƒ /payment/success                           1.18 kB         115 kB
+├ ○ /pricing                                   1.18 kB         115 kB
+├ ○ /register                                  5.89 kB         121 kB
+├ ○ /reports                                   4.47 kB         107 kB
+├ ○ /sensors                                   5.57 kB         108 kB
+├ ƒ /settings/notifications                    6.87 kB         109 kB
+├ ƒ /settings/subscription                     6.72 kB         117 kB
+├ ○ /settings/system                           5.26 kB         108 kB
+├ ○ /sites                                     7.36 kB         118 kB
+├ ƒ /sites/[id]                                6.38 kB         120 kB
+├ ○ /solutions/building                        1.18 kB         115 kB
+├ ○ /solutions/datacenter                      1.18 kB         115 kB
+├ ○ /solutions/industrial                      1.18 kB         115 kB
+├ ○ /solutions/manufacturing                   1.18 kB         115 kB
+├ ○ /support                                   1.18 kB         115 kB
+├ ○ /trial                                     1.18 kB         115 kB
+└ ○ /unauthorized                                166 B         106 kB
++ First Load JS shared by all                   102 kB
+  ├ chunks/7e45a4f1-ec25c0b2e02e6e91.js        54.2 kB
+  ├ chunks/994-1988e149c60156fa.js             46.1 kB
+  └ other shared chunks (total)                2.05 kB
+
+
+ƒ Middleware                                   56.4 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

@@ -1,13 +1,18 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
-import { Check, ArrowRight } from 'lucide-react';
+import { Check, ArrowRight, HelpCircle } from 'lucide-react';
 
 /**
  * 가격 플랜 페이지
  */
 export const metadata = {
   title: '가격 플랜 - EnergyAI',
-  description: 'EnergyAI 에너지 관리 플랫폼의 합리적인 가격 플랜을 확인하세요.',
+  description:
+    '무료 Starter부터 Enterprise까지. EnergyAI 에너지 관리 플랫폼의 합리적인 가격 플랜을 비교하세요. 14일 무료 체험 가능.',
+  openGraph: {
+    title: '가격 플랜 비교 - EnergyAI',
+    description: 'Starter(무료) · Professional(₩299,000/월) · Enterprise(맞춤). 14일 무료 체험.',
+  },
 };
 
 const plans = [
@@ -145,34 +150,58 @@ export default function PricingPage() {
           <h2 className="text-3xl font-bold text-white text-center mb-8">
             자주 묻는 질문
           </h2>
-          <div className="space-y-6">
+          <div className="space-y-4">
             <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-white mb-2">
+              <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+                <HelpCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
                 플랜을 변경할 수 있나요?
               </h3>
-              <p className="text-slate-300">
+              <p className="text-slate-300 pl-7">
                 네, 언제든 플랜을 업그레이드하거나 다운그레이드할 수 있습니다.
                 변경은 즉시 적용됩니다.
               </p>
             </div>
             <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-white mb-2">
+              <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+                <HelpCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
                 무료 체험 기간이 끝나면 어떻게 되나요?
               </h3>
-              <p className="text-slate-300">
+              <p className="text-slate-300 pl-7">
                 무료 체험 기간이 끝나면 자동으로 유료 플랜으로 전환됩니다.
                 원하지 않으시면 체험 기간 중 언제든 취소할 수 있습니다.
               </p>
             </div>
             <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-white mb-2">
+              <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+                <HelpCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
                 환불 정책은 어떻게 되나요?
               </h3>
-              <p className="text-slate-300">
+              <p className="text-slate-300 pl-7">
                 14일 이내 100% 환불 보장합니다. 서비스에 만족하지 않으시면
                 전액 환불해드립니다.
               </p>
             </div>
+            <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+                <HelpCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                데이터 보안은 어떻게 되나요?
+              </h3>
+              <p className="text-slate-300 pl-7">
+                모든 데이터는 AES-256으로 암호화되며, ISO 27001 인증 인프라에서 운영됩니다.
+                역할 기반 접근 제어(RBAC)와 전체 감사 로그를 제공합니다.
+              </p>
+            </div>
+          </div>
+
+          {/* 전체 FAQ 바로가기 */}
+          <div className="mt-8 text-center">
+            <p className="text-slate-400 mb-3">더 많은 질문이 있으신가요?</p>
+            <Link href="/faq">
+              <Button variant="outline" size="lg">
+                전체 FAQ 보기
+                <ArrowRight className="ml-2 w-5 h-5" />
+              </Button>
+            </Link>
           </div>
         </div>
       </div>

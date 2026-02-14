@@ -143,7 +143,7 @@ export const FOOTER_LINKS = {
     { label: '기능', href: '/features' },
     { label: '가격', href: '/pricing' },
     { label: '평가판', href: '/trial' },
-    { label: 'API', href: '/api-docs' },
+    { label: 'API', href: '/docs/api' },
   ],
   solutions: [
     { label: '제조업', href: '/solutions/manufacturing' },

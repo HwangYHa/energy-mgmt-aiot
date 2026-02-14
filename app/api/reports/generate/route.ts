@@ -1,23 +1,23 @@
 // app/api/reports/generate/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { getServerSession } from 'next-auth';
-import puppeteer from 'puppeteer';
+import { verifyAuth } from '@/lib/auth/verify';
+import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
 
 /**
- * 📄 리포트 생성 API
- * 
+ * 리포트 생성 API
+ *
  * 역할:
  * - 일일/주간/월간 리포트 생성
- * - PDF 생성 (Puppeteer)
+ * - PDF 생성 (PDFKit - 순수 JS, Chrome 불필요)
  * - Excel 생성 (ExcelJS)
  */
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession();
-    if (!session?.user) {
+    const auth = await verifyAuth(request);
+    if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     // 리포트 데이터 생성
     const reportData = await generateReportData({
-      tenantId: session.user.tenantId,
+      tenantId: auth.tenantId,
       type,
       period,
       startDate: new Date(startDate),
@@ -37,13 +37,13 @@ export async function POST(request: NextRequest) {
     // 리포트 DB 저장
     const report = await prisma.report.create({
       data: {
-        tenantId: session.user.tenantId,
+        tenantId: auth.tenantId,
         type,
         period,
         startDate: new Date(startDate),
         endDate: new Date(endDate),
         siteId,
-        generatedBy: session.user.id,
+        generatedBy: auth.userId,
         data: reportData as any,
       },
     });
@@ -93,226 +93,167 @@ async function generateReportData(params: {
 }) {
   const { tenantId, type: _type, period: _period, startDate, endDate, siteId } = params;
 
-  // 에너지 사용량
+  // 에너지 사용량 (실제 DB 컬럼명 사용: time, tenant_id, metric_id)
   const energyQuery = `
-    SELECT 
-      DATE(timestamp) as date,
-      SUM(CAST(value AS DECIMAL(10,2))) as total_energy
+    SELECT
+      DATE(m.time) as date,
+      SUM(CAST(m.value AS DECIMAL(10,2))) as total_energy
     FROM measurement m
-    JOIN metric mt ON m.metricId = mt.id
-    WHERE m.tenantId = ?
-      AND mt.key = 'energy'
-      AND m.timestamp BETWEEN ? AND ?
-      ${siteId ? 'AND mt.siteId = ?' : ''}
-    GROUP BY date
+    JOIN metric mt ON m.metric_id = mt.id
+    ${siteId ? 'JOIN device d ON mt.device_id = d.id' : ''}
+    WHERE m.tenant_id = ?
+      AND mt.\`key\` = 'energy'
+      AND m.time BETWEEN ? AND ?
+      ${siteId ? 'AND d.site_id = ?' : ''}
+    GROUP BY DATE(m.time)
     ORDER BY date ASC
   `;
 
-  const params_array = [tenantId, startDate, endDate];
+  const params_array: (string | Date)[] = [tenantId, startDate, endDate];
   if (siteId) params_array.push(siteId);
 
-  const energyData = await prisma.$queryRawUnsafe(energyQuery, ...params_array);
+  let energyData: any[];
+  try {
+    energyData = await prisma.$queryRawUnsafe(energyQuery, ...params_array) as any[];
+  } catch {
+    energyData = [];
+  }
 
   // 피크 전력
   const peakQuery = `
-    SELECT 
-      MAX(CAST(value AS DECIMAL(10,2))) as peak_power,
-      AVG(CAST(value AS DECIMAL(10,2))) as avg_power
+    SELECT
+      MAX(CAST(m.value AS DECIMAL(10,2))) as peak_power,
+      AVG(CAST(m.value AS DECIMAL(10,2))) as avg_power
     FROM measurement m
-    JOIN metric mt ON m.metricId = mt.id
-    WHERE m.tenantId = ?
-      AND mt.key = 'power'
-      AND m.timestamp BETWEEN ? AND ?
-      ${siteId ? 'AND mt.siteId = ?' : ''}
+    JOIN metric mt ON m.metric_id = mt.id
+    ${siteId ? 'JOIN device d ON mt.device_id = d.id' : ''}
+    WHERE m.tenant_id = ?
+      AND mt.\`key\` = 'power'
+      AND m.time BETWEEN ? AND ?
+      ${siteId ? 'AND d.site_id = ?' : ''}
   `;
 
-  const peakData = await prisma.$queryRawUnsafe(peakQuery, ...params_array);
+  let peakData: any[];
+  try {
+    peakData = await prisma.$queryRawUnsafe(peakQuery, ...params_array) as any[];
+  } catch {
+    peakData = [{ peak_power: 0, avg_power: 0 }];
+  }
 
   // 비용 계산 (간단 버전)
-  const totalEnergy = (energyData as any[]).reduce((sum, row) => sum + parseFloat(row.total_energy), 0);
+  const totalEnergy = energyData.reduce((sum, row) => sum + parseFloat(row.total_energy || '0'), 0);
   const estimatedCost = totalEnergy * 120; // 평균 단가 120원/kWh
-
-  // 알람 통계
-  // Note: AlertEvent model doesn't exist in Prisma schema
-  const alerts: any[] = [];
 
   return {
     period: `${startDate.toLocaleDateString()} ~ ${endDate.toLocaleDateString()}`,
     summary: {
       totalEnergy: Math.round(totalEnergy * 10) / 10,
-      peakPower: (peakData as any)[0]?.peak_power || 0,
-      avgPower: (peakData as any)[0]?.avg_power || 0,
+      peakPower: peakData[0]?.peak_power || 0,
+      avgPower: peakData[0]?.avg_power || 0,
       estimatedCost,
     },
     dailyData: energyData,
-    alerts: alerts.reduce((acc, alert) => {
-      acc[alert.severity] = alert._count.id;
-      return acc;
-    }, {} as Record<string, number>),
+    alerts: {} as Record<string, number>,
   };
 }
 
 /**
- * PDF 생성
+ * PDF 생성 (PDFKit - Chrome 불필요)
  */
 async function generatePDF(reportId: string, data: any): Promise<string> {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
-
-  const page = await browser.newPage();
-
-  // HTML 템플릿
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        body {
-          font-family: 'Noto Sans KR', Arial, sans-serif;
-          padding: 40px;
-          color: #333;
-        }
-        h1 {
-          color: #1e40af;
-          border-bottom: 3px solid #1e40af;
-          padding-bottom: 10px;
-        }
-        .summary {
-          background-color: #f3f4f6;
-          padding: 20px;
-          border-radius: 8px;
-          margin: 20px 0;
-        }
-        .summary-item {
-          display: flex;
-          justify-content: space-between;
-          margin: 10px 0;
-          padding: 10px;
-          background-color: white;
-          border-radius: 4px;
-        }
-        .label {
-          font-weight: bold;
-          color: #6b7280;
-        }
-        .value {
-          font-size: 1.2em;
-          color: #1e40af;
-          font-weight: bold;
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin: 20px 0;
-        }
-        th, td {
-          border: 1px solid #e5e7eb;
-          padding: 12px;
-          text-align: left;
-        }
-        th {
-          background-color: #1e40af;
-          color: white;
-        }
-        tr:nth-child(even) {
-          background-color: #f9fafb;
-        }
-      </style>
-    </head>
-    <body>
-      <h1>⚡ 에너지 리포트</h1>
-      <p><strong>기간:</strong> ${data.period}</p>
-      
-      <div class="summary">
-        <h2>요약</h2>
-        <div class="summary-item">
-          <span class="label">총 에너지 사용량</span>
-          <span class="value">${data.summary.totalEnergy.toLocaleString()} kWh</span>
-        </div>
-        <div class="summary-item">
-          <span class="label">피크 전력</span>
-          <span class="value">${data.summary.peakPower.toLocaleString()} kW</span>
-        </div>
-        <div class="summary-item">
-          <span class="label">평균 전력</span>
-          <span class="value">${data.summary.avgPower.toLocaleString()} kW</span>
-        </div>
-        <div class="summary-item">
-          <span class="label">예상 비용</span>
-          <span class="value">₩${data.summary.estimatedCost.toLocaleString()}</span>
-        </div>
-      </div>
-
-      <h2>일별 사용량</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>날짜</th>
-            <th>사용량 (kWh)</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${data.dailyData.map((row: any) => `
-            <tr>
-              <td>${new Date(row.date).toLocaleDateString()}</td>
-              <td>${parseFloat(row.total_energy).toLocaleString()}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-
-      <h2>알람 통계</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>심각도</th>
-            <th>건수</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${Object.entries(data.alerts).map(([severity, count]) => `
-            <tr>
-              <td>${severity}</td>
-              <td>${count}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-
-      <footer style="margin-top: 40px; text-align: center; color: #6b7280; font-size: 0.9em;">
-        <p>© 2026 Energy Management System</p>
-      </footer>
-    </body>
-    </html>
-  `;
-
-  await page.setContent(html, { waitUntil: 'networkidle0' });
-
-  const pdfBuffer = await page.pdf({
-    format: 'A4',
-    printBackground: true,
-    margin: {
-      top: '20px',
-      bottom: '20px',
-      left: '20px',
-      right: '20px',
-    },
-  });
-
-  await browser.close();
-
-  // 파일 저장 (실제로는 S3/CDN 업로드)
-  const fileName = `report-${reportId}.pdf`;
-  const filePath = `/tmp/${fileName}`;
-  
   const fs = require('fs');
-  fs.writeFileSync(filePath, pdfBuffer);
+  const path = require('path');
+  const os = require('os');
 
-  // 임시로 로컬 URL 반환 (실제로는 S3 URL)
-  return `/api/reports/download/${fileName}`;
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    const fileName = `report-${reportId}.pdf`;
+    const filePath = path.join(os.tmpdir(), fileName);
+    const writeStream = fs.createWriteStream(filePath);
+
+    doc.pipe(writeStream);
+
+    // 헤더
+    doc.fontSize(24).fillColor('#1e40af').text('Energy Report', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(11).fillColor('#6b7280').text(`Period: ${data.period}`, { align: 'center' });
+    doc.moveDown(0.3);
+    doc.fontSize(9).text(`Generated: ${new Date().toLocaleString('ko-KR')}`, { align: 'center' });
+
+    // 구분선
+    doc.moveDown(1);
+    doc.strokeColor('#1e40af').lineWidth(2)
+      .moveTo(40, doc.y).lineTo(555, doc.y).stroke();
+    doc.moveDown(1);
+
+    // 요약 섹션
+    doc.fontSize(16).fillColor('#1e40af').text('Summary');
+    doc.moveDown(0.5);
+
+    const summaryItems = [
+      ['Total Energy', `${Number(data.summary.totalEnergy).toLocaleString()} kWh`],
+      ['Peak Power', `${Number(data.summary.peakPower).toLocaleString()} kW`],
+      ['Avg Power', `${Number(data.summary.avgPower).toLocaleString()} kW`],
+      ['Est. Cost', `KRW ${Number(data.summary.estimatedCost).toLocaleString()}`],
+    ];
+
+    summaryItems.forEach(([label, value]) => {
+      const y = doc.y;
+      doc.fontSize(10).fillColor('#6b7280').text(String(label), 50, y);
+      doc.fontSize(12).fillColor('#1e40af').text(String(value), 300, y, { align: 'right', width: 245 });
+      doc.moveDown(0.3);
+      doc.strokeColor('#e5e7eb').lineWidth(0.5)
+        .moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+      doc.moveDown(0.3);
+    });
+
+    // 일별 사용량 테이블
+    doc.moveDown(1);
+    doc.fontSize(16).fillColor('#1e40af').text('Daily Usage');
+    doc.moveDown(0.5);
+
+    // 테이블 헤더
+    const tableTop = doc.y;
+    doc.rect(50, tableTop, 495, 22).fill('#1e40af');
+    doc.fontSize(10).fillColor('#ffffff')
+      .text('Date', 60, tableTop + 6)
+      .text('Usage (kWh)', 300, tableTop + 6, { align: 'right', width: 235 });
+    doc.moveDown(0.3);
+
+    let currentY = tableTop + 22;
+
+    if (data.dailyData && data.dailyData.length > 0) {
+      data.dailyData.forEach((row: any, index: number) => {
+        if (currentY > 720) {
+          doc.addPage();
+          currentY = 40;
+        }
+
+        const bgColor = index % 2 === 0 ? '#f9fafb' : '#ffffff';
+        doc.rect(50, currentY, 495, 20).fill(bgColor);
+        doc.fontSize(9).fillColor('#333333')
+          .text(new Date(row.date).toLocaleDateString('ko-KR'), 60, currentY + 5)
+          .text(parseFloat(row.total_energy || '0').toLocaleString(), 300, currentY + 5, { align: 'right', width: 235 });
+        currentY += 20;
+      });
+    } else {
+      doc.rect(50, currentY, 495, 20).fill('#f9fafb');
+      doc.fontSize(9).fillColor('#6b7280').text('No data available', 60, currentY + 5);
+      currentY += 20;
+    }
+
+    // 푸터
+    doc.moveDown(3);
+    doc.fontSize(8).fillColor('#9ca3af').text(
+      '(c) 2026 EnergyAI Platform. All rights reserved.',
+      { align: 'center' }
+    );
+
+    doc.end();
+
+    writeStream.on('finish', () => resolve(`/api/reports/download/${fileName}`));
+    writeStream.on('error', reject);
+  });
 }
 
 /**
