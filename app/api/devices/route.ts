@@ -14,64 +14,76 @@ import { UserRole } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { deviceCreateSchema, formatValidationError } from '@/lib/validation/schemas';
 import { z } from 'zod';
+import { successResponse, serverErrorResponse, unauthorizedResponse } from '@/lib/api/response';
 
 export async function GET(request: NextRequest) {
   try {
     // ✅ 인증 검증
     const auth = await verifyAuth(request);
-    if (!auth) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    if (!auth) return unauthorizedResponse();
 
-    // 쿼리 파라미터 처리 (pagination: cursor or skip/take)
+    // 쿼리 파라미터 처리
     const { searchParams } = new URL(request.url);
     const siteId = searchParams.get('siteId');
-    const take = Number(searchParams.get('take') || 20);
+    const controlCapable = searchParams.get('controlCapable');
+    const statusFilter = searchParams.get('status');
+    const take = Math.min(Number(searchParams.get('take') || 20), 100); // 최대 100개 제한
     const cursor = searchParams.get('cursor');
     const skip = Number(searchParams.get('skip') || 0);
 
     // ✅ 기기 조회 (tenantId 필터 자동 포함)
-    const where: any = { tenantId: auth.tenantId };
+    const where: Record<string, unknown> = {
+      tenantId: auth.tenantId,
+      deletedAt: null,
+    };
     if (siteId) where.siteId = siteId;
+    if (controlCapable === 'true') where.controlCapable = true;
+    if (controlCapable === 'false') where.controlCapable = false;
+    if (statusFilter) where.status = statusFilter;
 
-    const findArgs: any = {
+    const findArgs: Record<string, unknown> = {
       where,
       select: {
         id: true,
         name: true,
         deviceType: true,
         status: true,
+        controlCapable: true,
+        controlMode: true,
         lastSeenAt: true,
         siteId: true,
+        site: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     };
 
     if (cursor) {
-      // 커서 기반 페이지네이션: 커서 항목 자체는 제외하고 다음 항목부터 조회
       findArgs.cursor = { id: cursor };
       findArgs.skip = 1;
       findArgs.take = take;
     } else {
-      // 기존 skip/take 페이징과 호환
       findArgs.skip = skip;
       findArgs.take = take;
     }
 
-    const devices = await prisma.device.findMany(findArgs);
+    const devices = await prisma.device.findMany(findArgs as Parameters<typeof prisma.device.findMany>[0]);
 
-    const nextCursor = devices.length === take && devices.length > 0 ? devices[devices.length - 1]?.id : null;
+    const nextCursor =
+      devices.length === take && devices.length > 0
+        ? devices[devices.length - 1]?.id
+        : null;
 
-    return NextResponse.json({ data: devices, nextCursor, pageSize: take });
+    return successResponse(devices, {
+      meta: { nextCursor, pageSize: take },
+    });
   } catch (error) {
     console.error('Device fetch error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch devices' },
-      { status: 500 }
-    );
+    return serverErrorResponse({ message: 'Failed to fetch devices' });
   }
 }
 

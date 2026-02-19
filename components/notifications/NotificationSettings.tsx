@@ -59,8 +59,8 @@ export function NotificationSettings({ initialRules }: Props) {
       if (res.success && res.data) {
         setRules((prev) => [...prev, res.data as NotificationRule]);
       }
-    } catch (error) {
-      console.error('알림 규칙 생성 실패:', error);
+    } catch {
+      alert('알림 규칙 생성에 실패했습니다. 다시 시도해주세요.');
     } finally {
       setCreating(false);
     }

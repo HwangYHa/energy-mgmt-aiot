@@ -9,7 +9,7 @@
  */
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -109,6 +109,12 @@ export default function Sidebar({
   const [menuGroups, setMenuGroups] = useState<MenuGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // hover-to-expand: 접힌 상태에서 마우스 올리면 일시 확장
+  const [isHovering, setIsHovering] = useState(false);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 실제 표시 상태: 외부 collapsed이지만 hover 중이면 펼친 것처럼 동작
+  const effectiveCollapsed = collapsed && !isHovering;
 
   const userRole = (session?.user?.role as UserRole) || ('viewer' as UserRole);
   const roleStyle = roleStyles[userRole] ?? roleStyles.viewer;
@@ -169,10 +175,31 @@ export default function Sidebar({
     if (status === 'authenticated' && session && session.user) {
       fetchMenus();
     }
-  }, [session, status]);
+  // session 객체 참조 대신 안정적인 원시값(email)을 의존성으로 사용 → 무한 리렌더 방지
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.email, status]);
+
+  // 언마운트 시 타이머 정리
+  useEffect(() => {
+    return () => {
+      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    };
+  }, []);
+
+  // hover 핸들러: 약간의 딜레이로 의도치 않은 열림 방지
+  const handleMouseEnter = () => {
+    if (!collapsed) return;
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => setIsHovering(true), 150);
+  };
+
+  const handleMouseLeave = () => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    setIsHovering(false);
+  };
 
   const toggleGroup = (groupName: string) => {
-    if (collapsed) return;
+    if (effectiveCollapsed) return;
     setExpandedGroups((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(groupName)) {
@@ -192,22 +219,26 @@ export default function Sidebar({
     <aside
       className={cn(
         'h-screen bg-slate-900 border-r border-slate-700/50 flex flex-col transition-all duration-300',
-        collapsed ? 'w-16' : 'w-64',
+        effectiveCollapsed ? 'w-16' : 'w-64',
+        // 마우스 hover로 일시 확장된 경우 그림자 추가 (오버레이 느낌)
+        collapsed && isHovering ? 'shadow-2xl shadow-black/60 z-50' : '',
         className
       )}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       {/* 로고 영역 */}
       <div
         className={cn(
           'h-16 border-b border-slate-700/50 flex items-center',
-          collapsed ? 'justify-center px-2' : 'px-4'
+          effectiveCollapsed ? 'justify-center px-2' : 'px-4'
         )}
       >
         <Link href="/dashboard" className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/20">
             <Zap className="w-6 h-6 text-white" />
           </div>
-          {!collapsed && (
+          {!effectiveCollapsed && (
             <div>
               <h1 className="text-lg font-bold text-white">EMS</h1>
               <p className="text-[10px] text-slate-500 -mt-0.5">
@@ -219,7 +250,7 @@ export default function Sidebar({
       </div>
 
       {/* 역할 뱃지 */}
-      {!collapsed && roleStyle && (
+      {!effectiveCollapsed && roleStyle && (
         <div className="px-4 py-3 border-b border-slate-700/50">
           <div
             className={cn(
@@ -240,12 +271,12 @@ export default function Sidebar({
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-32 text-slate-500">
             <Loader2 className="w-6 h-6 animate-spin mb-2" />
-            {!collapsed && <span className="text-sm">로딩 중...</span>}
+            {!effectiveCollapsed && <span className="text-sm">로딩 중...</span>}
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center h-32 text-slate-500 px-4">
             <AlertCircle className="w-6 h-6 text-red-400 mb-2" />
-            {!collapsed && (
+            {!effectiveCollapsed && (
               <>
                 <p className="text-xs text-center text-red-400 mb-2">{error}</p>
                 <button
@@ -260,7 +291,7 @@ export default function Sidebar({
           </div>
         ) : filteredGroups.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-slate-500">
-            {!collapsed && <p className="text-sm">메뉴가 없습니다.</p>}
+            {!effectiveCollapsed && <p className="text-sm">메뉴가 없습니다.</p>}
           </div>
         ) : (
           <div className="space-y-1">
@@ -282,7 +313,7 @@ export default function Sidebar({
               return (
                 <div key={group.id}>
                   {/* 모니터링 섹션 라벨 */}
-                  {showMonitoringLabel && !collapsed && (
+                  {showMonitoringLabel && !effectiveCollapsed && (
                     <div className="mb-2 mx-2">
                       <div className="flex items-center gap-2">
                         <div className="flex-1 h-px bg-slate-700/50" />
@@ -293,7 +324,7 @@ export default function Sidebar({
                   )}
 
                   {/* 섹션 구분선: 모니터링 → 관리 */}
-                  {showSectionDivider && !collapsed && (
+                  {showSectionDivider && !effectiveCollapsed && (
                     <div className="my-3 mx-2">
                       <div className="flex items-center gap-2">
                         <div className="flex-1 h-px bg-slate-700/50" />
@@ -302,22 +333,35 @@ export default function Sidebar({
                       </div>
                     </div>
                   )}
-                  {showSectionDivider && collapsed && (
+                  {showSectionDivider && effectiveCollapsed && (
                     <div className="my-2 mx-2 h-px bg-slate-700/50" />
                   )}
 
                   <div className="mb-2">
                   {/* 그룹 헤더 */}
                   <button
-                    onClick={() => toggleGroup(group.name)}
+                    onClick={() => {
+                      if (collapsed && !isHovering) {
+                        // 완전히 접힌 상태(hover 없음)에서 클릭: 영구 확장
+                        onCollapsedChange?.(false);
+                      } else if (collapsed && isHovering) {
+                        // hover로 일시 확장된 상태에서 클릭: 영구 확장 + 그룹 토글
+                        onCollapsedChange?.(false);
+                        setIsHovering(false);
+                        toggleGroup(group.name);
+                      } else {
+                        // 일반 확장 상태: 그룹 토글
+                        toggleGroup(group.name);
+                      }
+                    }}
                     className={cn(
                       'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all',
-                      collapsed ? 'justify-center' : 'justify-between',
+                      effectiveCollapsed ? 'justify-center' : 'justify-between',
                       hasActiveItem
                         ? 'bg-cyan-500/10 text-cyan-400'
                         : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                     )}
-                    title={collapsed ? group.name : undefined}
+                    title={effectiveCollapsed ? group.name : undefined}
                   >
                     <div className="flex items-center gap-3">
                       <GroupIcon
@@ -326,11 +370,11 @@ export default function Sidebar({
                           hasActiveItem ? 'text-cyan-400' : ''
                         )}
                       />
-                      {!collapsed && (
+                      {!effectiveCollapsed && (
                         <span className="font-medium text-sm">{group.name}</span>
                       )}
                     </div>
-                    {!collapsed && (
+                    {!effectiveCollapsed && (
                       <ChevronDown
                         className={cn(
                           'w-4 h-4 transition-transform',
@@ -341,7 +385,7 @@ export default function Sidebar({
                   </button>
 
                   {/* 메뉴 아이템 */}
-                  {!collapsed && isExpanded && (
+                  {!effectiveCollapsed && isExpanded && (
                     <div className="mt-1 ml-3 pl-3 border-l border-slate-700/50 space-y-0.5">
                       {group.items.map((item) => {
                         const isActive = pathname === item.path;
@@ -395,16 +439,21 @@ export default function Sidebar({
       {/* 하단: 접기/펴기 버튼 */}
       <div className="border-t border-slate-700/50 p-2">
         <button
-          onClick={() => onCollapsedChange?.(!collapsed)}
+          onClick={() => {
+            // hover로 일시 확장 중이면 hover 해제 후 영구 상태 토글
+            setIsHovering(false);
+            onCollapsedChange?.(!collapsed);
+          }}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
-          title={collapsed ? '펼치기' : '접기'}
+          title={effectiveCollapsed ? '펼치기' : '접기'}
         >
-          {collapsed ? (
+          {effectiveCollapsed ? (
             <ChevronRight className="w-5 h-5" />
           ) : (
             <>
               <ChevronLeft className="w-5 h-5" />
-              <span className="text-sm">접기</span>
+              {!collapsed && <span className="text-sm">접기</span>}
+              {collapsed && isHovering && <span className="text-sm">고정</span>}
             </>
           )}
         </button>

@@ -92,7 +92,7 @@ export default function SensorsPage() {
         setTotal(json.pagination?.total || json.data.length);
       }
     } catch {
-      console.error('센서 목록 조회 실패');
+      // error handled
     } finally {
       setIsLoading(false);
     }

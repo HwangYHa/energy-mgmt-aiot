@@ -215,33 +215,24 @@ export async function GET(request: NextRequest) {
         });
       }
     } else {
-      // 폴백: 시뮬레이션 데이터 (센서 데이터 없을 때)
-      realtime = {
-        currentPower: Math.round(200 + Math.random() * 100),
-        dailyUsage: Math.round(1500 + Math.random() * 500),
-        peakRatio: Math.round(60 + Math.random() * 20),
-        estimatedCost: Math.round(250000 + Math.random() * 50000),
-      };
+      // 실제 데이터 없음 → 0값 반환 (가짜 시뮬레이션 제거)
+      realtime = { currentPower: 0, dailyUsage: 0, peakRatio: 0, estimatedCost: 0 };
 
-      monthlyConsumption = monthNames.map((name, index) => ({
+      monthlyConsumption = monthNames.slice(0, now.getMonth() + 1).map((name) => ({
         name,
-        consumption: Math.round(3500 + Math.random() * 2000),
-        target: 4000 + (index % 4) * 200,
+        consumption: 0,
+        target: 4000,
       }));
 
-      weeklyTrend = weekdayNames.map((name) => ({
-        name,
-        current: Math.round(400 + Math.random() * 400),
-        previous: Math.round(400 + Math.random() * 400),
-      }));
+      weeklyTrend = weekdayNames.map((name) => ({ name, current: 0, previous: 0 }));
 
       hourlyLoad = [
-        { name: '00시', load: 120, peak: 200 },
-        { name: '04시', load: 100, peak: 200 },
-        { name: '08시', load: 280, peak: 300 },
-        { name: '12시', load: 350, peak: 350 },
-        { name: '16시', load: 320, peak: 350 },
-        { name: '20시', load: 250, peak: 300 },
+        { name: '00시', load: 0, peak: 0 },
+        { name: '04시', load: 0, peak: 0 },
+        { name: '08시', load: 0, peak: 0 },
+        { name: '12시', load: 0, peak: 0 },
+        { name: '16시', load: 0, peak: 0 },
+        { name: '20시', load: 0, peak: 0 },
       ];
     }
 
@@ -257,19 +248,22 @@ export async function GET(request: NextRequest) {
       savings: Math.round(m.consumption * energySettings.electricityRate * 0.08),
     }));
 
-    // 탄소 배출
-    const carbonEmission = monthlyConsumption.slice(0, 6).map((m, i) => ({
+    // 탄소 배출 (목표한도: 월 소비목표 × 탄소계수 × 1.1)
+    const emissionLimit = Math.round(4000 * energySettings.carbonFactor * 1.1);
+    const carbonEmission = monthlyConsumption.slice(0, 6).map((m) => ({
       name: m.name,
       emission: Math.round(m.consumption * energySettings.carbonFactor),
-      limit: 2800 + (i % 3) * 200,
+      limit: emissionLimit,
     }));
 
-    // 효율성 추이
-    const efficiencyTrend = Array.from({ length: 6 }, (_, i) => ({
-      name: `${i + 1}주`,
-      efficiency: hasRealData ? Math.round(equipmentRate - 5 + Math.random() * 10) : Math.round(80 + Math.random() * 10),
-      target: 85,
-    }));
+    // 효율성 추이 (설비 가동률 기반, 실제 데이터 없으면 빈 배열)
+    const efficiencyTrend = hasRealData
+      ? Array.from({ length: 6 }, (_, i) => ({
+          name: `${i + 1}주`,
+          efficiency: equipmentRate,
+          target: 85,
+        }))
+      : ([] as DashboardStats['efficiencyTrend']);
 
     // 비용 절감 추이
     const costSavings = monthlyConsumption.slice(0, 6).map((m, i) => ({
@@ -278,13 +272,8 @@ export async function GET(request: NextRequest) {
       target: 800 + i * 50,
     }));
 
-    // 신재생 에너지
-    const renewableEnergy = ['1분기', '2분기', '3분기', '4분기'].map((name) => ({
-      name,
-      solar: Math.round(4000 + Math.random() * 2500),
-      wind: Math.round(3000 + Math.random() * 1500),
-      ess: Math.round(1500 + Math.random() * 1000),
-    }));
+    // 신재생 에너지: 별도 데이터 모델 없음 → 빈 배열 반환
+    const renewableEnergy: DashboardStats['renewableEnergy'] = [];
 
     // 피크 시간대
     const peakHourAnalysis = [
@@ -306,7 +295,7 @@ export async function GET(request: NextRequest) {
         },
         efficiency: hasRealData ? equipmentRate : 94,
         equipmentRate,
-        drParticipation: 76,
+        drParticipation: 0, // DR 참여 데이터 없음 (미구현)
         carbonGoal: Math.round(100 - energySettings.targetReduction),
       },
       realtime,

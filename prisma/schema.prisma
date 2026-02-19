@@ -73,6 +73,9 @@ model Tenant {
   paymentHistories  PaymentHistory[]
   notificationRules NotificationRule[]
   sensors           Sensor[]
+  apiKeys           ApiKey[]
+  physicalSpaces    PhysicalSpace[]
+  twinNodes         TwinNode[]
 
   @@index([status])
   @@index([industryType])
@@ -265,6 +268,7 @@ model User {
   menuAccessLogs    MenuAccessLog[]
   generatedReports  Report[]
   notificationRules NotificationRule[]
+  apiKeys           ApiKey[]
 
   @@index([tenantId])
   @@index([email])
@@ -323,10 +327,11 @@ model Site {
   deletedAt DateTime? @map("deleted_at")
 
   // Relations
-  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  manager  User?     @relation("SiteManager", fields: [managerId], references: [id], onDelete: SetNull)
-  gateways Gateway[]
-  devices  Device[]
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  manager        User?           @relation("SiteManager", fields: [managerId], references: [id], onDelete: SetNull)
+  gateways       Gateway[]
+  devices        Device[]
+  physicalSpaces PhysicalSpace[]
 
   @@index([tenantId])
   @@index([siteType])
@@ -466,8 +471,9 @@ model Device {
   tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   site    Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
   gateway Gateway? @relation(fields: [gatewayId], references: [id], onDelete: SetNull)
-  metrics Metric[]
-  sensors Sensor[]
+  metrics  Metric[]
+  sensors  Sensor[]
+  twinNode TwinNode?
 
   @@index([tenantId])
   @@index([siteId])
@@ -514,8 +520,9 @@ model Metric {
   name String? @db.VarChar(200)
 
   // 타입
-  dataType DataType @default(float) @map("data_type")
-  unit     String?  @db.VarChar(20)
+  dataType DataType       @default(float) @map("data_type")
+  unit     String?        @db.VarChar(20)
+  category MetricCategory @default(other)
 
   // 통신
   registerAddress Int?          @map("register_address")
@@ -544,6 +551,7 @@ model Metric {
   @@index([tenantId])
   @@index([sensorId])
   @@index([key])
+  @@index([tenantId, category])  // power_active 집계 필터용
   @@map("metric")
 }
 
@@ -607,6 +615,20 @@ enum DataSource {
   calculated
   estimated
   manual
+}
+
+// 계측 포인트 분류 (집계 쿼리 필터링용)
+enum MetricCategory {
+  power_active    // kW — 유효전력 (에너지 집계 기준)
+  power_reactive  // kVAR — 무효전력
+  energy_kwh      // kWh — 누적 전력량
+  temperature     // °C
+  humidity        // %RH
+  pressure        // Pa / kPa
+  flow            // m³/h, L/min
+  co2             // ppm
+  status          // 불리언/열거형 상태값
+  other           // 미분류
 }
 
 // ========================================
@@ -1434,4 +1456,181 @@ model CalcEngineVersion {
 
   @@index([isActive])
   @@map("calc_engine_version")
+}
+
+// ========================================
+// API: API 키 관리
+// ========================================
+
+model ApiKey {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  userId   String @map("user_id")
+
+  // 키 정보
+  name      String @db.VarChar(200)
+  keyHash   String @unique @map("key_hash") @db.VarChar(255)
+  keyPrefix String @map("key_prefix") @db.VarChar(20) // ea_live_abc...
+
+  // 권한
+  scopes Json? // ["read:sites", "write:devices"]
+
+  // 사용 추적
+  lastUsedAt DateTime? @map("last_used_at")
+  expiresAt  DateTime? @map("expires_at")
+
+  // 상태
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+  @@index([keyHash])
+  @@map("api_key")
+}
+
+// ========================================
+// SUPPORT: 문의 접수
+// ========================================
+
+model SupportInquiry {
+  id String @id @default(uuid())
+
+  // 문의 정보
+  name     String @db.VarChar(200)
+  email    String @db.VarChar(255)
+  category String @db.VarChar(50)
+  subject  String @db.VarChar(500)
+  message  String @db.Text
+
+  // 상태
+  status String @default("pending") @db.VarChar(20) // pending, in_progress, resolved, closed
+
+  // 연결 (로그인 사용자의 경우)
+  tenantId String? @map("tenant_id")
+  userId   String? @map("user_id")
+
+  // 관리자 메모
+  adminNote String? @map("admin_note") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([email])
+  @@index([createdAt(sort: Desc)])
+  @@map("support_inquiry")
+}
+
+// ========================================
+// DIGITAL TWIN: 물리 공간 계층
+// ========================================
+
+enum SpaceType {
+  building
+  floor
+  zone
+  room
+  shaft
+}
+
+model PhysicalSpace {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  siteId   String @map("site_id")
+
+  // 기본 정보
+  name String  @db.VarChar(200)
+  code String? @db.VarChar(50)
+  type SpaceType
+
+  // 계층 (0=building, 1=floor, 2=zone, 3=room)
+  level Int @default(0)
+
+  // 자기참조 부모
+  parentId String? @map("parent_id")
+
+  // 평면도 좌표 (선택)
+  floorPlanX Decimal? @map("floor_plan_x") @db.Decimal(10, 2)
+  floorPlanY Decimal? @map("floor_plan_y") @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site      Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  parent    PhysicalSpace?  @relation("SpaceChildren", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children  PhysicalSpace[] @relation("SpaceChildren")
+  twinNodes TwinNode[]
+
+  @@index([tenantId])
+  @@index([siteId, type])
+  @@index([parentId])
+  @@map("physical_space")
+}
+
+// ========================================
+// DIGITAL TWIN: 트윈 노드 (Device ↔ 공간 바인딩)
+// ========================================
+
+enum SystemType {
+  HVAC
+  ELECTRICAL
+  PLUMBING
+  FIRE_SAFETY
+  LIGHTING
+  MECHANICAL
+  OTHER
+}
+
+enum EquipClass {
+  AHU
+  FCU
+  CHILLER
+  COOLING_TOWER
+  BOILER
+  PUMP
+  FAN
+  TRANSFORMER
+  UPS
+  PANEL
+  METER
+  SENSOR
+  OTHER
+}
+
+model TwinNode {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  deviceId String @unique @map("device_id")
+  spaceId  String @map("space_id")
+
+  // 설비 분류
+  systemType SystemType @map("system_type")
+  equipClass EquipClass @map("equip_class")
+
+  // 에너지 토폴로지 (downstream / upstream TwinNode ID 배열)
+  feedsIds Json? @map("feeds_ids")
+  fedByIds Json? @map("fed_by_ids")
+
+  // 파생 메트릭 정의 (COP, 부하율 등 계산식 JSON)
+  computedMetrics Json? @map("computed_metrics")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  device Device        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  space  PhysicalSpace @relation(fields: [spaceId], references: [id])
+
+  @@index([tenantId])
+  @@index([spaceId])
+  @@index([systemType])
+  @@map("twin_node")
 }

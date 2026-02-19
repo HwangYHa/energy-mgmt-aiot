@@ -42,7 +42,12 @@ export default function APIDocsPage() {
         {
           method: 'GET',
           endpoint: '/api/auth/token',
-          description: 'API 키 발급 및 관리',
+          description: 'Bearer JWT 토큰 발급',
+        },
+        {
+          method: 'POST',
+          endpoint: '/api/api-keys',
+          description: 'API 키 생성 (설정 > API 키 관리)',
         },
       ],
     },
@@ -135,13 +140,13 @@ export default function APIDocsPage() {
     },
   ];
 
-  const authExample = `curl -X POST https://api.energyai.io/api/auth/token \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer YOUR_SESSION_TOKEN" \\
-  -d '{
-    "name": "My API Key",
-    "scopes": ["read:sites", "write:devices"]
-  }'`;
+  const authExample = `# 사이트 목록 조회
+curl https://api.energyai.io/api/sites \\
+  -H "Authorization: Bearer ea_live_YOUR_API_KEY"
+
+# 디바이스 목록 조회
+curl https://api.energyai.io/api/devices \\
+  -H "Authorization: Bearer ea_live_YOUR_API_KEY"`;
 
   const responseExample = `{
   "success": true,

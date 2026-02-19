@@ -36,6 +36,7 @@ const RESULT_CONFIG = {
 export default function AuditTrailPage() {
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
   const [todayCount, setTodayCount] = useState(0);
   const [search, setSearch] = useState('');
@@ -58,7 +59,9 @@ export default function AuditTrailPage() {
         setTodayCount(json.meta?.todayCount || 0);
         setResourceTypes(json.meta?.resourceTypes || []);
       }
-    } catch { /* silent */ } finally {
+    } catch {
+      setError('감사 로그를 불러오지 못했습니다.');
+    } finally {
       setIsLoading(false);
     }
   }, [search, filterType]);
@@ -66,7 +69,7 @@ export default function AuditTrailPage() {
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
   return (
-    <div className="min-h-screen bg-slate-950 p-4 md:p-6">
+    <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -82,6 +85,16 @@ export default function AuditTrailPage() {
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
+
+      {/* 에러 배너 */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 flex items-center justify-between">
+          <p className="text-sm text-red-300">{error}</p>
+          <button onClick={fetchLogs} className="px-3 py-1.5 bg-red-500/20 text-red-300 rounded-lg text-sm hover:bg-red-500/30 transition">
+            재시도
+          </button>
+        </div>
+      )}
 
       {/* 통계 */}
       <div className="grid grid-cols-3 gap-4 mb-6">

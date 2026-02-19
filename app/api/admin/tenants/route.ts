@@ -67,23 +67,27 @@ export async function GET(request: NextRequest) {
       prisma.tenant.count({ where }),
     ]);
 
-    // 각 테넌트의 측정 데이터 수 (오늘)
+    // 각 테넌트의 측정 데이터 수 (오늘) - N+1 방지: groupBy로 단일 쿼리
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    const enriched = await Promise.all(
-      tenants.map(async (t) => {
-        const measurementsToday = await prisma.measurement.count({
-          where: { tenantId: t.id, time: { gte: todayStart } },
-        });
-        return {
-          ...t,
-          subscription: t.subscriptions[0] || null,
-          subscriptions: undefined,
-          measurementsToday,
-        };
-      })
-    );
+    const measurementCounts = await prisma.measurement.groupBy({
+      by: ['tenantId'],
+      where: {
+        tenantId: { in: tenants.map((t) => t.id) },
+        time: { gte: todayStart },
+      },
+      _count: { _all: true },
+    });
+
+    const countMap = new Map(measurementCounts.map((mc) => [mc.tenantId, mc._count._all]));
+
+    const enriched = tenants.map((t) => ({
+      ...t,
+      subscription: t.subscriptions[0] || null,
+      subscriptions: undefined,
+      measurementsToday: countMap.get(t.id) ?? 0,
+    }));
 
     return successResponse(enriched, {
       pagination: { skip, take, total, hasMore: skip + take < total },

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { CheckCircle2, XCircle, Clock, Receipt, Loader2 } from 'lucide-react';
+import { apiGet } from '@/lib/api/client';
 
 interface PaymentRecord {
   id: string;
@@ -29,15 +30,12 @@ export function PaymentTimeline() {
   useEffect(() => {
     async function fetchPayments() {
       try {
-        const res = await fetch('/api/payment/history');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success) {
-            setPayments(data.data);
-          }
+        const res = await apiGet<PaymentRecord[]>('/api/payment/history');
+        if (res.success && res.data) {
+          setPayments(res.data);
         }
-      } catch {
-        // silently fail - show empty state
+      } catch (error) {
+        console.error('결제 내역 조회 실패:', error);
       } finally {
         setIsLoading(false);
       }

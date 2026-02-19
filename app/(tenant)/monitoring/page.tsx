@@ -57,6 +57,7 @@ export default function MonitoringPage() {
   const [data, setData] = useState<MonitoringData | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [refreshInterval, setRefreshInterval] = useState(10);
 
   const fetchData = useCallback(async () => {
@@ -76,7 +77,7 @@ export default function MonitoringPage() {
         });
       }
     } catch {
-      // ignore
+      setError('모니터링 데이터를 불러오지 못했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -92,7 +93,7 @@ export default function MonitoringPage() {
   }, [fetchData, refreshInterval]);
 
   const getSystemStatus = () => {
-    if (!data) return { status: 'normal', label: '로딩 중', color: 'bg-gray-600' };
+    if (!data) return { status: 'normal', label: '로딩 중', color: 'bg-slate-600' };
     if (data.devices.error > 0) return { status: 'critical', label: '위험', color: 'bg-red-600' };
     if (data.devices.offline > 2 || data.realtime.peakRatio > 90) return { status: 'warning', label: '주의', color: 'bg-amber-500' };
     return { status: 'normal', label: '정상', color: 'bg-green-600' };
@@ -100,19 +101,37 @@ export default function MonitoringPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-96 bg-slate-900">
+      <div className="flex items-center justify-center h-96 bg-[#051225]">
         <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
       </div>
     );
   }
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="min-h-screen bg-[#051225] text-white flex items-center justify-center">
+        <div className="text-center">
+          {error ? (
+            <>
+              <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
+              <p className="text-red-300 mb-3">{error}</p>
+              <button onClick={fetchData} className="px-4 py-2 bg-red-500/20 text-red-300 rounded-lg hover:bg-red-500/30 transition">
+                재시도
+              </button>
+            </>
+          ) : (
+            <p className="text-slate-400">데이터가 없습니다.</p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const systemStatus = getSystemStatus();
   const carbonEmission = data.realtime.dailyUsage * 0.4567;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-6 space-y-4">
+    <div className="min-h-screen bg-[#051225] text-white p-6 space-y-4">
       {/* 상태 배너 */}
       <div className={`${systemStatus.color} rounded-lg p-4 flex items-center justify-between shadow-lg`}>
         <div className="flex items-center gap-4">

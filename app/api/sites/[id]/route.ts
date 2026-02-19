@@ -9,7 +9,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuth, requireRole } from '@/lib/auth/verify';
+import { verifyAuth, requireRoleOrHigher } from '@/lib/auth/verify';
+import { UserRole } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { siteUpdateSchema, formatValidationError } from '@/lib/validation/schemas';
 import { z } from 'zod';
@@ -22,7 +23,6 @@ interface RouteParams {
 // GET /api/sites/[id] - 사이트 상세 조회
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    console.log('GET /api/sites called111');
     const { id } = await params;
 
     // ✅ 인증 검증
@@ -113,8 +113,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // ✅ 권한 검증
-    if (!requireRole(auth, ['site_manager', 'tenant_admin'])) {
+    // ✅ 권한 검증 (site_manager 이상 - super_admin 포함)
+    if (!requireRoleOrHigher(auth, 'site_manager' as UserRole)) {
       return NextResponse.json(
         { error: 'Insufficient permissions' },
         { status: 403 }
@@ -230,8 +230,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // ✅ 권한 검증 (삭제는 tenant_admin만)
-    if (!requireRole(auth, ['tenant_admin'])) {
+    // ✅ 권한 검증 (삭제는 tenant_admin 이상 - super_admin 포함)
+    if (!requireRoleOrHigher(auth, 'tenant_admin' as UserRole)) {
       return NextResponse.json(
         { error: 'Insufficient permissions' },
         { status: 403 }

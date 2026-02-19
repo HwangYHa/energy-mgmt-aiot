@@ -51,8 +51,7 @@ export async function GET() {
       expiresIn: 86400, // 24 hours in seconds
       tokenType: 'Bearer',
     });
-  } catch (error) {
-    console.error('[Token API] Error generating token:', error);
+  } catch {
     return NextResponse.json(
       { error: 'Failed to generate token' },
       { status: 500 }

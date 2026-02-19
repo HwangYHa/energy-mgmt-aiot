@@ -1,8 +1,10 @@
 /**
  * 알림 규칙 API
  *
- * GET  /api/notifications/rules - 현재 사용자의 알림 규칙 목록
- * POST /api/notifications/rules - 알림 규칙 생성
+ * GET    /api/notifications/rules - 현재 사용자의 알림 규칙 목록
+ * POST   /api/notifications/rules - 알림 규칙 생성
+ * PATCH  /api/notifications/rules - 알림 규칙 수정
+ * DELETE /api/notifications/rules?id=xxx - 알림 규칙 삭제
  */
 
 import { NextRequest } from 'next/server';
@@ -12,6 +14,7 @@ import { z } from 'zod';
 import {
   successResponse,
   unauthorizedResponse,
+  notFoundResponse,
   validationErrorResponse,
   serverErrorResponse,
   formatZodErrors,
@@ -114,7 +117,7 @@ export async function PATCH(request: NextRequest) {
     });
 
     if (!existing) {
-      return successResponse(null, { status: 404 });
+      return notFoundResponse('알림 규칙');
     }
 
     // 테스트 발송 처리
@@ -148,6 +151,41 @@ export async function PATCH(request: NextRequest) {
     return successResponse(updated);
   } catch (error) {
     console.error('[Notification Rules] PATCH Error:', error);
+    return serverErrorResponse();
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const auth = await verifyAuth(request);
+    if (!auth) return unauthorizedResponse();
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return validationErrorResponse({ id: '삭제할 규칙 ID가 필요합니다.' });
+    }
+
+    // 본인 규칙만 삭제 가능
+    const existing = await prisma.notificationRule.findFirst({
+      where: {
+        id,
+        tenantId: auth.tenantId,
+        userId: auth.userId,
+      },
+    });
+
+    if (!existing) {
+      return notFoundResponse('알림 규칙');
+    }
+
+    // 관련 로그도 함께 삭제 (cascade)
+    await prisma.notificationRule.delete({ where: { id } });
+
+    return successResponse({ deleted: true });
+  } catch (error) {
+    console.error('[Notification Rules] DELETE Error:', error);
     return serverErrorResponse();
   }
 }

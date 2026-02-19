@@ -138,21 +138,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 데이터가 없으면 시뮬레이션 데이터 생성 (개발/데모용)
-    if (energyData.length === 0) {
-      const simulated = generateSimulatedData(period, startDate, endDate);
-      energyData = simulated.energyData;
-      peakAnalysis = simulated.peakAnalysis;
-      comparison = simulated.comparison;
-    }
-
     return successResponse({
       energyData,
       peakAnalysis,
       comparison,
       period,
       range: { start: startDate.toISOString(), end: endDate.toISOString() },
-      isSimulated: metricIds.length === 0,
+      hasData: energyData.length > 0,
     });
   } catch (error) {
     console.error('[API] 에너지 분석 오류:', error);
@@ -200,68 +192,3 @@ function groupByPeriod(
   }));
 }
 
-function generateSimulatedData(period: string, startDate: Date, endDate: Date) {
-  const energyData: Array<{ timestamp: string; value: number }> = [];
-  const baseLoad = 150;
-  const peakLoad = 420;
-  let maxVal = 0;
-  let minVal = Infinity;
-  let maxTs = '';
-  let minTs = '';
-  let sum = 0;
-
-  const current = new Date(startDate);
-  while (current <= endDate) {
-    const hour = current.getHours();
-    const isWeekday = current.getDay() > 0 && current.getDay() < 6;
-    const timeWeight = (hour >= 9 && hour <= 18) ? (isWeekday ? 0.8 : 0.5) : 0.25;
-    const noise = (Math.random() - 0.5) * 40;
-    const value = Math.round((baseLoad + (peakLoad - baseLoad) * timeWeight + noise) * 10) / 10;
-
-    let key: string;
-    switch (period) {
-      case 'hourly':
-        key = `${current.getMonth() + 1}/${current.getDate()} ${current.getHours()}:00`;
-        current.setHours(current.getHours() + 1);
-        break;
-      case 'daily':
-        key = `${current.getMonth() + 1}/${current.getDate()}`;
-        current.setDate(current.getDate() + 1);
-        break;
-      case 'weekly':
-        key = `${current.getMonth() + 1}/${current.getDate()}주`;
-        current.setDate(current.getDate() + 7);
-        break;
-      case 'monthly':
-        key = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`;
-        current.setMonth(current.getMonth() + 1);
-        break;
-      default:
-        key = `${current.getMonth() + 1}/${current.getDate()}`;
-        current.setDate(current.getDate() + 1);
-    }
-
-    energyData.push({ timestamp: key, value });
-    sum += value;
-    if (value > maxVal) { maxVal = value; maxTs = current.toISOString(); }
-    if (value < minVal) { minVal = value; minTs = current.toISOString(); }
-  }
-
-  const avg = energyData.length > 0 ? sum / energyData.length : 0;
-
-  return {
-    energyData,
-    peakAnalysis: {
-      peak: { value: maxVal, timestamp: maxTs },
-      valley: { value: minVal, timestamp: minTs },
-      average: Math.round(avg * 10) / 10,
-      loadFactor: maxVal > 0 ? Math.round((avg / maxVal) * 1000) / 10 : 0,
-    },
-    comparison: {
-      current: Math.round(sum * 0.4 * 10) / 10,
-      previous: Math.round(sum * 0.38 * 10) / 10,
-      difference: Math.round(sum * 0.02 * 10) / 10,
-      percentageChange: 5.3,
-    },
-  };
-}

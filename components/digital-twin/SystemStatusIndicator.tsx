@@ -6,6 +6,10 @@ interface SystemStatusIndicatorProps {
   status: 'normal' | 'warning' | 'critical';
   message: string;
   score: number;
+  /** 온라인 설비 비율 (0~100). null이면 '-' 표시 */
+  uptimePercent?: number | null;
+  /** 평균 응답시간 ms. null이면 '-' 표시 */
+  latencyMs?: number | null;
 }
 
 /**
@@ -16,27 +20,26 @@ export function SystemStatusIndicator({
   status,
   message,
   score,
+  uptimePercent = null,
+  latencyMs = null,
 }: SystemStatusIndicatorProps) {
   const statusConfig = {
     normal: {
       icon: CheckCircle,
       bg: 'bg-gradient-to-br from-green-500 to-emerald-600',
       text: '정상',
-      textColor: 'text-white',
       ringColor: 'ring-green-500',
     },
     warning: {
       icon: AlertTriangle,
       bg: 'bg-gradient-to-br from-yellow-500 to-orange-600',
       text: '주의',
-      textColor: 'text-white',
       ringColor: 'ring-yellow-500',
     },
     critical: {
       icon: XCircle,
       bg: 'bg-gradient-to-br from-red-500 to-rose-600',
       text: '위험',
-      textColor: 'text-white',
       ringColor: 'ring-red-500',
     },
   };
@@ -83,18 +86,18 @@ export function SystemStatusIndicator({
       </div>
 
       <div className="mt-6 pt-6 border-t border-white/20">
-        <div className="grid grid-cols-3 gap-4 text-sm">
+        <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <div className="opacity-75">가동률</div>
-            <div className="text-2xl font-bold mt-1">98.5%</div>
-          </div>
-          <div>
-            <div className="opacity-75">효율</div>
-            <div className="text-2xl font-bold mt-1">92.3%</div>
+            <div className="text-2xl font-bold mt-1">
+              {uptimePercent !== null ? `${uptimePercent.toFixed(1)}%` : '-'}
+            </div>
           </div>
           <div>
             <div className="opacity-75">응답시간</div>
-            <div className="text-2xl font-bold mt-1">45ms</div>
+            <div className="text-2xl font-bold mt-1">
+              {latencyMs !== null ? `${Math.round(latencyMs)}ms` : '-'}
+            </div>
           </div>
         </div>
       </div>

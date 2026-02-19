@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
+import { jwtVerify } from 'jose';
 import { securityHeadersMiddleware } from '@/lib/middleware/security-headers';
 import { verifyCsrfToken } from '@/lib/middleware/csrf';
 
@@ -15,6 +16,7 @@ export async function middleware(request: NextRequest) {
     '/api/auth',
     '/api/security/csrf', // CSRF 토큰 발급 (회원가입 등 비로그인 상태에서도 필요)
     '/api/csp-report',    // CSP 위반 리포트 (브라우저 자동 전송, 인증 불필요)
+    '/api/support',       // 고객 문의 접수 (비로그인 가능)
     '/_next',
     '/api/docs',
     '/pricing',
@@ -56,11 +58,23 @@ export async function middleware(request: NextRequest) {
     cookieName,
   });
 
-  // ✅ Naver OAuth 토큰 확인 (별도 JWT)
+  // ✅ Naver OAuth 토큰 확인 (별도 JWT) - 서명 검증 포함
   const naverToken = request.cookies.get('auth-token')?.value;
+  let naverTokenValid = false;
 
-  // 둘 중 하나라도 있으면 인증된 것으로 간주
-  if (!token && !naverToken) {
+  if (naverToken) {
+    try {
+      const jwtSecret = new TextEncoder().encode(process.env.JWT_SECRET!);
+      await jwtVerify(naverToken, jwtSecret);
+      naverTokenValid = true;
+    } catch {
+      // 서명 검증 실패 (만료, 위변조 등)
+      naverTokenValid = false;
+    }
+  }
+
+  // 둘 중 하나라도 유효하면 인증된 것으로 간주
+  if (!token && !naverTokenValid) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('callbackUrl', request.url);
     return NextResponse.redirect(loginUrl);

@@ -72,18 +72,23 @@ export default function ScheduleControlPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [devices, setDevices] = useState<DeviceOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
 
   const fetchSchedules = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams({ take: '100' });
       if (filterStatus) params.set('status', filterStatus);
       const res = await fetch(`/api/control/schedules?${params}`);
       const json = await res.json();
       if (json.success) setSchedules(json.data);
-    } catch { /* silent */ } finally {
+      else setError('스케줄 목록을 불러오지 못했습니다.');
+    } catch {
+      setError('서버에 연결할 수 없습니다.');
+    } finally {
       setIsLoading(false);
     }
   }, [filterStatus]);
@@ -93,7 +98,9 @@ export default function ScheduleControlPage() {
       const res = await fetch('/api/devices?take=200');
       const json = await res.json();
       setDevices(json.data || []);
-    } catch { /* silent */ }
+    } catch {
+      // 디바이스 목록 로드 실패 시 기본값 유지
+    }
   }, []);
 
   useEffect(() => {
@@ -117,7 +124,7 @@ export default function ScheduleControlPage() {
   const filteredSchedules = schedules;
 
   return (
-    <div className="min-h-screen bg-slate-950 p-4 md:p-6">
+    <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -151,6 +158,19 @@ export default function ScheduleControlPage() {
           </button>
         </div>
       </div>
+
+      {/* 에러 배너 */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
+            <p className="text-sm text-red-300">{error}</p>
+          </div>
+          <button onClick={fetchSchedules} className="px-3 py-1.5 bg-red-500/20 text-red-300 rounded-lg text-sm hover:bg-red-500/30 transition">
+            재시도
+          </button>
+        </div>
+      )}
 
       {/* 통계 */}
       <div className="grid grid-cols-4 gap-4 mb-6">

@@ -92,14 +92,14 @@ export default function ForecastPage() {
   const maxPrediction = predictions.length > 0 ? Math.max(...predictions.map((p) => p.value)) : 0;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-[#051225] text-white p-6">
       {/* 헤더 */}
       <div className="mb-8">
         <h1 className="text-4xl font-bold mb-2 flex items-center gap-3">
           <TrendingUp className="w-10 h-10 text-blue-400" />
-          🔮 부하 예측
+          부하 예측
         </h1>
-        <p className="text-gray-400">AI 기반 전력 수요 예측으로 효율적인 에너지 관리</p>
+        <p className="text-slate-400">AI 기반 전력 수요 예측으로 효율적인 에너지 관리</p>
       </div>
 
       {/* 예측 기간 선택 */}
@@ -111,11 +111,11 @@ export default function ForecastPage() {
             className={`p-4 rounded-lg font-medium transition ${
               horizon === option.value
                 ? 'bg-blue-600 border-2 border-blue-400'
-                : 'bg-gray-800 border-2 border-gray-700 hover:border-blue-500'
+                : 'bg-slate-800/50 border-2 border-slate-700/50 hover:border-blue-500'
             }`}
           >
             <div className="text-lg">{option.label}</div>
-            <div className="text-sm text-gray-300">{option.description}</div>
+            <div className="text-sm text-slate-300">{option.description}</div>
           </button>
         ))}
       </div>
@@ -125,39 +125,39 @@ export default function ForecastPage() {
         {/* 평균 예측값 */}
         <div className="bg-gradient-to-br from-blue-800 to-blue-900 p-6 rounded-lg">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-gray-300">평균 예측 전력</span>
+            <span className="text-slate-300">평균 예측 전력</span>
             <Zap className="w-5 h-5 text-yellow-400" />
           </div>
           <div className="text-3xl font-bold">{avgPrediction} kW</div>
-          <div className="text-sm text-gray-400 mt-2">예측 기간 평균</div>
+          <div className="text-sm text-slate-400 mt-2">예측 기간 평균</div>
         </div>
 
         {/* 최대 예측값 */}
         <div className="bg-gradient-to-br from-red-800 to-red-900 p-6 rounded-lg">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-gray-300">최대 예측 전력</span>
+            <span className="text-slate-300">최대 예측 전력</span>
             <Target className="w-5 h-5 text-orange-400" />
           </div>
           <div className="text-3xl font-bold">{Math.round(maxPrediction)} kW</div>
-          <div className="text-sm text-gray-400 mt-2">피크 부하</div>
+          <div className="text-sm text-slate-400 mt-2">피크 부하</div>
         </div>
 
         {/* 예측 정확도 */}
         <div className="bg-gradient-to-br from-green-800 to-green-900 p-6 rounded-lg">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-gray-300">예측 정확도</span>
+            <span className="text-slate-300">예측 정확도</span>
             <Target className="w-5 h-5 text-green-400" />
           </div>
           <div className="text-3xl font-bold">{(accuracy * 100).toFixed(1)}%</div>
-          <div className="text-sm text-gray-400 mt-2">
-            {accuracy > 0.9 ? '✅ 매우 높음' : accuracy > 0.8 ? '⚠️ 높음' : '📊 보통'}
+          <div className="text-sm text-slate-400 mt-2">
+            {accuracy > 0.9 ? '매우 높음' : accuracy > 0.8 ? '높음' : '보통'}
           </div>
         </div>
       </div>
 
       {/* 에러 메시지 */}
       {error && (
-        <div className="mb-6 bg-red-900 border-l-4 border-red-500 p-4 rounded flex items-start gap-3">
+        <div className="mb-6 bg-red-500/10 border-l-4 border-red-500/30 p-4 rounded flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
           <div>
             <h3 className="font-bold text-red-300">오류 발생</h3>
@@ -168,7 +168,7 @@ export default function ForecastPage() {
 
       {/* 예측 차트 */}
       {chartData.length > 0 && (
-        <div className="bg-gray-800 rounded-lg p-6 mb-8">
+        <div className="bg-slate-800/50 rounded-lg p-6 mb-8">
           <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
             <LineChart className="w-6 h-6 text-blue-400" />
             전력 부하 예측 그래프
@@ -186,13 +186,13 @@ export default function ForecastPage() {
                   <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="time" stroke="#9CA3AF" />
-              <YAxis stroke="#9CA3AF" label={{ value: 'kW', angle: -90, position: 'insideLeft' }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis dataKey="time" stroke="#94a3b8" />
+              <YAxis stroke="#94a3b8" label={{ value: 'kW', angle: -90, position: 'insideLeft' }} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#1F2937',
-                  border: '1px solid #374151',
+                  backgroundColor: '#0f172a',
+                  border: '1px solid #334155',
                   borderRadius: '8px',
                 }}
                 formatter={(value: number) => [value.toFixed(1), '']}
@@ -240,19 +240,19 @@ export default function ForecastPage() {
         <div className="flex items-center justify-center py-12">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
-            <p className="text-gray-300">예측 데이터를 처리 중입니다...</p>
+            <p className="text-slate-300">예측 데이터를 처리 중입니다...</p>
           </div>
         </div>
       )}
 
       {/* 예측 정보 테이블 (선택) */}
       {predictions.length > 0 && (
-        <div className="bg-gray-800 rounded-lg p-6">
+        <div className="bg-slate-800/50 rounded-lg p-6">
           <h2 className="text-xl font-bold mb-4">상세 예측 데이터</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-700">
+                <tr className="border-b border-slate-700/50">
                   <th className="text-left py-2 px-4">시간</th>
                   <th className="text-right py-2 px-4">예측 (kW)</th>
                   <th className="text-right py-2 px-4">하한 (kW)</th>
@@ -261,7 +261,7 @@ export default function ForecastPage() {
               </thead>
               <tbody>
                 {predictions.slice(0, 12).map((p, idx) => (
-                  <tr key={idx} className="border-b border-gray-700 hover:bg-gray-700/50">
+                  <tr key={idx} className="border-b border-slate-700/50 hover:bg-slate-700/50">
                     <td className="py-2 px-4">{new Date(p.timestamp).getHours()}시</td>
                     <td className="text-right py-2 px-4 text-blue-400 font-semibold">
                       {p.value.toFixed(1)}

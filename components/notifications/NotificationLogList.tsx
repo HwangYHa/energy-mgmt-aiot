@@ -52,19 +52,21 @@ const SEVERITY_COLORS: Record<string, string> = {
 export function NotificationLogList() {
   const [logs, setLogs] = useState<NotificationLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchLogs();
   }, []);
 
   async function fetchLogs() {
+    setError(null);
     try {
       const res = await apiGet<NotificationLog[]>('/api/notifications/logs?take=30');
       if (res.success && res.data) {
         setLogs(res.data);
       }
-    } catch (error) {
-      console.error('알림 로그 조회 실패:', error);
+    } catch {
+      setError('알림 로그를 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
@@ -74,6 +76,18 @@ export function NotificationLogList() {
     return (
       <div className="flex items-center justify-center py-8">
         <Loader2 className="w-5 h-5 text-slate-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8">
+        <XCircle className="w-10 h-10 text-red-500/50 mx-auto mb-3" />
+        <p className="text-sm text-red-400 mb-2">{error}</p>
+        <button onClick={() => { setLoading(true); fetchLogs(); }} className="text-xs text-cyan-400 hover:text-cyan-300 transition">
+          재시도
+        </button>
       </div>
     );
   }

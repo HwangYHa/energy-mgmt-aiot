@@ -69,7 +69,7 @@ export default function SystemSettingsPage() {
         setIsAdmin(json.data.isAdmin);
       }
     } catch {
-      console.error('설정 조회 실패');
+      // error handled
     } finally {
       setIsLoading(false);
     }

@@ -267,71 +267,73 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // 4. Check if user exists
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        id,
-        tenantId: auth.tenantId,
-        deletedAt: null,
-      },
-    });
+    // 4~6. 트랜잭션 내에서 사용자 조회 + 마지막 관리자 체크 + 소프트 삭제 (경쟁 조건 방지)
+    try {
+      await prisma.$transaction(async (tx) => {
+        // 4. Check if user exists (트랜잭션 내에서 재확인)
+        const existingUser = await tx.user.findFirst({
+          where: { id, tenantId: auth.tenantId, deletedAt: null },
+        });
 
-    if (!existingUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
+        if (!existingUser) throw new Error('USER_NOT_FOUND');
 
-    // 5. Prevent deletion of last admin
-    if (existingUser.role === 'tenant_admin') {
-      const adminCount = await prisma.user.count({
-        where: {
-          tenantId: auth.tenantId,
-          role: 'tenant_admin',
-          isActive: true,
-          deletedAt: null,
-        },
-      });
+        // 5. Prevent deletion of last admin (트랜잭션 내에서 체크 - race condition 방지)
+        if (existingUser.role === 'tenant_admin') {
+          const adminCount = await tx.user.count({
+            where: {
+              tenantId: auth.tenantId,
+              role: 'tenant_admin',
+              isActive: true,
+              deletedAt: null,
+            },
+          });
 
-      if (adminCount <= 1) {
-        return NextResponse.json(
-          { error: 'Cannot delete the last admin' },
-          { status: 400 }
-        );
-      }
-    }
+          if (adminCount <= 1) throw new Error('LAST_ADMIN');
+        }
 
-    // 6. Soft delete with audit log
-    await prisma.$transaction(async (tx) => {
-      // Remove as site manager
-      await tx.site.updateMany({
-        where: { managerId: id },
-        data: { managerId: null },
-      });
+        // 6. Soft delete with audit log
+        await tx.site.updateMany({
+          where: { managerId: id },
+          data: { managerId: null },
+        });
 
-      // Soft delete
-      await tx.user.update({
-        where: { id },
-        data: {
-          deletedAt: new Date(),
-          isActive: false,
-          // Anonymize email for GDPR
-          email: `deleted_${id}@deleted.local`,
-        },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          tenantId: auth.tenantId,
-          userId: auth.userId,
-          action: 'USER_DELETED',
-          resourceType: 'user',
-          resourceId: id,
-          changes: {
-            email: existingUser.email,
-            name: existingUser.name,
+        await tx.user.update({
+          where: { id },
+          data: {
+            deletedAt: new Date(),
+            isActive: false,
+            email: `deleted_${id}@deleted.local`,
           },
-        },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            tenantId: auth.tenantId,
+            userId: auth.userId,
+            action: 'USER_DELETED',
+            resourceType: 'user',
+            resourceId: id,
+            changes: {
+              email: existingUser.email,
+              name: existingUser.name,
+            },
+          },
+        });
       });
-    });
+    } catch (txError) {
+      if (txError instanceof Error) {
+        if (txError.message === 'USER_NOT_FOUND') {
+          return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        }
+        if (txError.message === 'LAST_ADMIN') {
+          return NextResponse.json(
+            { error: 'Cannot delete the last admin' },
+            { status: 400 }
+          );
+        }
+      }
+      throw txError;
+    }
 
     return NextResponse.json({
       success: true,

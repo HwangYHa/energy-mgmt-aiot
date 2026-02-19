@@ -60,8 +60,6 @@ export async function POST(request: NextRequest) {
 
       // TODO: 실제 이메일 전송 구현
       // 예: await sendPasswordResetEmail(validated.email, resetToken);
-      console.log(`[비밀번호 재설정] ${validated.email} - 토큰: ${resetToken}`);
-      console.log(`[비밀번호 재설정] 링크: ${process.env.WEB_APP_URL}/reset-password?token=${resetToken}`);
 
       // Note: Password reset requests are logged but not as security events
       // as they are expected user actions

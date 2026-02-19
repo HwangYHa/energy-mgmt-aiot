@@ -56,21 +56,32 @@ export function ContactForm() {
     setIsSubmitting(true);
 
     try {
-      // TODO: 실제 백엔드 API 연동 시 변경
-      // 현재는 성공 메시지만 표시 (이메일 전송 서비스 연동 필요)
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const res = await fetch('/api/support', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
 
-      setResult({
-        type: 'success',
-        text: '문의가 접수되었습니다. 24시간 이내에 답변 드리겠습니다.',
-      });
-      setForm({
-        name: '',
-        email: '',
-        category: 'general',
-        subject: '',
-        message: '',
-      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setResult({
+          type: 'success',
+          text: data.data?.message || '문의가 접수되었습니다. 24시간 이내에 답변 드리겠습니다.',
+        });
+        setForm({
+          name: '',
+          email: '',
+          category: 'general',
+          subject: '',
+          message: '',
+        });
+      } else {
+        setResult({
+          type: 'error',
+          text: data.error || '문의 접수 중 오류가 발생했습니다.',
+        });
+      }
     } catch {
       setResult({
         type: 'error',

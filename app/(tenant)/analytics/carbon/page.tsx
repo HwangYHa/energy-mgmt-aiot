@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 
 /**
- * 🌍 탄소 배출 분석 대시보드
+ * 탄소 배출 분석 대시보드
  * 
  * 기능:
  * - Scope 1/2/3 배출량 계산 및 시각화
@@ -88,10 +88,9 @@ export default function CarbonAnalyticsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // 모달 상태
-  const [_showFuelModal, setShowFuelModal] = useState(false);
-  const [_showTransportModal, setShowTransportModal] = useState(false);
-  const [_showSettingsModal, setShowSettingsModal] = useState(false);
+  const handleNotImplemented = (feature: string) => {
+    alert(`${feature} 기능은 준비 중입니다.`);
+  };
 
   useEffect(() => {
     if (session?.user) {
@@ -134,7 +133,6 @@ export default function CarbonAnalyticsPage() {
       setFootprint(footprintData);
 
     } catch (error) {
-      console.error('Carbon analytics error:', error);
       setError(error instanceof Error ? error.message : '데이터 로딩 실패');
     } finally {
       setIsLoading(false);
@@ -155,8 +153,7 @@ export default function CarbonAnalyticsPage() {
       a.href = url;
       a.download = `carbon-report-${year}.pdf`;
       a.click();
-    } catch (error) {
-      console.error('PDF export error:', error);
+    } catch {
       alert('PDF 생성 중 오류가 발생했습니다.');
     }
   };
@@ -175,8 +172,7 @@ export default function CarbonAnalyticsPage() {
       a.href = url;
       a.download = `carbon-report-${year}.xlsx`;
       a.click();
-    } catch (error) {
-      console.error('Excel export error:', error);
+    } catch {
       alert('Excel 생성 중 오류가 발생했습니다.');
     }
   };
@@ -184,7 +180,7 @@ export default function CarbonAnalyticsPage() {
   // 로딩 상태
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
+      <div className="flex items-center justify-center h-screen bg-[#051225] text-white">
         <div className="text-center">
           <RefreshCw className="w-12 h-12 animate-spin text-green-400 mx-auto mb-4" />
           <p className="text-xl">탄소 배출 데이터 로딩 중...</p>
@@ -196,14 +192,14 @@ export default function CarbonAnalyticsPage() {
   // 에러 상태
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
+      <div className="flex items-center justify-center h-screen bg-[#051225] text-white">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
           <p className="text-xl mb-2">데이터 로딩 실패</p>
-          <p className="text-gray-400 mb-4">{error}</p>
+          <p className="text-slate-400 mb-4">{error}</p>
           <button
             onClick={fetchCarbonData}
-            className="px-6 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
           >
             다시 시도
           </button>
@@ -234,7 +230,7 @@ export default function CarbonAnalyticsPage() {
     : [];
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6 space-y-6">
+    <div className="min-h-screen bg-[#051225] text-white p-6 space-y-6">
       {/* 헤더 */}
       <div className="flex justify-between items-center">
         <div>
@@ -242,7 +238,7 @@ export default function CarbonAnalyticsPage() {
             <Leaf className="w-8 h-8 text-green-400" />
             탄소 배출 분석
           </h1>
-          <p className="text-gray-400 mt-1">
+          <p className="text-slate-400 mt-1">
             온실가스 배출량 및 감축 현황 (ISO 14064, K-ETS 기준)
           </p>
         </div>
@@ -257,8 +253,8 @@ export default function CarbonAnalyticsPage() {
                 onClick={() => setYear(y)}
                 className={`px-4 py-2 rounded font-medium transition-colors ${
                   year === y
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'
                 }`}
               >
                 {y}
@@ -276,7 +272,7 @@ export default function CarbonAnalyticsPage() {
           </button>
           <button
             onClick={handleExportExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg font-medium transition-colors"
           >
             <Download className="w-4 h-4" />
             Excel
@@ -285,7 +281,7 @@ export default function CarbonAnalyticsPage() {
           {/* 새로고침 */}
           <button
             onClick={fetchCarbonData}
-            className="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+            className="p-2 bg-slate-800/50 hover:bg-slate-700/50 rounded-lg transition-colors"
             title="새로고침"
           >
             <RefreshCw className="w-5 h-5" />
@@ -293,8 +289,8 @@ export default function CarbonAnalyticsPage() {
 
           {/* 설정 */}
           <button
-            onClick={() => setShowSettingsModal(true)}
-            className="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+            onClick={() => handleNotImplemented('탄소 설정')}
+            className="p-2 bg-slate-800/50 hover:bg-slate-700/50 rounded-lg transition-colors"
             title="설정"
           >
             <Settings className="w-5 h-5" />
@@ -306,27 +302,27 @@ export default function CarbonAnalyticsPage() {
       {footprint && (
         <div className="grid grid-cols-4 gap-4">
           {/* 총 배출량 */}
-          <div className="bg-gray-800 rounded-lg p-6 border-2 border-green-500 relative overflow-hidden">
+          <div className="bg-slate-800/50 rounded-lg p-6 border-2 border-green-500 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/10 rounded-full -mr-16 -mt-16" />
             <div className="relative">
               <div className="flex items-center gap-2 mb-2">
                 <Leaf className="w-5 h-5 text-green-400" />
-                <span className="text-sm text-gray-400">총 배출량</span>
+                <span className="text-sm text-slate-400">총 배출량</span>
               </div>
               <div className="text-4xl font-bold text-green-400 mb-1">
                 {footprint.progress.current.toLocaleString('ko-KR', {
                   maximumFractionDigits: 1,
                 })}
               </div>
-              <div className="text-sm text-gray-400">tCO₂eq</div>
+              <div className="text-sm text-slate-400">tCO₂eq</div>
             </div>
           </div>
 
           {/* 목표 대비 */}
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
             <div className="flex items-center gap-2 mb-2">
               <Target className="w-5 h-5 text-blue-400" />
-              <span className="text-sm text-gray-400">목표 대비</span>
+              <span className="text-sm text-slate-400">목표 대비</span>
             </div>
             <div
               className={`text-4xl font-bold mb-1 ${
@@ -337,7 +333,7 @@ export default function CarbonAnalyticsPage() {
             >
               {footprint.progress.achievement.toFixed(1)}%
             </div>
-            <div className="text-sm text-gray-400">
+            <div className="text-sm text-slate-400">
               목표: {footprint.progress.target.toLocaleString('ko-KR')} tCO₂eq
             </div>
             {footprint.progress.achievement <= 100 ? (
@@ -354,14 +350,14 @@ export default function CarbonAnalyticsPage() {
           </div>
 
           {/* 전년 대비 감축 */}
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
             <div className="flex items-center gap-2 mb-2">
               {footprint.progress.reductionRate > 0 ? (
                 <TrendingDown className="w-5 h-5 text-green-400" />
               ) : (
                 <TrendingUp className="w-5 h-5 text-red-400" />
               )}
-              <span className="text-sm text-gray-400">전년 대비</span>
+              <span className="text-sm text-slate-400">전년 대비</span>
             </div>
             <div
               className={`text-4xl font-bold mb-1 ${
@@ -372,7 +368,7 @@ export default function CarbonAnalyticsPage() {
             >
               {Math.abs(footprint.progress.reductionRate).toFixed(1)}%
             </div>
-            <div className="text-sm text-gray-400">
+            <div className="text-sm text-slate-400">
               {footprint.progress.reduction > 0 ? '감축' : '증가'}:{' '}
               {Math.abs(footprint.progress.reduction).toLocaleString('ko-KR', {
                 maximumFractionDigits: 1,
@@ -382,17 +378,17 @@ export default function CarbonAnalyticsPage() {
           </div>
 
           {/* Scope 2 (주요 배출원) */}
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
             <div className="flex items-center gap-2 mb-2">
               <Calendar className="w-5 h-5 text-yellow-400" />
-              <span className="text-sm text-gray-400">Scope 2 (전력)</span>
+              <span className="text-sm text-slate-400">Scope 2 (전력)</span>
             </div>
             <div className="text-4xl font-bold text-yellow-400 mb-1">
               {footprint.emissions.scope2.toLocaleString('ko-KR', {
                 maximumFractionDigits: 1,
               })}
             </div>
-            <div className="text-sm text-gray-400">
+            <div className="text-sm text-slate-400">
               {(
                 (footprint.emissions.scope2 / footprint.emissions.total) *
                 100
@@ -406,14 +402,14 @@ export default function CarbonAnalyticsPage() {
       {/* 데이터 입력 버튼 */}
       <div className="flex gap-4">
         <button
-          onClick={() => setShowFuelModal(true)}
+          onClick={() => handleNotImplemented('연료 사용량 등록')}
           className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
         >
           <Plus className="w-5 h-5" />
           연료 사용량 등록
         </button>
         <button
-          onClick={() => setShowTransportModal(true)}
+          onClick={() => handleNotImplemented('운송 거리 등록')}
           className="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition-colors"
         >
           <Plus className="w-5 h-5" />
@@ -422,31 +418,31 @@ export default function CarbonAnalyticsPage() {
       </div>
 
       {/* 월별 배출량 추이 */}
-      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+      <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
         <h2 className="text-xl font-bold mb-4">월별 배출량 추이</h2>
 
         <ResponsiveContainer width="100%" height={400}>
           <BarChart data={monthlyData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis
               dataKey="monthName"
-              stroke="#9CA3AF"
-              tick={{ fill: '#9CA3AF' }}
+              stroke="#94a3b8"
+              tick={{ fill: '#94a3b8' }}
             />
             <YAxis
-              stroke="#9CA3AF"
-              tick={{ fill: '#9CA3AF' }}
+              stroke="#94a3b8"
+              tick={{ fill: '#94a3b8' }}
               label={{
                 value: 'tCO₂eq',
                 angle: -90,
                 position: 'insideLeft',
-                fill: '#9CA3AF',
+                fill: '#94a3b8',
               }}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#1F2937',
-                border: '1px solid #374151',
+                backgroundColor: '#0f172a',
+                border: '1px solid #334155',
                 borderRadius: '8px',
                 color: '#fff',
               }}
@@ -479,7 +475,7 @@ export default function CarbonAnalyticsPage() {
 
       <div className="grid grid-cols-2 gap-6">
         {/* Scope 분석 */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
           <h2 className="text-xl font-bold mb-4">Scope별 배출 비율</h2>
 
           {scopeData.length > 0 && footprint && (
@@ -504,8 +500,8 @@ export default function CarbonAnalyticsPage() {
                   </Pie>
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: '#1F2937',
-                      border: '1px solid #374151',
+                      backgroundColor: '#0f172a',
+                      border: '1px solid #334155',
                       borderRadius: '8px',
                       color: '#fff',
                     }}
@@ -542,7 +538,7 @@ export default function CarbonAnalyticsPage() {
         </div>
 
         {/* 감축 권장사항 */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <Lightbulb className="w-5 h-5 text-yellow-400" />
             AI 감축 권장사항
@@ -553,19 +549,19 @@ export default function CarbonAnalyticsPage() {
               {footprint.recommendations.map((rec, index) => (
                 <div
                   key={index}
-                  className="flex items-start gap-3 p-4 bg-gray-700/50 rounded hover:bg-gray-700 transition-colors"
+                  className="flex items-start gap-3 p-4 bg-slate-700/50 rounded hover:bg-slate-700/70 transition-colors"
                 >
                   <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
                     {index + 1}
                   </div>
-                  <p className="text-sm text-gray-300 pt-1">{rec}</p>
+                  <p className="text-sm text-slate-300 pt-1">{rec}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-center text-gray-400 py-8">
+            <div className="text-center text-slate-400 py-8">
               <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-2" />
-              <p className="text-lg">훌륭합니다! 🎉</p>
+              <p className="text-lg">훌륭합니다!</p>
               <p className="text-sm mt-2">목표를 달성하고 있습니다.</p>
               <p className="text-xs text-gray-500 mt-1">현재 수준을 유지하세요.</p>
             </div>
@@ -574,7 +570,7 @@ export default function CarbonAnalyticsPage() {
       </div>
 
       {/* 배출원별 상세 */}
-      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+      <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
         <h2 className="text-xl font-bold mb-4">배출원별 상세</h2>
 
         <div className="grid grid-cols-3 gap-4">
@@ -582,7 +578,7 @@ export default function CarbonAnalyticsPage() {
             <h3 className="font-bold mb-2 text-red-400">
               Scope 1 (직접 배출)
             </h3>
-            <ul className="text-sm space-y-1 text-gray-300">
+            <ul className="text-sm space-y-1 text-slate-300">
               <li>• 디젤 발전기</li>
               <li>• LNG 보일러</li>
               <li>• 차량 연료 (디젤, 가솔린)</li>
@@ -594,7 +590,7 @@ export default function CarbonAnalyticsPage() {
             <h3 className="font-bold mb-2 text-yellow-400">
               Scope 2 (간접 배출)
             </h3>
-            <ul className="text-sm space-y-1 text-gray-300">
+            <ul className="text-sm space-y-1 text-slate-300">
               <li>• 한국전력 (그리드 전력)</li>
               <li>• 배출계수: 0.4593 tCO₂/MWh</li>
               <li>• 재생에너지 (0 tCO₂/MWh)</li>
@@ -605,7 +601,7 @@ export default function CarbonAnalyticsPage() {
             <h3 className="font-bold mb-2 text-green-400">
               Scope 3 (기타)
             </h3>
-            <ul className="text-sm space-y-1 text-gray-300">
+            <ul className="text-sm space-y-1 text-slate-300">
               <li>• 운송 (화물차, 선박)</li>
               <li>• 출장 (항공, 철도)</li>
               <li>• 폐기물 처리</li>
@@ -616,13 +612,13 @@ export default function CarbonAnalyticsPage() {
 
       {/* 배출원별 상세 데이터 (테이블) */}
       {footprint && footprint.breakdown.length > 0 && (
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
           <h2 className="text-xl font-bold mb-4">배출원별 상세 데이터</h2>
           
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-700">
+                <tr className="border-b border-slate-700/50">
                   <th className="text-left py-3 px-4">카테고리</th>
                   <th className="text-left py-3 px-4">배출원</th>
                   <th className="text-right py-3 px-4">사용량</th>
@@ -632,7 +628,7 @@ export default function CarbonAnalyticsPage() {
               </thead>
               <tbody>
                 {footprint.breakdown.map((item, index) => (
-                  <tr key={index} className="border-b border-gray-700/50 hover:bg-gray-700/30">
+                  <tr key={index} className="border-b border-slate-700/50 hover:bg-slate-700/30">
                     <td className="py-3 px-4">{item.category}</td>
                     <td className="py-3 px-4">{item.sourceType}</td>
                     <td className="text-right py-3 px-4">

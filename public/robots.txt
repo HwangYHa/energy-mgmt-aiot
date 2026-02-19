@@ -1,0 +1,21 @@
+User-agent: *
+Allow: /
+Allow: /docs/
+Allow: /pricing/
+Allow: /about/
+Allow: /contact/
+Allow: /status/
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /monitoring/
+Disallow: /analytics/
+Disallow: /control/
+Disallow: /sensors/
+Disallow: /alerts/
+Disallow: /reports/
+Disallow: /compliance/
+Disallow: /admin/
+Disallow: /settings/
+Disallow: /manual/
+
+Sitemap: https://energyai.io/sitemap.xml

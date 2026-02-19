@@ -39,21 +39,19 @@ export default function APIQuickstartPage() {
       number: 2,
       title: 'API 키 발급',
       description:
-        '설정 페이지에서 API 키를 생성합니다. API 키는 모든 요청에 필요합니다.',
+        '로그인 후 설정 > API 키 관리 페이지에서 API 키를 생성합니다.',
       icon: Key,
       color: 'text-emerald-400',
       bgColor: 'bg-emerald-500/10',
-      code: `// 설정 > API 키 관리에서 생성하거나
-// API를 통해 직접 생성할 수 있습니다.
-
-curl -X POST https://api.energyai.io/api/auth/token \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer YOUR_SESSION_TOKEN" \\
-  -d '{
-    "name": "My API Key",
-    "scopes": ["read:sites", "read:devices", "write:devices"]
-  }'`,
+      code: `// 1. 로그인 후 설정 > API 키 관리 이동
+//    https://your-domain.com/settings/api
+//
+// 2. "새 API 키" 버튼 클릭 → 이름, 권한 범위 설정
+//
+// 3. 생성된 API 키를 안전한 곳에 저장
+//    예: ea_live_aBcDeFgHiJkLmNoPqRsT...`,
       note: 'API 키는 생성 시 한 번만 표시됩니다. 안전한 곳에 저장하세요.',
+      action: { label: 'API 키 관리', href: '/settings/api' },
     },
     {
       number: 3,

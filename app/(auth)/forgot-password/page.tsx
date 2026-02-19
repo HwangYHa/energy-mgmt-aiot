@@ -49,7 +49,6 @@ export default function ForgotPasswordPage() {
       setSuccess(true);
     } catch (err) {
       setError('요청 중 오류가 발생했습니다.');
-      console.error(err);
     } finally {
       setLoading(false);
     }

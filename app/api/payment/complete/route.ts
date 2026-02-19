@@ -30,12 +30,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { imp_uid, merchant_uid, paid_amount } = completeSchema.parse(body);
 
-    console.log('[Payment Complete] Validating payment:', {
-      imp_uid,
-      merchant_uid,
-      userId: auth.userId,
-    });
-
     // 3. Iamport에서 결제 검증
     const { valid, payment } = await validatePayment(
       imp_uid,
@@ -51,32 +45,64 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Subscription 조회
-    const subscription = await prisma.subscription.findFirst({
-      where: {
-        tenantId: auth.tenantId,
-        status: { in: ['PAID', 'ACTIVE'] },
-      },
-      include: {
-        plan: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+    // 4. 중복 결제 방지 - imp_uid 기준 멱등성 체크
+    const existingPayment = await prisma.paymentHistory.findFirst({
+      where: { transactionId: imp_uid },
     });
 
-    if (!subscription) {
-      console.error(
-        '[Payment Complete] Subscription not found for tenant:',
-        auth.tenantId
-      );
+    if (existingPayment) {
+      console.warn('[Payment Complete] Duplicate imp_uid detected:', imp_uid);
       return NextResponse.json(
-        { error: 'Subscription not found' },
-        { status: 404 }
+        { error: 'Payment already processed' },
+        { status: 409 }
       );
     }
 
-    // 5. 사용자 역할 확인 (tenant_admin으로 업그레이드 되었는지)
+    // 5. 트랜잭션: Subscription 조회 + 상태 업데이트 + PaymentHistory 생성
+    const result = await prisma.$transaction(async (tx) => {
+      // 구독 조회 (PRE_PAYMENT 또는 PAID 상태)
+      const subscription = await tx.subscription.findFirst({
+        where: {
+          tenantId: auth.tenantId,
+          status: { in: ['PRE_PAYMENT', 'PAID', 'ACTIVE'] },
+        },
+        include: { plan: true },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (!subscription) {
+        throw new Error('SUBSCRIPTION_NOT_FOUND');
+      }
+
+      // 구독 상태를 ACTIVE로 업데이트 (PRE_PAYMENT → ACTIVE)
+      const updatedSubscription = await tx.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          status: 'ACTIVE',
+          updatedAt: new Date(),
+        },
+        include: { plan: true },
+      });
+
+      // PaymentHistory 레코드 생성
+      await tx.paymentHistory.create({
+        data: {
+          tenantId: auth.tenantId,
+          subscriptionId: subscription.id,
+          amount: payment.paid_amount,
+          currency: 'KRW',
+          status: 'paid',
+          method: payment.pay_method ?? null,
+          transactionId: imp_uid,
+          receiptUrl: payment.receipt_url ?? null,
+          paidAt: payment.paid_at ? new Date(payment.paid_at * 1000) : new Date(),
+        },
+      });
+
+      return updatedSubscription;
+    });
+
+    // 6. 사용자 정보 조회
     const user = await prisma.user.findUnique({
       where: { id: auth.userId },
     });
@@ -89,11 +115,11 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         subscription: {
-          id: subscription.id,
-          planName: subscription.plan.name,
-          status: subscription.status,
-          startDate: subscription.startDate,
-          endDate: subscription.endDate,
+          id: result.id,
+          planName: result.plan.name,
+          status: result.status,
+          startDate: result.startDate,
+          endDate: result.endDate,
         },
         user: {
           role: user.role,
@@ -112,6 +138,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Invalid input', details: error.errors },
         { status: 400 }
+      );
+    }
+
+    if (error instanceof Error && error.message === 'SUBSCRIPTION_NOT_FOUND') {
+      console.error('[Payment Complete] Subscription not found');
+      return NextResponse.json(
+        { error: 'Subscription not found' },
+        { status: 404 }
       );
     }
 

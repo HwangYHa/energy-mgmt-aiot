@@ -1,7 +1,6 @@
-// app/web/app/(tenant)/analytics/cost/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   PieChart,
   Pie,
@@ -21,6 +20,7 @@ import {
   TrendingDown,
   Lightbulb,
   Clock,
+  Loader2,
 } from 'lucide-react';
 
 interface CostBreakdown {
@@ -56,81 +56,72 @@ export default function CostAnalyticsPage() {
   const [costBreakdown, setCostBreakdown] = useState<CostBreakdown | null>(null);
   const [hourlyCost, setHourlyCost] = useState<HourlyCost[]>([]);
   const [savingPotential, setSavingPotential] = useState<SavingPotential | null>(null);
-  const [comparison, setComparison] = useState<any>(null);
+  const [comparison, setComparison] = useState<{
+    currentMonth: number;
+    previousMonth: number;
+    difference: number;
+    percentageChange: number;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [contractPower, setContractPower] = useState(1000);
 
-  const contractPower = 1000; // 계약전력 1000kW (예시)
-
-  useEffect(() => {
-    fetchCostAnalytics();
-  }, []);
-
-  const fetchCostAnalytics = async () => {
+  const fetchCostAnalytics = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
+
     try {
-      const token = localStorage.getItem('accessToken');
+      // 사이트 설정에서 계약전력 조회 시도
+      try {
+        const siteRes = await fetch('/api/sites?take=1');
+        if (siteRes.ok) {
+          const siteJson = await siteRes.json();
+          const site = siteJson.data?.[0];
+          if (site?.contractPower) {
+            setContractPower(site.contractPower);
+          }
+        }
+      } catch {
+        // 사이트 정보 미조회 시 기본값 유지
+      }
+
       const currentMonth = new Date();
       const currentMonthStr = currentMonth.toISOString();
-
-      // 월간 비용
-      const costResponse = await fetch(
-        `http://localhost:4000/api/analytics/cost/monthly?` +
-        `contractPower=${contractPower}&` +
-        `month=${currentMonthStr}`,
-        {
-          headers: { 'Authorization': `Bearer ${token}` },
-        },
-      );
-
-      if (costResponse.ok) {
-        setCostBreakdown(await costResponse.json());
-      }
-
-      // 시간대별 비용 (오늘)
       const today = new Date().toISOString();
-      const hourlyResponse = await fetch(
-        `http://localhost:4000/api/analytics/cost/hourly?date=${today}`,
-        {
-          headers: { 'Authorization': `Bearer ${token}` },
-        },
-      );
 
-      if (hourlyResponse.ok) {
-        setHourlyCost(await hourlyResponse.json());
+      const [costRes, hourlyRes, savingRes, compareRes] = await Promise.allSettled([
+        fetch(`/api/analytics/cost/monthly?contractPower=${contractPower}&month=${currentMonthStr}`),
+        fetch(`/api/analytics/cost/hourly?date=${today}`),
+        fetch(`/api/analytics/cost/saving-potential?month=${currentMonthStr}`),
+        fetch(`/api/analytics/cost/compare?contractPower=${contractPower}&currentMonth=${currentMonthStr}`),
+      ]);
+
+      if (costRes.status === 'fulfilled' && costRes.value.ok) {
+        const json = await costRes.value.json();
+        if (json.success) setCostBreakdown(json.data);
       }
-
-      // 절감 잠재력
-      const savingResponse = await fetch(
-        `http://localhost:4000/api/analytics/cost/saving-potential?month=${currentMonthStr}`,
-        {
-          headers: { 'Authorization': `Bearer ${token}` },
-        },
-      );
-
-      if (savingResponse.ok) {
-        setSavingPotential(await savingResponse.json());
+      if (hourlyRes.status === 'fulfilled' && hourlyRes.value.ok) {
+        const json = await hourlyRes.value.json();
+        if (json.success) setHourlyCost(json.data || []);
       }
-
-      // 전월 대비
-      const compareResponse = await fetch(
-        `http://localhost:4000/api/analytics/cost/compare?` +
-        `contractPower=${contractPower}&` +
-        `currentMonth=${currentMonthStr}`,
-        {
-          headers: { 'Authorization': `Bearer ${token}` },
-        },
-      );
-
-      if (compareResponse.ok) {
-        setComparison(await compareResponse.json());
+      if (savingRes.status === 'fulfilled' && savingRes.value.ok) {
+        const json = await savingRes.value.json();
+        if (json.success) setSavingPotential(json.data);
       }
-
-    } catch (error) {
-      console.error('Failed to fetch cost analytics:', error);
+      if (compareRes.status === 'fulfilled' && compareRes.value.ok) {
+        const json = await compareRes.value.json();
+        if (json.success) setComparison(json.data);
+      }
+    } catch {
+      setError('비용 분석 데이터를 불러오지 못했습니다.');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [contractPower]);
+
+  useEffect(() => {
+    fetchCostAnalytics();
+  }, [fetchCostAnalytics]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ko-KR', {
@@ -141,8 +132,8 @@ export default function CostAnalyticsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
-        <div className="text-xl">비용 분석 중...</div>
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
       </div>
     );
   }
@@ -156,20 +147,35 @@ export default function CostAnalyticsPage() {
   ] : [];
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6 space-y-6">
+    <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6 space-y-6">
       {/* 헤더 */}
       <div>
-        <h1 className="text-3xl font-bold">💰 비용 분석</h1>
-        <p className="text-gray-400 mt-1">전력 요금 및 절감 분석</p>
+        <h1 className="text-2xl font-bold flex items-center gap-3">
+          <div className="p-2 bg-blue-500/10 rounded-lg">
+            <DollarSign className="w-6 h-6 text-blue-400" />
+          </div>
+          비용 분석
+        </h1>
+        <p className="text-slate-400 mt-1">전력 요금 및 절감 분석</p>
       </div>
+
+      {/* 에러 배너 */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center justify-between">
+          <p className="text-sm text-red-300">{error}</p>
+          <button onClick={fetchCostAnalytics} className="px-3 py-1.5 bg-red-500/20 text-red-300 rounded-lg text-sm hover:bg-red-500/30 transition">
+            재시도
+          </button>
+        </div>
+      )}
 
       {/* 주요 지표 */}
       <div className="grid grid-cols-4 gap-4">
         {/* 이번 달 총 비용 */}
-        <div className="bg-gray-800 rounded-lg p-6 border-2 border-blue-500">
+        <div className="bg-slate-800/50 rounded-lg p-6 border-2 border-blue-500">
           <div className="flex items-center gap-2 mb-2">
             <DollarSign className="w-5 h-5 text-blue-400" />
-            <span className="text-sm text-gray-400">이번 달 총 비용</span>
+            <span className="text-sm text-slate-400">이번 달 총 비용</span>
           </div>
           <div className="text-4xl font-bold text-blue-400 mb-1">
             {costBreakdown && formatCurrency(costBreakdown.total)}
@@ -177,56 +183,56 @@ export default function CostAnalyticsPage() {
         </div>
 
         {/* 전월 대비 */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
           <div className="flex items-center gap-2 mb-2">
             {comparison && comparison.percentageChange < 0 ? (
               <TrendingDown className="w-5 h-5 text-green-400" />
             ) : (
               <TrendingUp className="w-5 h-5 text-red-400" />
             )}
-            <span className="text-sm text-gray-400">전월 대비</span>
+            <span className="text-sm text-slate-400">전월 대비</span>
           </div>
           <div className={`text-4xl font-bold mb-1 ${
             comparison && comparison.percentageChange < 0 ? 'text-green-400' : 'text-red-400'
           }`}>
             {comparison?.percentageChange.toFixed(1) || 0}%
           </div>
-          <div className="text-sm text-gray-400">
+          <div className="text-sm text-slate-400">
             {comparison && formatCurrency(Math.abs(comparison.difference))}
           </div>
         </div>
 
         {/* 절감 가능 금액 */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-green-700">
+        <div className="bg-slate-800/50 rounded-lg p-6 border border-green-700">
           <div className="flex items-center gap-2 mb-2">
             <Lightbulb className="w-5 h-5 text-green-400" />
-            <span className="text-sm text-gray-400">절감 가능</span>
+            <span className="text-sm text-slate-400">절감 가능</span>
           </div>
           <div className="text-4xl font-bold text-green-400 mb-1">
             {savingPotential && formatCurrency(savingPotential.potentialSaving)}
           </div>
-          <div className="text-sm text-gray-400">
+          <div className="text-sm text-slate-400">
             {savingPotential?.savingPercentage.toFixed(1)}%
           </div>
         </div>
 
         {/* 계약전력 */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
           <div className="flex items-center gap-2 mb-2">
             <Clock className="w-5 h-5 text-yellow-400" />
-            <span className="text-sm text-gray-400">계약전력</span>
+            <span className="text-sm text-slate-400">계약전력</span>
           </div>
           <div className="text-4xl font-bold text-yellow-400 mb-1">
             {contractPower}
           </div>
-          <div className="text-sm text-gray-400">kW</div>
+          <div className="text-sm text-slate-400">kW</div>
         </div>
       </div>
 
       {/* 비용 구성 */}
       <div className="grid grid-cols-2 gap-6">
         {/* 비용 구성 비율 (Pie Chart) */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
           <h2 className="text-xl font-bold mb-4">비용 구성</h2>
           
           {pieData.length > 0 && (
@@ -263,26 +269,26 @@ export default function CostAnalyticsPage() {
           {costBreakdown && (
             <div className="mt-4 space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-400">기본요금</span>
+                <span className="text-slate-400">기본요금</span>
                 <span className="font-bold">{formatCurrency(costBreakdown.basicCharge)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">전력량요금</span>
+                <span className="text-slate-400">전력량요금</span>
                 <span className="font-bold">{formatCurrency(costBreakdown.energyCharge)}</span>
               </div>
-              <div className="flex justify-between border-t border-gray-700 pt-2">
-                <span className="text-gray-400">소계</span>
+              <div className="flex justify-between border-t border-slate-700/50 pt-2">
+                <span className="text-slate-400">소계</span>
                 <span className="font-bold">{formatCurrency(costBreakdown.subtotal)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">전력산업기반기금</span>
+                <span className="text-slate-400">전력산업기반기금</span>
                 <span>{formatCurrency(costBreakdown.fund)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400">부가세</span>
+                <span className="text-slate-400">부가세</span>
                 <span>{formatCurrency(costBreakdown.vat)}</span>
               </div>
-              <div className="flex justify-between border-t border-gray-700 pt-2 text-lg">
+              <div className="flex justify-between border-t border-slate-700/50 pt-2 text-lg">
                 <span className="font-bold">합계</span>
                 <span className="font-bold text-blue-400">
                   {formatCurrency(costBreakdown.total)}
@@ -293,7 +299,7 @@ export default function CostAnalyticsPage() {
         </div>
 
         {/* 절감 권장사항 */}
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <Lightbulb className="w-5 h-5 text-green-400" />
             절감 권장사항
@@ -302,11 +308,11 @@ export default function CostAnalyticsPage() {
           {savingPotential && (
             <>
               <div className="bg-green-900/30 border border-green-700 rounded-lg p-4 mb-4">
-                <div className="text-sm text-gray-400 mb-1">절감 가능 금액</div>
+                <div className="text-sm text-slate-400 mb-1">절감 가능 금액</div>
                 <div className="text-3xl font-bold text-green-400">
                   {formatCurrency(savingPotential.potentialSaving)}
                 </div>
-                <div className="text-sm text-gray-400 mt-1">
+                <div className="text-sm text-slate-400 mt-1">
                   전체 비용의 {savingPotential.savingPercentage.toFixed(1)}%
                 </div>
               </div>
@@ -315,12 +321,12 @@ export default function CostAnalyticsPage() {
                 {savingPotential.recommendations.map((rec, index) => (
                   <div 
                     key={index}
-                    className="flex items-start gap-3 p-3 bg-gray-700/50 rounded"
+                    className="flex items-start gap-3 p-3 bg-slate-700/50 rounded"
                   >
                     <div className="w-6 h-6 bg-green-600 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
                       {index + 1}
                     </div>
-                    <p className="text-sm text-gray-300">{rec}</p>
+                    <p className="text-sm text-slate-300">{rec}</p>
                   </div>
                 ))}
               </div>
@@ -330,7 +336,7 @@ export default function CostAnalyticsPage() {
       </div>
 
       {/* 시간대별 비용 */}
-      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+      <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
         <h2 className="text-xl font-bold mb-4">시간대별 비용 (금일)</h2>
 
         <ResponsiveContainer width="100%" height={300}>

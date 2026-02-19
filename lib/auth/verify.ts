@@ -6,14 +6,16 @@
  * if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
  *
  * 지원 인증 방식:
- * 1. NextAuth 세션 (Google OAuth) - 쿠키 기반
+ * 1. Bearer ea_live_* API 키 (외부 통합, operator 권한 고정)
  * 2. Bearer JWT 토큰 (Naver OAuth, API 호출)
  * 3. auth-token 쿠키 (Naver OAuth)
+ * 4. NextAuth 세션 (Google OAuth) - 쿠키 기반
  */
 
 import { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { getToken } from 'next-auth/jwt';
+import { createHash } from 'crypto';
 import { prisma } from '@/lib/db/prisma';
 import { TenantContext } from '@/lib/context/tenant-context';
 import env from '@/lib/env';
@@ -188,12 +190,63 @@ async function verifyJwtToken(token: string, request: NextRequest): Promise<Tena
 }
 
 /**
+ * ea_live_ API 키 검증 (외부 API 통합용)
+ *
+ * Authorization: Bearer ea_live_XXXX 헤더로 전달된 키를 SHA-256 해시 후
+ * DB에서 조회하여 인증 컨텍스트 반환. lastUsedAt 비동기 갱신.
+ */
+async function verifyApiKey(token: string): Promise<TenantContext | null> {
+  try {
+    const keyHash = createHash('sha256').update(token).digest('hex');
+
+    const apiKey = await prisma.apiKey.findFirst({
+      where: {
+        keyHash,
+        isActive: true,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        userId: true,
+      },
+    });
+
+    if (!apiKey) return null;
+
+    // 사용자 이메일 조회 (TenantContext.email 필수)
+    const user = await prisma.user.findUnique({
+      where: { id: apiKey.userId },
+      select: { email: true, isActive: true },
+    });
+
+    if (!user || !user.isActive) return null;
+
+    // lastUsedAt 비동기 갱신 (응답 지연 없이)
+    prisma.apiKey
+      .update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } })
+      .catch(() => {});
+
+    return {
+      tenantId: apiKey.tenantId,
+      userId: apiKey.userId,
+      role: 'operator' as UserRole, // API 키는 operator 권한으로 고정
+      email: user.email,
+    };
+  } catch (error) {
+    console.error('[Auth] API 키 검증 오류:', error);
+    return null;
+  }
+}
+
+/**
  * 통합 인증 검증 함수
  *
  * 우선순위:
- * 1. Authorization: Bearer 토큰 (API 호출)
- * 2. auth-token 쿠키 (Naver OAuth)
- * 3. NextAuth 세션 (Google OAuth)
+ * 1. Authorization: Bearer ea_live_* (외부 API 키)
+ * 2. Authorization: Bearer JWT 토큰 (Naver OAuth, API 호출)
+ * 3. auth-token 쿠키 (Naver OAuth)
+ * 4. NextAuth 세션 (Google OAuth)
  *
  * ⭐ 3중 검증:
  * 1. 토큰/세션 서명 검증
@@ -207,6 +260,13 @@ export async function verifyAuth(
     // 1. Authorization: Bearer 토큰 확인
     const bearerToken = extractBearerToken(request);
     if (bearerToken) {
+      // 1-a. ea_live_ 접두사 → API 키 검증
+      if (bearerToken.startsWith('ea_live_')) {
+        const result = await verifyApiKey(bearerToken);
+        if (result) return result;
+        return null; // API 키로 시도했지만 실패 → JWT 시도 안 함
+      }
+      // 1-b. 일반 JWT 검증
       const result = await verifyJwtToken(bearerToken, request);
       if (result) return result;
     }

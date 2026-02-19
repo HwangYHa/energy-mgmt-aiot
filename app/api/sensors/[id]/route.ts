@@ -8,7 +8,7 @@
 
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
-import { verifyAuth, requireRoleOrHigher, validateTenantMatch } from '@/lib/auth/verify';
+import { verifyAuth, requireRoleOrHigher } from '@/lib/auth/verify';
 import { prisma } from '@/lib/db/prisma';
 import { UserRole } from '@/lib/constants/roles';
 import {
@@ -87,15 +87,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
 
-    const existing = await prisma.sensor.findFirst({
-      where: { id, deletedAt: null },
-    });
-
-    if (!existing) return notFoundResponse('센서');
-    if (!validateTenantMatch(auth.tenantId, existing.tenantId)) {
-      return forbiddenResponse();
-    }
-
     const body = await request.json();
     const parsed = updateSensorSchema.safeParse(body);
     if (!parsed.success) {
@@ -121,14 +112,23 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (data.nextCalibrationDate !== undefined) updateData.nextCalibrationDate = new Date(data.nextCalibrationDate);
     if (data.metadata !== undefined) updateData.metadata = data.metadata;
 
-    const updated = await prisma.sensor.update({
-      where: { id },
-      data: updateData,
-      include: {
-        device: { select: { id: true, name: true, code: true } },
-      },
+    // TOCTOU 방지: 트랜잭션 내에서 소유권 확인 + 업데이트 원자적 처리
+    const updated = await prisma.$transaction(async (tx) => {
+      const sensor = await tx.sensor.findFirst({
+        where: { id, tenantId: auth.tenantId, deletedAt: null },
+      });
+      if (!sensor) return null;
+
+      return tx.sensor.update({
+        where: { id },
+        data: updateData,
+        include: {
+          device: { select: { id: true, name: true, code: true } },
+        },
+      });
     });
 
+    if (!updated) return notFoundResponse('센서');
     return successResponse(updated);
   } catch (error) {
     console.error('[API] 센서 수정 오류:', error);
@@ -146,21 +146,21 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
 
-    const existing = await prisma.sensor.findFirst({
-      where: { id, deletedAt: null },
+    // TOCTOU 방지: 트랜잭션 내에서 소유권 확인 + 삭제 원자적 처리
+    const deleted = await prisma.$transaction(async (tx) => {
+      const sensor = await tx.sensor.findFirst({
+        where: { id, tenantId: auth.tenantId, deletedAt: null },
+      });
+      if (!sensor) return false;
+
+      await tx.sensor.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+      return true;
     });
 
-    if (!existing) return notFoundResponse('센서');
-    if (!validateTenantMatch(auth.tenantId, existing.tenantId)) {
-      return forbiddenResponse();
-    }
-
-    // 소프트 삭제
-    await prisma.sensor.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    });
-
+    if (!deleted) return notFoundResponse('센서');
     return successResponse({ deleted: true });
   } catch (error) {
     console.error('[API] 센서 삭제 오류:', error);

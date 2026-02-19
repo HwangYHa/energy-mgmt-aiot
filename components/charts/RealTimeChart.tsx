@@ -113,40 +113,48 @@ export default function RealTimeChart({
   }, [deviceId, metricKey, maxDataPoints]);
 
   return (
-    <div className="w-full h-full bg-white rounded-lg shadow p-4">
+    <div className="w-full h-full bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold">{title}</h3>
+        <h3 className="text-lg font-semibold text-white">{title}</h3>
         <div className="flex items-center gap-2">
           <div
             className={`w-2 h-2 rounded-full ${
-              isConnected ? 'bg-green-500' : 'bg-red-500'
+              isConnected ? 'bg-emerald-500' : 'bg-red-500'
             }`}
           />
-          <span className="text-sm text-gray-600">
+          <span className="text-sm text-slate-400">
             {isConnected ? '연결됨' : '연결 끊김'}
           </span>
         </div>
       </div>
 
       {data.length === 0 ? (
-        <div className="flex items-center justify-center h-64 text-gray-400">
+        <div className="flex items-center justify-center h-64 text-slate-500">
           데이터를 기다리는 중...
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis
               dataKey="time"
-              tick={{ fontSize: 12 }}
+              tick={{ fontSize: 12, fill: '#94a3b8' }}
+              stroke="#475569"
             />
-            <YAxis tick={{ fontSize: 12 }} />
-            <Tooltip />
-            <Legend />
+            <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#475569" />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#1e293b',
+                border: '1px solid #334155',
+                borderRadius: '8px',
+                color: '#fff',
+              }}
+            />
+            <Legend wrapperStyle={{ color: '#94a3b8' }} />
             <Line
               type="monotone"
               dataKey="value"
-              stroke="#3b82f6"
+              stroke="#06b6d4"
               strokeWidth={2}
               dot={false}
               animationDuration={300}
@@ -155,7 +163,7 @@ export default function RealTimeChart({
         </ResponsiveContainer>
       )}
 
-      <div className="mt-4 flex justify-between text-sm text-gray-600">
+      <div className="mt-4 flex justify-between text-sm text-slate-400">
         <span>최신 값: {data[data.length - 1]?.value.toFixed(2) || 'N/A'}</span>
         <span>데이터 포인트: {data.length}/{maxDataPoints}</span>
       </div>

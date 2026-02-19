@@ -57,9 +57,11 @@ export default function EnergyAnalyticsPage() {
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSimulated, setIsSimulated] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchAnalytics = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/analytics/energy?period=${period}`);
       if (res.ok) {
@@ -69,9 +71,11 @@ export default function EnergyAnalyticsPage() {
         setPeakAnalysis(data.peakAnalysis || null);
         setComparison(data.comparison || null);
         setIsSimulated(data.isSimulated || false);
+      } else {
+        setError('에너지 분석 데이터를 불러오지 못했습니다.');
       }
-    } catch (error) {
-      console.error('Failed to fetch analytics:', error);
+    } catch {
+      setError('서버에 연결할 수 없습니다. 네트워크를 확인해주세요.');
     } finally {
       setIsLoading(false);
     }
@@ -128,6 +132,16 @@ export default function EnergyAnalyticsPage() {
           ))}
         </div>
       </div>
+
+      {/* 에러 배너 */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center justify-between">
+          <p className="text-sm text-red-300">{error}</p>
+          <button onClick={fetchAnalytics} className="px-3 py-1.5 bg-red-500/20 text-red-300 rounded-lg text-sm hover:bg-red-500/30 transition">
+            재시도
+          </button>
+        </div>
+      )}
 
       {/* 통계 카드 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

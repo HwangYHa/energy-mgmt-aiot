@@ -22,17 +22,21 @@ export default function ReportsPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [recentReports, setRecentReports] = useState<ReportItem[]>([]);
   const [isLoadingReports, setIsLoadingReports] = useState(true);
+  const [reportsError, setReportsError] = useState<string | null>(null);
 
   const fetchRecentReports = useCallback(async () => {
     setIsLoadingReports(true);
+    setReportsError(null);
     try {
       const res = await fetch('/api/reports/regulation?take=5');
       if (res.ok) {
         const data = await res.json();
         setRecentReports(data.data || []);
+      } else {
+        setReportsError('리포트 목록을 불러오지 못했습니다.');
       }
     } catch {
-      // silent
+      setReportsError('서버에 연결할 수 없습니다.');
     } finally {
       setIsLoadingReports(false);
     }
@@ -70,8 +74,7 @@ export default function ReportsPage() {
         const err = await response.json().catch(() => null);
         alert(err?.message || '리포트 생성에 실패했습니다.');
       }
-    } catch (error) {
-      console.error('Report generation error:', error);
+    } catch {
       alert('리포트 생성 중 오류가 발생했습니다.');
     } finally {
       setIsGenerating(false);
@@ -221,7 +224,12 @@ export default function ReportsPage() {
           </button>
         </div>
 
-        {isLoadingReports ? (
+        {reportsError ? (
+          <div className="text-center py-8">
+            <p className="text-sm text-red-400 mb-2">{reportsError}</p>
+            <button onClick={fetchRecentReports} className="text-xs text-cyan-400 hover:text-cyan-300 transition">재시도</button>
+          </div>
+        ) : isLoadingReports ? (
           <div className="text-center py-8 text-slate-500"><Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" /><p className="text-sm">불러오는 중...</p></div>
         ) : recentReports.length === 0 ? (
           <div className="text-center py-8 text-slate-500"><FileText className="w-8 h-8 mx-auto mb-2 opacity-50" /><p className="text-sm">생성된 리포트가 없습니다.</p></div>

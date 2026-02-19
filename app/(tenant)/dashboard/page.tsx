@@ -96,7 +96,6 @@ export default function DashboardPage() {
         throw new Error(result.error || '데이터 조회 실패');
       }
     } catch (err) {
-      console.error('대시보드 데이터 조회 오류:', err);
       setError(err instanceof Error ? err.message : '알 수 없는 오류');
     } finally {
       setIsLoading(false);
@@ -142,8 +141,26 @@ export default function DashboardPage() {
     );
   }
 
-  // 데이터가 없는 경우 기본값 사용
-  const data = stats || getDefaultStats();
+  // 데이터가 없는 경우 빈 상태 안내
+  if (!stats) {
+    return (
+      <div className="min-h-screen bg-[#051225] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <p className="text-slate-400 text-lg">표시할 데이터가 없습니다.</p>
+          <p className="text-slate-500 text-sm">사이트와 디바이스를 먼저 등록하세요.</p>
+          <button
+            onClick={fetchDashboardData}
+            className="mt-4 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg flex items-center gap-2 mx-auto transition-colors text-sm"
+          >
+            <RefreshCw className="w-4 h-4" />
+            새로고침
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const data = stats;
 
   return (
     <div className="min-h-screen bg-[#051225] p-2 md:p-3 lg:p-4">
@@ -400,78 +417,3 @@ export default function DashboardPage() {
   );
 }
 
-// 기본 통계 데이터 (API 실패 시 폴백)
-function getDefaultStats(): DashboardStats {
-  const monthNames = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
-  const weekdayNames = ['월', '화', '수', '목', '금', '토', '일'];
-
-  return {
-    kpis: {
-      totalConsumption: 153123461,
-      consumptionUnit: 'kWh',
-      consumptionTrend: { value: 8.5, direction: 'down' },
-      efficiency: 94,
-      equipmentRate: 81,
-      drParticipation: 76,
-      carbonGoal: 89,
-    },
-    realtime: {
-      currentPower: 245,
-      dailyUsage: 1842,
-      peakRatio: 72,
-      estimatedCost: 284500,
-    },
-    monthlyConsumption: monthNames.map((name, i) => ({
-      name,
-      consumption: 3500 + (i % 4) * 500,
-      target: 4000,
-    })),
-    weeklyTrend: weekdayNames.map((name) => ({
-      name,
-      current: 500 + Math.floor(Math.random() * 300),
-      previous: 500 + Math.floor(Math.random() * 300),
-    })),
-    hourlyLoad: [
-      { name: '00시', load: 120, peak: 200 },
-      { name: '04시', load: 100, peak: 200 },
-      { name: '08시', load: 280, peak: 300 },
-      { name: '12시', load: 350, peak: 350 },
-      { name: '16시', load: 320, peak: 350 },
-      { name: '20시', load: 250, peak: 300 },
-    ],
-    costAnalysis: monthNames.slice(0, 6).map((name) => ({
-      name,
-      cost: 10000 + Math.floor(Math.random() * 5000),
-      savings: 1500 + Math.floor(Math.random() * 1000),
-    })),
-    efficiencyTrend: Array.from({ length: 6 }, (_, i) => ({
-      name: `${i + 1}주`,
-      efficiency: 82 + i,
-      target: 85,
-    })),
-    carbonEmission: monthNames.slice(0, 6).map((name, i) => ({
-      name,
-      emission: 2500 + (i % 3) * 200,
-      limit: 3000,
-    })),
-    costSavings: monthNames.slice(0, 6).map((name, i) => ({
-      name,
-      profit: 850 + i * 50,
-      target: 800 + i * 50,
-    })),
-    renewableEnergy: ['1분기', '2분기', '3분기', '4분기'].map((name) => ({
-      name,
-      solar: 4500 + Math.floor(Math.random() * 2000),
-      wind: 3200 + Math.floor(Math.random() * 1000),
-      ess: 1800 + Math.floor(Math.random() * 700),
-    })),
-    peakHourAnalysis: [
-      { name: '06-09', value: 180, avg: 150 },
-      { name: '09-12', value: 320, avg: 280 },
-      { name: '12-15', value: 280, avg: 260 },
-      { name: '15-18', value: 350, avg: 300 },
-      { name: '18-21', value: 290, avg: 250 },
-      { name: '21-24', value: 150, avg: 120 },
-    ],
-  };
-}

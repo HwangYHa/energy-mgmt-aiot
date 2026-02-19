@@ -36,18 +36,22 @@ const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
 export default function DRDashboardPage() {
   const [events, setEvents] = useState<DREvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchEvents = useCallback(async () => {
     try {
+      setError(null);
       const res = await fetch('/api/control/dr-events');
       if (res.ok) {
         const json = await res.json();
         setEvents(json.data || []);
+      } else {
+        setError('DR 이벤트 목록을 불러오지 못했습니다.');
       }
-    } catch (error) {
-      console.error('DR 이벤트 조회 실패:', error);
+    } catch {
+      setError('서버에 연결할 수 없습니다. 네트워크를 확인해주세요.');
     } finally {
       setIsLoading(false);
     }
@@ -71,8 +75,8 @@ export default function DRDashboardPage() {
         const err = await res.json().catch(() => null);
         alert(err?.error?.message || '작업에 실패했습니다.');
       }
-    } catch (error) {
-      console.error('DR 이벤트 상태 변경 실패:', error);
+    } catch {
+      alert('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
       setActionLoading(null);
     }
@@ -98,8 +102,8 @@ export default function DRDashboardPage() {
         const err = await res.json().catch(() => null);
         alert(err?.error?.message || '이벤트 생성에 실패했습니다.');
       }
-    } catch (error) {
-      console.error('DR 이벤트 생성 실패:', error);
+    } catch {
+      alert('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
     }
   };
 
@@ -155,6 +159,22 @@ export default function DRDashboardPage() {
             </button>
           </div>
         </div>
+
+        {/* Error Banner */}
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+              <p className="text-sm text-red-300">{error}</p>
+            </div>
+            <button
+              onClick={() => { setError(null); setIsLoading(true); fetchEvents(); }}
+              className="px-3 py-1.5 bg-red-500/20 text-red-300 rounded-lg text-sm hover:bg-red-500/30 transition"
+            >
+              재시도
+            </button>
+          </div>
+        )}
 
         {/* Key Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

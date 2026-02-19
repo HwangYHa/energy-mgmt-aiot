@@ -73,9 +73,22 @@ const CATEGORY_LABELS: Record<string, string> = {
 export function NotificationRuleCard({ rule, onUpdate }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const severity = SEVERITY_CONFIG[rule.severity as keyof typeof SEVERITY_CONFIG] || SEVERITY_CONFIG.info;
   const SeverityIcon = severity.icon;
+
+  function showFeedback(type: 'error' | 'success', msg: string) {
+    if (type === 'error') {
+      setErrorMsg(msg);
+      setSuccessMsg(null);
+    } else {
+      setSuccessMsg(msg);
+      setErrorMsg(null);
+    }
+    setTimeout(() => { setErrorMsg(null); setSuccessMsg(null); }, 3000);
+  }
 
   async function toggleChannel(field: 'emailEnabled' | 'smsEnabled' | 'pushEnabled') {
     setUpdating(true);
@@ -89,6 +102,7 @@ export function NotificationRuleCard({ rule, onUpdate }: Props) {
       }
     } catch (error) {
       console.error('알림 채널 업데이트 실패:', error);
+      showFeedback('error', '채널 변경에 실패했습니다.');
     } finally {
       setUpdating(false);
     }
@@ -106,6 +120,7 @@ export function NotificationRuleCard({ rule, onUpdate }: Props) {
       }
     } catch (error) {
       console.error('알림 규칙 상태 변경 실패:', error);
+      showFeedback('error', '상태 변경에 실패했습니다.');
     } finally {
       setUpdating(false);
     }
@@ -123,6 +138,7 @@ export function NotificationRuleCard({ rule, onUpdate }: Props) {
       }
     } catch (error) {
       console.error('심각도 변경 실패:', error);
+      showFeedback('error', '심각도 변경에 실패했습니다.');
     } finally {
       setUpdating(false);
     }
@@ -142,6 +158,7 @@ export function NotificationRuleCard({ rule, onUpdate }: Props) {
       }
     } catch (error) {
       console.error('임계값 업데이트 실패:', error);
+      showFeedback('error', '임계값 변경에 실패했습니다.');
     } finally {
       setUpdating(false);
     }
@@ -155,11 +172,11 @@ export function NotificationRuleCard({ rule, onUpdate }: Props) {
         testSend: true,
       });
       if (res.success) {
-        alert('테스트 알림이 발송되었습니다.');
+        showFeedback('success', '테스트 알림이 발송되었습니다.');
       }
     } catch (error) {
       console.error('테스트 알림 발송 실패:', error);
-      alert('테스트 알림 발송에 실패했습니다.');
+      showFeedback('error', '테스트 알림 발송에 실패했습니다.');
     } finally {
       setUpdating(false);
     }
@@ -350,6 +367,18 @@ export function NotificationRuleCard({ rule, onUpdate }: Props) {
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* 에러/성공 피드백 */}
+      {errorMsg && (
+        <div className="mx-4 mb-3 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400">
+          {errorMsg}
+        </div>
+      )}
+      {successMsg && (
+        <div className="mx-4 mb-3 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-xs text-emerald-400">
+          {successMsg}
         </div>
       )}
     </div>

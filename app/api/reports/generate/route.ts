@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db/prisma';
 import { verifyAuth } from '@/lib/auth/verify';
 import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
+import { generateDownloadFilename } from '@/lib/utils/filename';
 
 /**
  * 리포트 생성 API
@@ -23,6 +24,32 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { type, period, startDate, endDate, siteId, format } = body;
+
+    // 날짜 유효성 검증
+    const startDateObj = new Date(startDate);
+    const endDateObj = new Date(endDate);
+
+    if (isNaN(startDateObj.getTime()) || isNaN(endDateObj.getTime())) {
+      return NextResponse.json({ error: 'Invalid date format' }, { status: 400 });
+    }
+
+    const daysDiff = (endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysDiff < 0) {
+      return NextResponse.json({ error: 'startDate must be before endDate' }, { status: 400 });
+    }
+    if (daysDiff > 365) {
+      return NextResponse.json({ error: '조회 기간은 최대 365일입니다' }, { status: 400 });
+    }
+
+    // siteId 테넌트 소유권 검증 (다른 테넌트의 siteId로 데이터 조회 방지)
+    if (siteId) {
+      const site = await prisma.site.findFirst({
+        where: { id: siteId, tenantId: auth.tenantId, deletedAt: null },
+      });
+      if (!site) {
+        return NextResponse.json({ error: '유효하지 않은 사이트입니다' }, { status: 400 });
+      }
+    }
 
     // 리포트 데이터 생성
     const reportData = await generateReportData({
@@ -167,7 +194,7 @@ async function generatePDF(reportId: string, data: any): Promise<string> {
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
-    const fileName = `report-${reportId}.pdf`;
+    const fileName = generateDownloadFilename('에너지보고서', reportId, 'pdf');
     const filePath = path.join(os.tmpdir(), fileName);
     const writeStream = fs.createWriteStream(filePath);
 
@@ -312,7 +339,7 @@ async function generateExcel(reportId: string, data: any): Promise<string> {
   };
 
   // 파일 저장
-  const fileName = `report-${reportId}.xlsx`;
+  const fileName = generateDownloadFilename('에너지보고서', reportId, 'xlsx');
   const filePath = `/tmp/${fileName}`;
   
   await workbook.xlsx.writeFile(filePath);

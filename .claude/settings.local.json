@@ -43,7 +43,13 @@
       "Bash(\"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysql.exe\" -u root -p0000 energy -e \"SELECT COUNT\\(*\\) as cnt FROM menu_item WHERE code=''monitoring_realtime'';\")",
       "Bash(node prisma/check-menus.js:*)",
       "Bash(node prisma/insert-menus.js:*)",
-      "Bash(yarn add:*)"
+      "Bash(yarn add:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(echo:*)",
+      "Bash(cmd /c \"cd /d g:\\\\Dev\\\\react-workspace\\\\energy-mgmt-aiot && npx next build\")",
+      "Bash(npx --yes npm install:*)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(PRISMA_HIDE_UPDATE_MESSAGE=1 npx prisma migrate:*)"
     ],
     "deny": [
       "Bash(sudo:*)",

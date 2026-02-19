@@ -93,6 +93,7 @@ const REFRESH_OPTIONS = [
 export default function RealtimeDashboardPage() {
   const [data, setData] = useState<RealtimeData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [refreshInterval, setRefreshInterval] = useState(10000);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [filterSite, setFilterSite] = useState('');
@@ -106,9 +107,12 @@ export default function RealtimeDashboardPage() {
       if (json.success) {
         setData(json.data);
         setLastRefresh(new Date());
+        setError(null);
+      } else {
+        setError('실시간 데이터를 불러오지 못했습니다.');
       }
     } catch {
-      // silent retry
+      setError('서버에 연결할 수 없습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -137,7 +141,7 @@ export default function RealtimeDashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-[#051225] flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-10 h-10 text-cyan-400 animate-spin mx-auto" />
           <p className="text-slate-400 mt-3">실시간 데이터 로딩 중...</p>
@@ -147,7 +151,17 @@ export default function RealtimeDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 p-4 md:p-6">
+    <div className="min-h-screen bg-[#051225] p-4 md:p-6">
+      {/* 에러 배너 */}
+      {error && !data && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 flex items-center justify-between">
+          <p className="text-sm text-red-300">{error}</p>
+          <button onClick={fetchData} className="px-3 py-1.5 bg-red-500/20 text-red-300 rounded-lg text-sm hover:bg-red-500/30 transition">
+            재시도
+          </button>
+        </div>
+      )}
+
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <div>

@@ -28,8 +28,10 @@ interface NotificationRule {
 export default function AlertRulesPage() {
   const [rules, setRules] = useState<NotificationRule[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchRules = useCallback(async () => {
+    setError(null);
     try {
       const res = await fetch('/api/notifications/rules');
       const json = await res.json();
@@ -37,7 +39,7 @@ export default function AlertRulesPage() {
         setRules(json.data || []);
       }
     } catch {
-      // 규칙 조회 실패
+      setError('알림 규칙을 불러오지 못했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -98,6 +100,16 @@ export default function AlertRulesPage() {
         <ArrowLeft className="w-4 h-4" />
         알림 현황으로 돌아가기
       </Link>
+
+      {/* 에러 배너 */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 flex items-center justify-between">
+          <p className="text-sm text-red-300">{error}</p>
+          <button onClick={fetchRules} className="px-3 py-1.5 bg-red-500/20 text-red-300 rounded-lg text-sm hover:bg-red-500/30 transition">
+            재시도
+          </button>
+        </div>
+      )}
 
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-8">

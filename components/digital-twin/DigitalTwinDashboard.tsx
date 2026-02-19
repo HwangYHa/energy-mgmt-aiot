@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Activity,
   Zap,
-  TrendingUp,
   TrendingDown,
   RefreshCw,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import { SystemStatusIndicator } from './SystemStatusIndicator';
 import { EnergyFlowDiagram } from './EnergyFlowDiagram';
@@ -16,6 +17,7 @@ import { RealTimeMetrics } from './RealTimeMetrics';
 /**
  * 디지털 트윈 메인 대시보드
  * 실시간 시설 상태 모니터링 및 즉시 판단
+ * /api/dashboard/realtime 30초 폴링으로 실제 DB 데이터 표시
  */
 
 export interface SystemStatus {
@@ -35,68 +37,94 @@ export interface Equipment {
   lastUpdate: string;
 }
 
+interface RealtimeDevice {
+  id: string;
+  name: string;
+  deviceType: string;
+  status: string;
+  lastSeenAt: string | null;
+}
+
+interface RealtimeSensor {
+  id: string;
+  sensorType: string;
+  lastValue: number | null;
+  device: { id: string; name: string; siteId: string } | null;
+}
+
+interface DeviceSummary {
+  total: number;
+  online: number;
+  offline: number;
+  error: number;
+  maintenance: number;
+}
+
 export function DigitalTwinDashboard() {
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({
     overall: 'normal',
-    message: '모든 시스템이 정상 작동 중입니다',
-    score: 98,
+    message: '데이터 로딩 중...',
+    score: 0,
   });
 
-  const [equipment, setEquipment] = useState<Equipment[]>([
-    {
-      id: 'hvac-1',
-      name: 'HVAC 시스템 #1',
-      type: 'HVAC',
-      status: 'online',
-      power: 145.2,
-      efficiency: 92,
-      temperature: 22.5,
-      lastUpdate: new Date().toISOString(),
-    },
-    {
-      id: 'chiller-1',
-      name: '냉동기 #1',
-      type: 'Chiller',
-      status: 'online',
-      power: 280.5,
-      efficiency: 88,
-      temperature: 7.2,
-      lastUpdate: new Date().toISOString(),
-    },
-    {
-      id: 'boiler-1',
-      name: '보일러 #1',
-      type: 'Boiler',
-      status: 'warning',
-      power: 95.8,
-      efficiency: 75,
-      temperature: 85.0,
-      lastUpdate: new Date().toISOString(),
-    },
-    {
-      id: 'ups-1',
-      name: 'UPS #1',
-      type: 'UPS',
-      status: 'online',
-      power: 52.3,
-      efficiency: 96,
-      lastUpdate: new Date().toISOString(),
-    },
-  ]);
-
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [uptimePercent, setUptimePercent] = useState<number | null>(null);
 
-  // 실시간 데이터 갱신 시뮬레이션
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // 시스템 상태 업데이트
-      const warningCount = equipment.filter((e) => e.status === 'warning').length;
-      const criticalCount = equipment.filter((e) => e.status === 'offline').length;
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/dashboard/realtime');
+      if (!res.ok) return;
+      const json = await res.json();
+      if (!json.success) return;
 
-      if (criticalCount > 0) {
+      const { devices, sensors, deviceSummary } = json.data as {
+        devices: RealtimeDevice[];
+        sensors: RealtimeSensor[];
+        deviceSummary: DeviceSummary;
+      };
+
+      // Device → Equipment 매핑
+      const equipmentList: Equipment[] = devices.map((d) => {
+        const powerSensor = sensors.find(
+          (s) => s.device?.id === d.id && s.sensorType === 'power_meter'
+        );
+        const tempSensor = sensors.find(
+          (s) => s.device?.id === d.id && s.sensorType === 'temperature'
+        );
+
+        const status: Equipment['status'] =
+          d.status === 'online' ? 'online' :
+          d.status === 'error' ? 'offline' : 'warning';
+
+        return {
+          id: d.id,
+          name: d.name,
+          type: d.deviceType,
+          status,
+          power: powerSensor?.lastValue ?? 0,
+          efficiency: 0,
+          temperature: tempSensor?.lastValue ?? undefined,
+          lastUpdate: d.lastSeenAt || new Date().toISOString(),
+        };
+      });
+
+      setEquipment(equipmentList);
+
+      // 가동률 계산 (online / total)
+      const uptime =
+        deviceSummary.total > 0
+          ? (deviceSummary.online / deviceSummary.total) * 100
+          : null;
+      setUptimePercent(uptime);
+
+      // 시스템 상태 집계
+      const warningCount = deviceSummary.offline + deviceSummary.maintenance;
+      if (deviceSummary.error > 0) {
         setSystemStatus({
           overall: 'critical',
-          message: `${criticalCount}개 설비에 긴급 조치가 필요합니다`,
+          message: `${deviceSummary.error}개 설비에 긴급 조치가 필요합니다`,
           score: 65,
         });
       } else if (warningCount > 0) {
@@ -105,6 +133,12 @@ export function DigitalTwinDashboard() {
           message: `${warningCount}개 설비에 주의가 필요합니다`,
           score: 82,
         });
+      } else if (deviceSummary.total === 0) {
+        setSystemStatus({
+          overall: 'normal',
+          message: '등록된 설비가 없습니다',
+          score: 0,
+        });
       } else {
         setSystemStatus({
           overall: 'normal',
@@ -112,45 +146,39 @@ export function DigitalTwinDashboard() {
           score: 98,
         });
       }
+    } catch (err) {
+      console.error('[DigitalTwin]', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-      // 설비 데이터 미세 조정
-      setEquipment((prev) =>
-        prev.map((eq) => ({
-          ...eq,
-          power: eq.power + (Math.random() - 0.5) * 5,
-          efficiency: Math.min(100, Math.max(0, eq.efficiency + (Math.random() - 0.5) * 2)),
-          temperature: eq.temperature
-            ? eq.temperature + (Math.random() - 0.5) * 0.5
-            : undefined,
-          lastUpdate: new Date().toISOString(),
-        }))
-      );
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [equipment]);
+  useEffect(() => {
+    fetchData();
+    const id = setInterval(fetchData, 30000);
+    return () => clearInterval(id);
+  }, [fetchData]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    // 실제 환경에서는 API 호출
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await fetchData();
     setIsRefreshing(false);
   };
 
   const totalPower = equipment.reduce((sum, eq) => sum + eq.power, 0);
-  const avgEfficiency =
-    equipment.reduce((sum, eq) => sum + eq.efficiency, 0) / equipment.length;
 
   return (
     <div className="space-y-6">
       {/* 전체 상태 및 주요 메트릭 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 메인 상태 인디케이터 - "지금 괜찮은가?" */}
+        {/* 메인 상태 인디케이터 */}
         <div className="lg:col-span-2">
           <SystemStatusIndicator
             status={systemStatus.overall}
             message={systemStatus.message}
             score={systemStatus.score}
+            uptimePercent={uptimePercent}
+            latencyMs={null}
           />
         </div>
 
@@ -164,27 +192,31 @@ export function DigitalTwinDashboard() {
               <Zap className="w-5 h-5 text-yellow-500" />
             </div>
             <div className="text-3xl font-bold text-slate-900 dark:text-white">
-              {totalPower.toFixed(1)} kW
+              {totalPower > 0 ? `${totalPower.toFixed(1)} kW` : '-'}
             </div>
-            <div className="flex items-center gap-1 mt-2 text-sm text-green-600 dark:text-green-400">
-              <TrendingDown className="w-4 h-4" />
-              <span>전주 대비 12% 감소</span>
-            </div>
+            {totalPower > 0 && (
+              <div className="flex items-center gap-1 mt-2 text-sm text-slate-500 dark:text-slate-400">
+                <TrendingDown className="w-4 h-4" />
+                <span>설비 합산</span>
+              </div>
+            )}
           </div>
 
           <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                평균 효율
+                정상 가동 설비
               </span>
               <Activity className="w-5 h-5 text-blue-500" />
             </div>
             <div className="text-3xl font-bold text-slate-900 dark:text-white">
-              {avgEfficiency.toFixed(1)}%
+              {equipment.length > 0
+                ? `${equipment.filter((e) => e.status === 'online').length} / ${equipment.length}`
+                : '-'}
             </div>
-            <div className="flex items-center gap-1 mt-2 text-sm text-green-600 dark:text-green-400">
-              <TrendingUp className="w-4 h-4" />
-              <span>목표 대비 +3.2%</span>
+            <div className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+              경고: {equipment.filter((e) => e.status === 'warning').length} •
+              오프라인: {equipment.filter((e) => e.status === 'offline').length}
             </div>
           </div>
         </div>
@@ -239,11 +271,23 @@ export function DigitalTwinDashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {equipment.map((eq) => (
-            <EquipmentStatusCard key={eq.id} equipment={eq} />
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+          </div>
+        ) : equipment.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-3">
+            <AlertTriangle className="w-10 h-10" />
+            <p className="text-sm">등록된 설비가 없습니다.</p>
+            <p className="text-xs text-slate-500">디바이스와 센서를 먼저 등록하세요.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {equipment.map((eq) => (
+              <EquipmentStatusCard key={eq.id} equipment={eq} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 실시간 메트릭 */}

@@ -108,7 +108,6 @@ export default function ManualControlPage() {
         throw new Error(response.error || '데이터 조회 실패');
       }
     } catch (err) {
-      console.error('설비 목록 조회 오류:', err);
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
@@ -212,7 +211,6 @@ export default function ManualControlPage() {
         throw new Error(response.error || '제어 실행 실패');
       }
     } catch (err) {
-      console.error('제어 실행 오류:', err);
       if (err instanceof ApiError) {
         setResultMessage({
           type: 'error',

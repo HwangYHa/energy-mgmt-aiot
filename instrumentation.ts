@@ -35,6 +35,10 @@ export async function register() {
     }
 
     serverLogger.info('서버 측정 완료');
+
+    // MQTT 브로커 연결 초기화 (MQTT_BROKER_URL 미설정 시 자동 스킵)
+    const { initMQTT } = await import('@/lib/mqtt/init');
+    initMQTT();
   }
   // Edge Runtime에서는 아무것도 하지 않음
 }
