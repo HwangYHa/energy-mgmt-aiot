@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
   PLAN_FEATURES,
@@ -17,6 +18,9 @@ import {
   Users,
   Database,
   Zap,
+  Loader2,
+  ExternalLink,
+  Info,
 } from 'lucide-react';
 
 interface PlanComparisonProps {
@@ -24,6 +28,29 @@ interface PlanComparisonProps {
 }
 
 const PLAN_ORDER = ['trial', 'basic', 'pro', 'enterprise'] as const;
+
+/**
+ * Stripe 결제 시작
+ * - 서버에 tier + billingCycle 전달 → Stripe Checkout URL 수신 → 리다이렉트
+ */
+async function initiateCheckout(tier: string, billingCycle: 'monthly' | 'yearly'): Promise<void> {
+  const res = await fetch('/api/payment/stripe/checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tier, billingCycle }),
+  });
+
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({ error: '결제 세션 생성 실패' }));
+    throw new Error(error || '결제 세션 생성 실패');
+  }
+
+  const { url } = await res.json();
+  if (!url) throw new Error('Stripe URL을 받지 못했습니다');
+
+  // Stripe Hosted Checkout으로 리다이렉트
+  window.location.href = url;
+}
 
 // 기능 카테고리별 그룹
 const FEATURE_GROUPS = [
@@ -50,7 +77,10 @@ const FEATURE_GROUPS = [
 ];
 
 export function PlanComparison({ currentTier }: PlanComparisonProps) {
+  const router = useRouter();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [loadingTier, setLoadingTier] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const formatPrice = (price: number | null) => {
     if (price === null) return '문의';
@@ -58,10 +88,42 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
     return `₩${price.toLocaleString('ko-KR')}`;
   };
 
+  async function handleSelectPlan(tier: string) {
+    if (tier === 'enterprise') {
+      router.push('/support');
+      return;
+    }
+    if (tier === 'trial') return; // 무료 플랜은 별도 처리 불필요
+
+    setLoadingTier(tier);
+    setCheckoutError(null);
+    try {
+      await initiateCheckout(tier, billingCycle);
+      // initiateCheckout은 window.location.href 변경 → 이 이후 코드는 실행되지 않음
+    } catch (e) {
+      setCheckoutError(e instanceof Error ? e.message : '결제 오류가 발생했습니다.');
+      setLoadingTier(null);
+    }
+  }
+
   return (
     <div className="mt-8">
+      {/* 결제 오류 메시지 */}
+      {checkoutError && (
+        <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+          <Info className="w-4 h-4 flex-shrink-0" />
+          {checkoutError}
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-semibold text-white">플랜 비교</h2>
+        <div>
+          <h2 className="text-lg font-semibold text-white">플랜 비교</h2>
+          <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+            <Info className="w-3 h-3" />
+            표시 금액에 부가세(VAT 10%)가 별도 부과됩니다. Stripe 결제 페이지에서 최종 금액 확인.
+          </p>
+        </div>
 
         {/* 결제 주기 토글 */}
         <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1">
@@ -136,7 +198,7 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
               <p className="text-xs text-slate-400 mt-1 mb-4">{display.description}</p>
 
               {/* 가격 */}
-              <div className="mb-4">
+              <div className="mb-1">
                 <span className="text-3xl font-bold text-white">{formatPrice(price)}</span>
                 {price !== null && price > 0 && (
                   <span className="text-sm text-slate-400 ml-1">
@@ -144,6 +206,13 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
                   </span>
                 )}
               </div>
+              {price !== null && price > 0 && (
+                <p className="text-[10px] text-slate-600 mb-3">
+                  부가세(10%) 별도 · 연간 결제 시 2개월 무료
+                </p>
+              )}
+              {price === 0 && <p className="text-[10px] text-slate-600 mb-3">영구 무료 (기능 제한)</p>}
+              {price === null && <p className="text-[10px] text-slate-600 mb-3">맞춤 견적 제공</p>}
 
               {/* 리소스 제한 */}
               <div className="space-y-2 mb-4 pb-4 border-b border-slate-700/50">
@@ -157,18 +226,31 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
               {/* CTA */}
               {!isCurrent ? (
                 <button
+                  onClick={() => handleSelectPlan(tier)}
+                  disabled={loadingTier === tier}
                   className={cn(
-                    'w-full py-2.5 rounded-lg font-medium text-sm transition mt-auto',
+                    'w-full py-2.5 rounded-lg font-medium text-sm transition mt-auto flex items-center justify-center gap-2',
                     tier === 'enterprise'
                       ? 'bg-purple-500/10 text-purple-400 border border-purple-500/30 hover:bg-purple-500/20'
-                      : 'bg-cyan-500 text-white hover:bg-cyan-600'
+                      : tier === 'trial'
+                      ? 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+                      : 'bg-cyan-500 text-white hover:bg-cyan-600',
+                    loadingTier === tier && 'opacity-70 cursor-not-allowed'
                   )}
                 >
-                  {tier === 'enterprise' ? '영업팀 문의' : '플랜 선택'}
+                  {loadingTier === tier ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : tier === 'enterprise' ? (
+                    <><ExternalLink className="w-3.5 h-3.5" /> 영업팀 문의</>
+                  ) : tier === 'trial' ? (
+                    '무료로 시작'
+                  ) : (
+                    '플랜 선택 →'
+                  )}
                 </button>
               ) : (
-                <div className="w-full py-2.5 rounded-lg font-medium text-sm text-center bg-slate-700/50 text-slate-400 mt-auto">
-                  사용 중
+                <div className="w-full py-2.5 rounded-lg font-medium text-sm text-center bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mt-auto">
+                  ✓ 현재 사용 중
                 </div>
               )}
             </div>

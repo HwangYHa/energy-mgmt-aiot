@@ -29,7 +29,13 @@ import {
   AlertCircle,
   CheckCircle,
   Settings,
+  X,
+  Loader2,
+  CheckCircle2,
+  Flame,
+  Truck,
 } from 'lucide-react';
+import { generateDownloadFilename } from '@/lib/utils/filename';
 
 /**
  * 탄소 배출 분석 대시보드
@@ -80,6 +86,172 @@ interface CarbonFootprint {
   recommendations: string[];
 }
 
+// ─── 연료 등록 모달 ────────────────────────────────────────────────
+const FUEL_TYPES = [
+  { value: 'diesel', label: '경유' },
+  { value: 'lng', label: 'LNG' },
+  { value: 'lpg', label: 'LPG' },
+  { value: 'gasoline', label: '휘발유' },
+  { value: 'kerosene', label: '등유' },
+  { value: 'bunker_c', label: '벙커C유' },
+];
+const FUEL_UNITS = ['L', 'm³', 'kg', 'ton'];
+
+function FuelModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [form, setForm] = useState({ fuelType: 'diesel', quantity: '', unit: 'L', period: new Date().toISOString().slice(0, 7), facility: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const handleSubmit = async () => {
+    setError(null);
+    if (!form.quantity) { setError('사용량을 입력해주세요'); return; }
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/analytics/carbon/register-fuel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fuelType: form.fuelType, quantity: Number(form.quantity), unit: form.unit, period: form.period, facility: form.facility || undefined }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as { message?: string }).message ?? '등록 실패'); }
+      setDone(true);
+      setTimeout(() => { onSuccess(); onClose(); }, 1200);
+    } catch (e) { setError(e instanceof Error ? e.message : '오류가 발생했습니다'); }
+    finally { setIsSubmitting(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <Flame className="w-5 h-5 text-orange-400" />
+            <h3 className="text-lg font-semibold text-white">연료 사용량 등록</h3>
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-white transition"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">연료 종류</label>
+              <select value={form.fuelType} onChange={(e) => setForm((f) => ({ ...f, fuelType: e.target.value }))} className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none">
+                {FUEL_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">사용 기간 (월)</label>
+              <input type="month" value={form.period} onChange={(e) => setForm((f) => ({ ...f, period: e.target.value }))} className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none" />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs text-slate-500 mb-1 block">사용량</label>
+              <input type="number" min="0" step="0.1" value={form.quantity} onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))} placeholder="0" className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">단위</label>
+              <select value={form.unit} onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))} className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none">
+                {FUEL_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">시설명 (선택)</label>
+            <input type="text" value={form.facility} onChange={(e) => setForm((f) => ({ ...f, facility: e.target.value }))} placeholder="예: 본관 보일러실" className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600 focus:border-orange-500 focus:outline-none" />
+          </div>
+          {error && <p className="text-xs text-red-400 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" />{error}</p>}
+          {done && <p className="text-xs text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />등록 완료!</p>}
+          <button onClick={handleSubmit} disabled={isSubmitting} className="w-full flex items-center justify-center gap-2 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition disabled:opacity-50">
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Flame className="w-4 h-4" />}
+            등록
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 운송 등록 모달 ────────────────────────────────────────────────
+const VEHICLE_TYPES = [
+  { value: 'car', label: '승용차' },
+  { value: 'truck', label: '화물차' },
+  { value: 'air', label: '항공' },
+  { value: 'ship', label: '해운' },
+  { value: 'rail', label: '철도' },
+];
+
+function TransportModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [form, setForm] = useState({ vehicleType: 'truck', distance: '', fuelType: 'diesel', period: new Date().toISOString().slice(0, 7) });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const handleSubmit = async () => {
+    setError(null);
+    if (!form.distance) { setError('거리를 입력해주세요'); return; }
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/analytics/carbon/register-transport', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleType: form.vehicleType, distance: Number(form.distance), fuelType: form.fuelType, period: form.period }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as { message?: string }).message ?? '등록 실패'); }
+      setDone(true);
+      setTimeout(() => { onSuccess(); onClose(); }, 1200);
+    } catch (e) { setError(e instanceof Error ? e.message : '오류가 발생했습니다'); }
+    finally { setIsSubmitting(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <Truck className="w-5 h-5 text-purple-400" />
+            <h3 className="text-lg font-semibold text-white">운송 거리 등록</h3>
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-white transition"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">운송 수단</label>
+              <select value={form.vehicleType} onChange={(e) => setForm((f) => ({ ...f, vehicleType: e.target.value }))} className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:border-purple-500 focus:outline-none">
+                {VEHICLE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">사용 기간 (월)</label>
+              <input type="month" value={form.period} onChange={(e) => setForm((f) => ({ ...f, period: e.target.value }))} className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:border-purple-500 focus:outline-none" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">거리 (km)</label>
+              <input type="number" min="0" step="1" value={form.distance} onChange={(e) => setForm((f) => ({ ...f, distance: e.target.value }))} placeholder="0" className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:border-purple-500 focus:outline-none" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">연료 종류</label>
+              <select value={form.fuelType} onChange={(e) => setForm((f) => ({ ...f, fuelType: e.target.value }))} className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:border-purple-500 focus:outline-none">
+                {FUEL_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+          </div>
+          {error && <p className="text-xs text-red-400 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" />{error}</p>}
+          {done && <p className="text-xs text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />등록 완료!</p>}
+          <button onClick={handleSubmit} disabled={isSubmitting} className="w-full flex items-center justify-center gap-2 py-2.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-sm font-medium transition disabled:opacity-50">
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Truck className="w-4 h-4" />}
+            등록
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+
 export default function CarbonAnalyticsPage() {
   const { data: session } = useSession();
   const [year, setYear] = useState(new Date().getFullYear());
@@ -87,10 +259,8 @@ export default function CarbonAnalyticsPage() {
   const [footprint, setFootprint] = useState<CarbonFootprint | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  const handleNotImplemented = (feature: string) => {
-    alert(`${feature} 기능은 준비 중입니다.`);
-  };
+  const [openModal, setOpenModal] = useState<'fuel' | 'transport' | null>(null);
+
 
   useEffect(() => {
     if (session?.user) {
@@ -139,41 +309,35 @@ export default function CarbonAnalyticsPage() {
     }
   };
 
-  const handleExportPDF = async () => {
+  const handleExportCSV = async () => {
     try {
-      const response = await fetch(
-        `/api/analytics/carbon/export/pdf?year=${year}`
-      );
-
-      if (!response.ok) throw new Error('PDF 생성 실패');
-
+      const response = await fetch(`/api/analytics/carbon/export?format=csv&year=${year}`);
+      if (!response.ok) throw new Error('CSV 생성 실패');
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `carbon-report-${year}.pdf`;
+      a.download = generateDownloadFilename('탄소배출데이터', '', 'csv');
       a.click();
+      window.URL.revokeObjectURL(url);
     } catch {
-      alert('PDF 생성 중 오류가 발생했습니다.');
+      alert('CSV 생성 중 오류가 발생했습니다.');
     }
   };
 
-  const handleExportExcel = async () => {
+  const handleExportJSON = async () => {
     try {
-      const response = await fetch(
-        `/api/analytics/carbon/export/excel?year=${year}`
-      );
-
-      if (!response.ok) throw new Error('Excel 생성 실패');
-
+      const response = await fetch(`/api/analytics/carbon/export?format=json&year=${year}`);
+      if (!response.ok) throw new Error('JSON 생성 실패');
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `carbon-report-${year}.xlsx`;
+      a.download = generateDownloadFilename('탄소배출데이터', '', 'json');
       a.click();
+      window.URL.revokeObjectURL(url);
     } catch {
-      alert('Excel 생성 중 오류가 발생했습니다.');
+      alert('JSON 내보내기 중 오류가 발생했습니다.');
     }
   };
 
@@ -262,20 +426,20 @@ export default function CarbonAnalyticsPage() {
             ))}
           </div>
 
-          {/* 리포트 생성 */}
+          {/* 데이터 내보내기 */}
           <button
-            onClick={handleExportPDF}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors text-sm"
           >
             <Download className="w-4 h-4" />
-            PDF
+            CSV
           </button>
           <button
-            onClick={handleExportExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg font-medium transition-colors"
+            onClick={handleExportJSON}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors text-sm"
           >
             <Download className="w-4 h-4" />
-            Excel
+            JSON
           </button>
 
           {/* 새로고침 */}
@@ -287,11 +451,11 @@ export default function CarbonAnalyticsPage() {
             <RefreshCw className="w-5 h-5" />
           </button>
 
-          {/* 설정 */}
+          {/* 설정 (준비 중) */}
           <button
-            onClick={() => handleNotImplemented('탄소 설정')}
-            className="p-2 bg-slate-800/50 hover:bg-slate-700/50 rounded-lg transition-colors"
-            title="설정"
+            className="p-2 bg-slate-800/50 hover:bg-slate-700/50 rounded-lg transition-colors opacity-50 cursor-not-allowed"
+            title="설정 (준비 중)"
+            disabled
           >
             <Settings className="w-5 h-5" />
           </button>
@@ -402,20 +566,28 @@ export default function CarbonAnalyticsPage() {
       {/* 데이터 입력 버튼 */}
       <div className="flex gap-4">
         <button
-          onClick={() => handleNotImplemented('연료 사용량 등록')}
+          onClick={() => setOpenModal('fuel')}
           className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
         >
           <Plus className="w-5 h-5" />
           연료 사용량 등록
         </button>
         <button
-          onClick={() => handleNotImplemented('운송 거리 등록')}
+          onClick={() => setOpenModal('transport')}
           className="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition-colors"
         >
           <Plus className="w-5 h-5" />
           운송 거리 등록
         </button>
       </div>
+
+      {/* 모달 */}
+      {openModal === 'fuel' && (
+        <FuelModal onClose={() => setOpenModal(null)} onSuccess={fetchCarbonData} />
+      )}
+      {openModal === 'transport' && (
+        <TransportModal onClose={() => setOpenModal(null)} onSuccess={fetchCarbonData} />
+      )}
 
       {/* 월별 배출량 추이 */}
       <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">

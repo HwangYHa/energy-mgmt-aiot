@@ -42,9 +42,17 @@ export async function createCheckoutSession({
   cancelUrl: string;
   metadata?: Record<string, string>;
 }) {
+  // Stripe Tax 자동 적용 (환경변수 STRIPE_TAX_AUTO=true 시 활성화)
+  const autoTaxEnabled = process.env.STRIPE_TAX_AUTO === 'true';
+
   const session = await getStripe().checkout.sessions.create({
     mode: 'subscription',
+    locale: 'ko',                           // 한국어 Checkout UI
     payment_method_types: ['card'],
+    allow_promotion_codes: true,            // 프로모션 코드 허용
+    billing_address_collection: 'required', // 청구 주소 수집
+    tax_id_collection: { enabled: true },   // 사업자등록번호 수집 (세금계산서)
+    ...(autoTaxEnabled && { automatic_tax: { enabled: true } }),
     line_items: [
       {
         price: priceId,

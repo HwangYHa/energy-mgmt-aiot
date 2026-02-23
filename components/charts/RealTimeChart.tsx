@@ -1,116 +1,84 @@
-// app/web/components/charts/RealTimeChart.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-// TODO: Install socket.io-client package
-// import { io, Socket } from 'socket.io-client';
-
-type Socket = any;
-
-// TODO: Will be used when socket.io-client is installed
-// interface MeasurementData {
-//   timestamp: string;
-//   deviceId: string;
-//   metricKey: string;
-//   value: number;
-//   quality: string;
-// }
+import { useEffect, useRef, useState } from 'react';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from 'recharts';
 
 interface ChartDataPoint {
   time: string;
   value: number;
 }
 
+interface SseMeasurement {
+  sensorCode: string;
+  value: number;
+  time: string;
+  quality: string;
+}
+
 interface RealTimeChartProps {
-  deviceId: string;
-  metricKey: string;
+  /** MQTT 토픽의 sensorCode와 동일 — SSE 필터링 기준 */
+  sensorCode: string;
   title?: string;
+  unit?: string;
   maxDataPoints?: number;
 }
 
 export default function RealTimeChart({
-  deviceId,
-  metricKey,
+  sensorCode,
   title = '실시간 데이터',
+  unit = '',
   maxDataPoints = 20,
 }: RealTimeChartProps) {
-  const [data, _setData] = useState<ChartDataPoint[]>([]);
+  const [data, setData] = useState<ChartDataPoint[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [_socket, setSocket] = useState<Socket | null>(null);
+  const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
-    // TODO: Implement socket.io connection when package is installed
-    // Stub: Set disconnected state
-    setIsConnected(false);
-    setSocket(null);
+    if (!sensorCode) return;
 
-    // WebSocket 연결 (commented out until socket.io-client is installed)
-    /*
-    const token = localStorage.getItem('accessToken');
+    // SSE 연결 — /api/realtime 에서 MQTT 측정값 스트리밍
+    const es = new EventSource('/api/realtime');
+    esRef.current = es;
 
-    if (!token) {
-      console.error('No access token found');
-      return;
-    }
+    es.addEventListener('open', () => setIsConnected(true));
+    es.addEventListener('error', () => setIsConnected(false));
 
-    const newSocket = io('http://localhost:4000/realtime', {
-      auth: {
-        token,
-      },
-      transports: ['websocket'],
-    });
+    es.addEventListener('message', (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data) as SseMeasurement;
+        if (payload.sensorCode !== sensorCode) return;
 
-    newSocket.on('connect', () => {
-      console.log('✅ Connected to WebSocket');
-      setIsConnected(true);
-
-      // 디바이스 구독
-      newSocket.emit('subscribe', { deviceIds: [deviceId] });
-    });
-
-    newSocket.on('disconnect', () => {
-      console.log('⚠️  Disconnected from WebSocket');
-      setIsConnected(false);
-    });
-
-    newSocket.on('measurement', (measurement: MeasurementData) => {
-      // 해당 디바이스 & 메트릭의 데이터만 필터링
-      if (measurement.deviceId === deviceId && measurement.metricKey === metricKey) {
-        const time = new Date(measurement.timestamp).toLocaleTimeString('ko-KR', {
+        const label = new Date(payload.time).toLocaleTimeString('ko-KR', {
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit',
         });
 
-        setData((prevData) => {
-          const newData = [
-            ...prevData,
-            {
-              time,
-              value: measurement.value,
-            },
-          ];
-
-          // 최대 데이터 포인트 제한
-          if (newData.length > maxDataPoints) {
-            newData.shift();
-          }
-
-          return newData;
+        setData((prev) => {
+          const next = [...prev, { time: label, value: payload.value }];
+          return next.length > maxDataPoints ? next.slice(-maxDataPoints) : next;
         });
+      } catch {
+        // 파싱 실패 무시
       }
     });
 
-    setSocket(newSocket);
-
-    // Cleanup
     return () => {
-      newSocket.emit('unsubscribe', { deviceIds: [deviceId] });
-      newSocket.disconnect();
+      es.close();
+      esRef.current = null;
+      setIsConnected(false);
     };
-    */
-  }, [deviceId, metricKey, maxDataPoints]);
+  }, [sensorCode, maxDataPoints]);
+
+  const latest = data[data.length - 1];
 
   return (
     <div className="w-full h-full bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
@@ -119,18 +87,18 @@ export default function RealTimeChart({
         <div className="flex items-center gap-2">
           <div
             className={`w-2 h-2 rounded-full ${
-              isConnected ? 'bg-emerald-500' : 'bg-red-500'
+              isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
             }`}
           />
           <span className="text-sm text-slate-400">
-            {isConnected ? '연결됨' : '연결 끊김'}
+            {isConnected ? 'SSE 연결됨' : '연결 끊김'}
           </span>
         </div>
       </div>
 
       {data.length === 0 ? (
-        <div className="flex items-center justify-center h-64 text-slate-500">
-          데이터를 기다리는 중...
+        <div className="flex items-center justify-center h-64 text-slate-500 text-sm">
+          {isConnected ? `${sensorCode} 데이터를 기다리는 중...` : 'SSE 연결 중...'}
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={300}>
@@ -138,10 +106,14 @@ export default function RealTimeChart({
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis
               dataKey="time"
-              tick={{ fontSize: 12, fill: '#94a3b8' }}
+              tick={{ fontSize: 11, fill: '#94a3b8' }}
               stroke="#475569"
             />
-            <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} stroke="#475569" />
+            <YAxis
+              tick={{ fontSize: 11, fill: '#94a3b8' }}
+              stroke="#475569"
+              unit={unit ? ` ${unit}` : undefined}
+            />
             <Tooltip
               contentStyle={{
                 backgroundColor: '#1e293b',
@@ -149,23 +121,29 @@ export default function RealTimeChart({
                 borderRadius: '8px',
                 color: '#fff',
               }}
+              formatter={(v) => [`${Number(v).toFixed(2)}${unit ? ` ${unit}` : ''}`, sensorCode]}
             />
-            <Legend wrapperStyle={{ color: '#94a3b8' }} />
             <Line
               type="monotone"
               dataKey="value"
               stroke="#06b6d4"
               strokeWidth={2}
               dot={false}
-              animationDuration={300}
+              animationDuration={200}
+              isAnimationActive={data.length < 5}
             />
           </LineChart>
         </ResponsiveContainer>
       )}
 
-      <div className="mt-4 flex justify-between text-sm text-slate-400">
-        <span>최신 값: {data[data.length - 1]?.value.toFixed(2) || 'N/A'}</span>
-        <span>데이터 포인트: {data.length}/{maxDataPoints}</span>
+      <div className="mt-3 flex justify-between text-xs text-slate-400">
+        <span>
+          최신값:{' '}
+          {latest ? `${latest.value.toFixed(2)}${unit ? ` ${unit}` : ''}` : 'N/A'}
+        </span>
+        <span>
+          {data.length}/{maxDataPoints} 포인트
+        </span>
       </div>
     </div>
   );

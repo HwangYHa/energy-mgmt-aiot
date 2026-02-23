@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { verifyAuth } from '@/lib/auth/verify';
-import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
 import { generateDownloadFilename } from '@/lib/utils/filename';
 
@@ -185,102 +184,154 @@ async function generateReportData(params: {
 }
 
 /**
- * PDF 생성 (PDFKit - Chrome 불필요)
+ * PDF 생성 (Puppeteer — 한국어 완전 지원)
  */
 async function generatePDF(reportId: string, data: any): Promise<string> {
-  const fs = require('fs');
-  const path = require('path');
-  const os = require('os');
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const os = require('os') as typeof import('os');
 
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 40 });
-    const fileName = generateDownloadFilename('에너지보고서', reportId, 'pdf');
-    const filePath = path.join(os.tmpdir(), fileName);
-    const writeStream = fs.createWriteStream(filePath);
+  const fileName = generateDownloadFilename('에너지보고서', reportId, 'pdf');
+  const filePath = path.join(os.tmpdir(), fileName);
 
-    doc.pipe(writeStream);
+  // 일별 데이터 행 HTML 생성
+  const rowsHtml = (data.dailyData && data.dailyData.length > 0)
+    ? data.dailyData.map((row: any, i: number) => `
+        <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#fff'}">
+          <td style="padding:7px 12px;border-bottom:1px solid #e2e8f0;font-size:10pt;color:#334155">
+            ${new Date(row.date).toLocaleDateString('ko-KR')}
+          </td>
+          <td style="padding:7px 12px;border-bottom:1px solid #e2e8f0;font-size:10pt;color:#334155;text-align:right">
+            ${parseFloat(row.total_energy || '0').toLocaleString('ko-KR')} kWh
+          </td>
+        </tr>`).join('')
+    : `<tr><td colspan="2" style="padding:12px;text-align:center;color:#94a3b8;font-size:10pt">데이터 없음</td></tr>`;
 
-    // 헤더
-    doc.fontSize(24).fillColor('#1e40af').text('Energy Report', { align: 'center' });
-    doc.moveDown(0.5);
-    doc.fontSize(11).fillColor('#6b7280').text(`Period: ${data.period}`, { align: 'center' });
-    doc.moveDown(0.3);
-    doc.fontSize(9).text(`Generated: ${new Date().toLocaleString('ko-KR')}`, { align: 'center' });
+  const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+    font-size: 11pt;
+    color: #1e293b;
+    background: #fff;
+    padding: 20mm 15mm;
+  }
+  .header-bar {
+    background: linear-gradient(135deg, #1e40af, #0369a1);
+    color: #fff;
+    padding: 20px 24px;
+    border-radius: 8px;
+    margin-bottom: 24px;
+  }
+  .header-bar h1 { font-size: 20pt; font-weight: bold; margin-bottom: 4px; }
+  .header-bar p { font-size: 10pt; opacity: 0.85; }
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .kpi-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: #f8fafc;
+  }
+  .kpi-label { font-size: 9pt; color: #64748b; margin-bottom: 4px; }
+  .kpi-value { font-size: 16pt; font-weight: bold; color: #1e40af; }
+  .kpi-unit { font-size: 10pt; color: #64748b; font-weight: normal; margin-left: 4px; }
+  h2 {
+    font-size: 14pt;
+    color: #0f172a;
+    border-left: 4px solid #1e40af;
+    padding-left: 10px;
+    margin: 24px 0 12px 0;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead tr { background: #1e40af; color: #fff; }
+  thead th { padding: 9px 12px; font-size: 10pt; text-align: left; }
+  thead th:last-child { text-align: right; }
+  .footer {
+    margin-top: 32px;
+    padding-top: 10px;
+    border-top: 1px solid #e2e8f0;
+    font-size: 8pt;
+    color: #94a3b8;
+    display: flex;
+    justify-content: space-between;
+  }
+  @page { margin: 15mm; }
+</style>
+</head>
+<body>
+  <div class="header-bar">
+    <h1>에너지 사용 리포트</h1>
+    <p>분석 기간: ${data.period}</p>
+    <p>생성일시: ${new Date().toLocaleString('ko-KR')}</p>
+  </div>
 
-    // 구분선
-    doc.moveDown(1);
-    doc.strokeColor('#1e40af').lineWidth(2)
-      .moveTo(40, doc.y).lineTo(555, doc.y).stroke();
-    doc.moveDown(1);
+  <h2>요약 (Summary)</h2>
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">총 에너지 사용량</div>
+      <div class="kpi-value">${Number(data.summary.totalEnergy).toLocaleString('ko-KR')}<span class="kpi-unit">kWh</span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">피크 전력</div>
+      <div class="kpi-value">${Number(data.summary.peakPower).toLocaleString('ko-KR')}<span class="kpi-unit">kW</span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">평균 전력</div>
+      <div class="kpi-value">${Number(data.summary.avgPower).toLocaleString('ko-KR')}<span class="kpi-unit">kW</span></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">예상 전기요금</div>
+      <div class="kpi-value">${Number(data.summary.estimatedCost).toLocaleString('ko-KR')}<span class="kpi-unit">원</span></div>
+    </div>
+  </div>
 
-    // 요약 섹션
-    doc.fontSize(16).fillColor('#1e40af').text('Summary');
-    doc.moveDown(0.5);
+  <h2>일별 사용량 (Daily Usage)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>날짜</th>
+        <th style="text-align:right">사용량 (kWh)</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
 
-    const summaryItems = [
-      ['Total Energy', `${Number(data.summary.totalEnergy).toLocaleString()} kWh`],
-      ['Peak Power', `${Number(data.summary.peakPower).toLocaleString()} kW`],
-      ['Avg Power', `${Number(data.summary.avgPower).toLocaleString()} kW`],
-      ['Est. Cost', `KRW ${Number(data.summary.estimatedCost).toLocaleString()}`],
-    ];
+  <div class="footer">
+    <span>EMS AIoT 에너지 관리 시스템</span>
+    <span>© 2026 EMS AIoT Platform. All rights reserved.</span>
+  </div>
+</body>
+</html>`;
 
-    summaryItems.forEach(([label, value]) => {
-      const y = doc.y;
-      doc.fontSize(10).fillColor('#6b7280').text(String(label), 50, y);
-      doc.fontSize(12).fillColor('#1e40af').text(String(value), 300, y, { align: 'right', width: 245 });
-      doc.moveDown(0.3);
-      doc.strokeColor('#e5e7eb').lineWidth(0.5)
-        .moveTo(50, doc.y).lineTo(545, doc.y).stroke();
-      doc.moveDown(0.3);
-    });
-
-    // 일별 사용량 테이블
-    doc.moveDown(1);
-    doc.fontSize(16).fillColor('#1e40af').text('Daily Usage');
-    doc.moveDown(0.5);
-
-    // 테이블 헤더
-    const tableTop = doc.y;
-    doc.rect(50, tableTop, 495, 22).fill('#1e40af');
-    doc.fontSize(10).fillColor('#ffffff')
-      .text('Date', 60, tableTop + 6)
-      .text('Usage (kWh)', 300, tableTop + 6, { align: 'right', width: 235 });
-    doc.moveDown(0.3);
-
-    let currentY = tableTop + 22;
-
-    if (data.dailyData && data.dailyData.length > 0) {
-      data.dailyData.forEach((row: any, index: number) => {
-        if (currentY > 720) {
-          doc.addPage();
-          currentY = 40;
-        }
-
-        const bgColor = index % 2 === 0 ? '#f9fafb' : '#ffffff';
-        doc.rect(50, currentY, 495, 20).fill(bgColor);
-        doc.fontSize(9).fillColor('#333333')
-          .text(new Date(row.date).toLocaleDateString('ko-KR'), 60, currentY + 5)
-          .text(parseFloat(row.total_energy || '0').toLocaleString(), 300, currentY + 5, { align: 'right', width: 235 });
-        currentY += 20;
-      });
-    } else {
-      doc.rect(50, currentY, 495, 20).fill('#f9fafb');
-      doc.fontSize(9).fillColor('#6b7280').text('No data available', 60, currentY + 5);
-      currentY += 20;
-    }
-
-    // 푸터
-    doc.moveDown(3);
-    doc.fontSize(8).fillColor('#9ca3af').text(
-      '(c) 2026 EnergyAI Platform. All rights reserved.',
-      { align: 'center' }
-    );
-
-    doc.end();
-
-    writeStream.on('finish', () => resolve(`/api/reports/download/${fileName}`));
-    writeStream.on('error', reject);
+  const puppeteer = await import('puppeteer');
+  const browser = await puppeteer.default.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
   });
+
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '0', bottom: '0', left: '0', right: '0' },
+    });
+    fs.writeFileSync(filePath, pdfBuffer);
+  } finally {
+    await browser.close();
+  }
+
+  return `/api/reports/download/${fileName}`;
 }
 
 /**

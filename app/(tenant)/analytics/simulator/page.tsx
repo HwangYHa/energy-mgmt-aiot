@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BarChart,
   Bar,
@@ -75,6 +75,37 @@ export default function SimulatorPage() {
   const [carbonFactor, setCarbonFactor] = useState(0.4781); // tCO2/MWh
   const [isSimulating, setIsSimulating] = useState(false);
   const [result, setResult] = useState<SimulationResult | null>(null);
+  const [isDataFromDb, setIsDataFromDb] = useState(false);
+
+  // 실 DB 데이터로 초기값 설정
+  useEffect(() => {
+    const loadActualData = async () => {
+      try {
+        const res = await fetch('/api/dashboard/stats');
+        if (!res.ok) return;
+        const json = await res.json();
+        const stats = json.data;
+
+        // 이번 달 소비량
+        const monthIdx = new Date().getMonth();
+        const monthlyKwh = stats?.monthlyConsumption?.[monthIdx]?.consumption;
+        if (monthlyKwh && monthlyKwh > 0) {
+          setCurrentMonthlyEnergy(Math.round(monthlyKwh));
+          // 한국 산업용 전기요금 기준 150원/kWh로 월 비용 추산
+          const rate: number = stats?.kpis?.electricityRate ?? 150;
+          setCurrentMonthlyCost(Math.round(monthlyKwh * rate));
+          setIsDataFromDb(true);
+        }
+
+        // 탄소 배출 계수 (테넌트 설정이 있으면 사용)
+        const cfactor: number | undefined = stats?.kpis?.carbonFactor;
+        if (cfactor && cfactor > 0) setCarbonFactor(cfactor);
+      } catch {
+        // 실패 시 기본값 유지
+      }
+    };
+    loadActualData();
+  }, []);
 
   const handleScenarioChange = (scenarioId: string) => {
     setSelectedScenario(scenarioId);
@@ -88,40 +119,40 @@ export default function SimulatorPage() {
   const runSimulation = () => {
     setIsSimulating(true);
 
-    setTimeout(() => {
-      const monthlyEnergySaving = currentMonthlyEnergy * (energyReduction / 100);
-      const monthlyCostSaving = currentMonthlyCost * (energyReduction / 100);
-      const monthlyCarbonSaving = (monthlyEnergySaving / 1000) * carbonFactor;
+    // 시뮬레이션은 순수 계산 (비동기 지연 없음)
+    const monthlyEnergySaving = currentMonthlyEnergy * (energyReduction / 100);
+    const monthlyCostSaving = currentMonthlyCost * (energyReduction / 100);
+    const monthlyCarbonSaving = (monthlyEnergySaving / 1000) * carbonFactor;
 
-      const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
-      const monthlySavings = months.map((month, i) => {
-        const seasonFactors = [0.9, 0.85, 0.9, 1.0, 1.05, 1.15, 1.2, 1.25, 1.1, 1.0, 0.95, 0.9];
-        const seasonFactor = seasonFactors[i] ?? 1.0;
-        const before = Math.round(currentMonthlyCost * seasonFactor);
-        const after = Math.round(before * (1 - energyReduction / 100));
-        return { month, before, after, saving: before - after };
-      });
+    // 한국 월별 계절 부하 계수 (하계/동계 피크 반영)
+    const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+    const seasonFactors = [1.1, 1.0, 0.9, 0.85, 0.9, 1.05, 1.2, 1.25, 1.1, 0.95, 0.9, 1.05];
+    const monthlySavings = months.map((month, i) => {
+      const seasonFactor = seasonFactors[i] ?? 1.0;
+      const before = Math.round(currentMonthlyCost * seasonFactor);
+      const after = Math.round(before * (1 - energyReduction / 100));
+      return { month, before, after, saving: before - after };
+    });
 
-      const totalCostSaving = monthlySavings.reduce((sum, m) => sum + m.saving, 0);
-      const paybackMonths = investmentCost > 0 ? Math.ceil(investmentCost / monthlyCostSaving) : 0;
+    const totalCostSaving = monthlySavings.reduce((sum, m) => sum + m.saving, 0);
+    const paybackMonths = investmentCost > 0 ? Math.ceil(investmentCost / monthlyCostSaving) : 0;
 
-      setResult({
-        monthlySavings,
-        totalCostSaving,
-        totalCarbonReduction: parseFloat((monthlyCarbonSaving * 12).toFixed(2)),
-        totalEnergySaving: Math.round(monthlyEnergySaving * 12),
-        paybackMonths,
-        recommendations: [
-          `연간 ${(totalCostSaving).toLocaleString()}원 절감 예상`,
-          `투자 회수 기간: 약 ${paybackMonths}개월`,
-          `연간 탄소 감축: ${(monthlyCarbonSaving * 12).toFixed(1)} tCO2`,
-          paybackMonths <= 24
-            ? '투자 회수 기간이 2년 이내로 경제성이 우수합니다.'
-            : '장기적 관점에서 환경 및 비용 효과를 고려해주세요.',
-        ],
-      });
-      setIsSimulating(false);
-    }, 1500);
+    setResult({
+      monthlySavings,
+      totalCostSaving,
+      totalCarbonReduction: parseFloat((monthlyCarbonSaving * 12).toFixed(2)),
+      totalEnergySaving: Math.round(monthlyEnergySaving * 12),
+      paybackMonths,
+      recommendations: [
+        `연간 ${totalCostSaving.toLocaleString()}원 절감 예상`,
+        `투자 회수 기간: 약 ${paybackMonths}개월`,
+        `연간 탄소 감축: ${(monthlyCarbonSaving * 12).toFixed(1)} tCO2`,
+        paybackMonths <= 24
+          ? '투자 회수 기간이 2년 이내로 경제성이 우수합니다.'
+          : '장기적 관점에서 환경 및 비용 효과를 고려해주세요.',
+      ],
+    });
+    setIsSimulating(false);
   };
 
   const resetSimulation = () => {
@@ -144,7 +175,14 @@ export default function SimulatorPage() {
           </div>
           비용/탄소 절감 시뮬레이터
         </h1>
-        <p className="text-slate-400 text-sm mt-1">에너지 절감 시나리오별 비용 및 탄소 감축 효과 시뮬레이션</p>
+        <div className="flex items-center gap-3 mt-1">
+          <p className="text-slate-400 text-sm">에너지 절감 시나리오별 비용 및 탄소 감축 효과 시뮬레이션</p>
+          {isDataFromDb && (
+            <span className="text-xs bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+              실 DB 데이터 기반
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

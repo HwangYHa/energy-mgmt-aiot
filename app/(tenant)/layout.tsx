@@ -32,7 +32,13 @@ export default function TenantLayout({
       )}
 
       {/* Sidebar - Desktop */}
-      <div className="hidden lg:block">
+      {/* wrapper 너비는 collapsed 상태에 따라 고정 — hover 확장은 absolute 오버레이 */}
+      <div
+        className={cn(
+          'hidden lg:block flex-shrink-0 transition-all duration-300',
+          sidebarCollapsed ? 'w-16' : 'w-64'
+        )}
+      >
         <Sidebar
           collapsed={sidebarCollapsed}
           onCollapsedChange={setSidebarCollapsed}

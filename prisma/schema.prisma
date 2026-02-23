@@ -76,6 +76,8 @@ model Tenant {
   apiKeys           ApiKey[]
   physicalSpaces    PhysicalSpace[]
   twinNodes         TwinNode[]
+  carbonCredits     CarbonCredit[]
+  carbonTrades      CarbonTrade[]
 
   @@index([status])
   @@index([industryType])
@@ -1633,4 +1635,62 @@ model TwinNode {
   @@index([spaceId])
   @@index([systemType])
   @@map("twin_node")
+}
+
+// ========================================
+// CARBON: 배출권 보유 현황
+// ========================================
+
+model CarbonCredit {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+
+  // 크레딧 정보
+  vintage  Int    // 크레딧 발행 연도 (예: 2024)
+  type     String @db.VarChar(10) // "KAU" | "KCU" | "OFFSET"
+
+  // 수량/가격
+  quantity Float  // 보유 크레딧 수량 (tCO₂)
+  avgCost  Float  @default(0) @map("avg_cost") // 평균 매입 단가 (KRW/tCO₂)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trades CarbonTrade[]
+
+  @@index([tenantId, vintage])
+  @@index([type])
+  @@map("carbon_credit")
+}
+
+// ========================================
+// CARBON: 배출권 거래 내역
+// ========================================
+
+model CarbonTrade {
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
+  creditId String @map("credit_id")
+
+  // 거래 정보
+  tradeType   String  @map("trade_type") @db.VarChar(10) // "buy" | "sell" | "retire"
+  quantity    Float   // 거래 수량 (tCO₂)
+  price       Float   @default(0) // 단가 KRW/tCO₂ (retire은 0)
+  totalAmount Float   @default(0) @map("total_amount") // quantity * price
+
+  memo String? @db.Text
+
+  tradedAt  DateTime @default(now()) @map("traded_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  credit CarbonCredit @relation(fields: [creditId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, tradedAt(sort: Desc)])
+  @@index([creditId])
+  @@index([tradeType])
+  @@map("carbon_trade")
 }

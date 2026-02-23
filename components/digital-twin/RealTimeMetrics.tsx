@@ -135,7 +135,7 @@ export function RealTimeMetrics() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {metricCards.map((metric, index) => {
+        {metricCards.map((metric) => {
           const Icon = metric.icon;
           const TrendIcon = metric.trend === 'up' ? TrendingUp : TrendingDown;
           const trendColor =
@@ -149,7 +149,7 @@ export function RealTimeMetrics() {
 
           return (
             <div
-              key={index}
+              key={metric.title}
               className={`${metric.bg} border border-slate-200 dark:border-slate-700 rounded-xl p-6`}
             >
               <div className="flex items-center justify-between mb-3">

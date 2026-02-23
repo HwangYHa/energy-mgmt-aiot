@@ -14,7 +14,10 @@ import {
   Star,
   Search,
   Loader2,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
+import { fetchWithCsrf } from '@/hooks/use-csrf';
 
 interface AnalysisTemplate {
   id: string;
@@ -25,6 +28,12 @@ interface AnalysisTemplate {
   estimatedTime: string;
   popularity: number;
   isNew?: boolean;
+}
+
+interface TemplateResult {
+  success: boolean;
+  summary: string;
+  detail?: string;
 }
 
 const CATEGORY_CONFIG = {
@@ -130,24 +139,142 @@ const TEMPLATES: AnalysisTemplate[] = [
   },
 ];
 
+/** 카테고리별 실제 API 호출 */
+async function runTemplateApi(
+  category: AnalysisTemplate['category']
+): Promise<TemplateResult> {
+  switch (category) {
+    case 'anomaly': {
+      const res = await fetchWithCsrf('/api/ai/anomaly', {
+        method: 'POST',
+        body: JSON.stringify({ sensitivity: 0.5 }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, summary: data.message || '이상 탐지 실패' };
+      }
+      const count: number = Array.isArray(data.anomalies) ? data.anomalies.length : 0;
+      const rate: number = data.anomaly_rate ?? 0;
+      return {
+        success: true,
+        summary: `이상치 ${count}건 탐지 (전체의 ${(rate * 100).toFixed(1)}%)`,
+        detail: `모델: ${data.model ?? 'N/A'}`,
+      };
+    }
+
+    case 'forecast': {
+      const res = await fetchWithCsrf('/api/ai/forecast', {
+        method: 'POST',
+        body: JSON.stringify({ horizon: '24h' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, summary: data.message || '예측 실패' };
+      }
+      const preds: { value: number }[] = data.predictions ?? [];
+      const avg =
+        preds.length > 0
+          ? preds.reduce((s, p) => s + p.value, 0) / preds.length
+          : 0;
+      const conf: number = data.confidence ?? 0;
+      return {
+        success: true,
+        summary: `24시간 예측 완료 — 평균 ${avg.toFixed(1)} kW (신뢰도 ${(conf * 100).toFixed(0)}%)`,
+        detail: `모델: ${data.model ?? 'N/A'}`,
+      };
+    }
+
+    case 'cost': {
+      const res = await fetchWithCsrf('/api/ai/optimize', {
+        method: 'POST',
+        body: JSON.stringify({ targetReduction: 10 }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, summary: data.message || '최적화 분석 실패' };
+      }
+      const recs: unknown[] = data.recommendations ?? [];
+      const costSaving: number = data.summary?.totalCostSaving ?? 0;
+      return {
+        success: true,
+        summary: `추천 ${recs.length}건 — 월 절감 가능 ${costSaving.toLocaleString()}원`,
+        detail: `모델: ${data.model ?? 'N/A'}`,
+      };
+    }
+
+    case 'energy':
+    case 'carbon': {
+      // 대시보드 overview에서 실 집계값 조회
+      const res = await fetch('/api/dashboard/overview');
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, summary: '대시보드 데이터 조회 실패' };
+      }
+      if (category === 'energy') {
+        const usage: number = data.energy?.currentUsage ?? 0;
+        const rate: number = data.energy?.usageRate ?? 0;
+        return {
+          success: true,
+          summary: `현재 전력 ${usage.toFixed(1)} kW, 목표 대비 사용률 ${rate.toFixed(1)}%`,
+          detail: '실 DB 데이터 기반',
+        };
+      } else {
+        const saved: number = data.carbon?.savingsEmissions ?? 0;
+        return {
+          success: true,
+          summary: `탄소 절감량 ${saved.toFixed(1)} kg CO₂`,
+          detail: '실 DB 데이터 기반',
+        };
+      }
+    }
+
+    default:
+      return { success: false, summary: '지원하지 않는 템플릿입니다' };
+  }
+}
+
 export default function AnalysisTemplatesPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [runningTemplate, setRunningTemplate] = useState<string | null>(null);
   const [completedTemplates, setCompletedTemplates] = useState<Set<string>>(new Set());
+  const [results, setResults] = useState<Record<string, TemplateResult>>({});
 
   const filteredTemplates = TEMPLATES.filter((t) => {
     const matchCategory = selectedCategory === 'all' || t.category === selectedCategory;
-    const matchSearch = !searchQuery || t.name.includes(searchQuery) || t.description.includes(searchQuery);
+    const matchSearch =
+      !searchQuery ||
+      t.name.includes(searchQuery) ||
+      t.description.includes(searchQuery);
     return matchCategory && matchSearch;
   });
 
-  const handleRun = (templateId: string) => {
-    setRunningTemplate(templateId);
-    setTimeout(() => {
+  const handleRun = async (template: AnalysisTemplate) => {
+    setRunningTemplate(template.id);
+    // 이전 결과 초기화
+    setResults((prev) => {
+      const next = { ...prev };
+      delete next[template.id];
+      return next;
+    });
+
+    try {
+      const result = await runTemplateApi(template.category);
+      setResults((prev) => ({ ...prev, [template.id]: result }));
+      if (result.success) {
+        setCompletedTemplates((prev) => new Set(prev).add(template.id));
+      }
+    } catch (err) {
+      setResults((prev) => ({
+        ...prev,
+        [template.id]: {
+          success: false,
+          summary: err instanceof Error ? err.message : '실행 중 오류 발생',
+        },
+      }));
+    } finally {
       setRunningTemplate(null);
-      setCompletedTemplates(prev => new Set(prev).add(templateId));
-    }, 2000);
+    }
   };
 
   return (
@@ -190,7 +317,7 @@ export default function AnalysisTemplatesPage() {
           전체 ({TEMPLATES.length})
         </button>
         {Object.entries(CATEGORY_CONFIG).map(([key, config]) => {
-          const count = TEMPLATES.filter(t => t.category === key).length;
+          const count = TEMPLATES.filter((t) => t.category === key).length;
           const Icon = config.icon;
           return (
             <button
@@ -216,6 +343,7 @@ export default function AnalysisTemplatesPage() {
           const CatIcon = catConfig.icon;
           const isRunning = runningTemplate === template.id;
           const isCompleted = completedTemplates.has(template.id);
+          const result = results[template.id];
 
           return (
             <div
@@ -233,7 +361,9 @@ export default function AnalysisTemplatesPage() {
                     <div className="flex items-center gap-2">
                       <h3 className="text-base font-semibold text-white">{template.name}</h3>
                       {template.isNew && (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded">NEW</span>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded">
+                          NEW
+                        </span>
                       )}
                     </div>
                     <span className={`text-xs ${catConfig.color}`}>{catConfig.label}</span>
@@ -252,18 +382,16 @@ export default function AnalysisTemplatesPage() {
                   <Clock className="w-3.5 h-3.5" />
                   {template.estimatedTime}
                 </div>
-                <div>
-                  파라미터: {template.parameters.join(', ')}
-                </div>
+                <div>파라미터: {template.parameters.join(', ')}</div>
               </div>
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => handleRun(template.id)}
+                  onClick={() => handleRun(template)}
                   disabled={isRunning}
                   className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
                     isCompleted
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30'
                       : 'bg-cyan-500 hover:bg-cyan-600 text-white'
                   } disabled:opacity-50`}
                 >
@@ -288,6 +416,29 @@ export default function AnalysisTemplatesPage() {
                   <Copy className="w-4 h-4" />
                 </button>
               </div>
+
+              {/* 실행 결과 */}
+              {result && (
+                <div
+                  className={`mt-3 p-3 rounded-lg text-sm border flex items-start gap-2 ${
+                    result.success
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      : 'bg-red-500/10 border-red-500/30 text-red-300'
+                  }`}
+                >
+                  {result.success ? (
+                    <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  )}
+                  <div>
+                    <div className="font-medium">{result.summary}</div>
+                    {result.detail && (
+                      <div className="text-xs mt-1 opacity-70">{result.detail}</div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}

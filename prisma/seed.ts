@@ -56,7 +56,7 @@ async function main() {
       code: 'management',
       name: '관리',
       icon: 'Settings',
-      displayOrder: 7,
+      displayOrder: 5,
       minRole: 'site_manager' as UserRole,
     },
     {
@@ -437,6 +437,16 @@ async function main() {
       displayOrder: 5,
       minRole: 'viewer' as UserRole,
     },
+    {
+      code: 'settings_manual',
+      name: '매뉴얼',
+      icon: 'FileText',
+      path: '/manual',
+      menuGroupCode: 'settings',
+      displayOrder: 6,
+      minRole: 'viewer' as UserRole,
+    },
+
     // ---- Super Admin ----
     {
       code: 'admin_tenants',

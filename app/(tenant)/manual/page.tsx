@@ -1,264 +1,624 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import {
   BookOpen,
   Search,
   ChevronRight,
+  ChevronLeft,
   Monitor,
   BarChart3,
   Zap,
   Settings,
   Shield,
-  Bell,
-  HelpCircle,
-  ExternalLink,
+  FileDown,
+  Loader2,
+  Lightbulb,
+  AlertTriangle,
+  List,
+  Hash,
+  X,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { generateDownloadFilename } from '@/lib/utils/filename';
+import {
+  MANUAL_DATA,
+  getChapter,
+  getArticle,
+  getAdjacentArticles,
+  searchManual,
+  type Chapter,
+  type Article,
+  type Block,
+} from '@/lib/data/manual-content';
 
-interface ManualSection {
-  id: string;
-  title: string;
-  icon: typeof BookOpen;
-  color: string;
-  articles: { title: string; description: string }[];
+// ──────────────────────────────────────────────
+// 아이콘 매핑 (챕터별)
+// ──────────────────────────────────────────────
+const CHAPTER_ICONS: Record<string, React.ElementType> = {
+  'getting-started': BookOpen,
+  monitoring:        Monitor,
+  analytics:         BarChart3,
+  control:           Zap,
+  management:        Settings,
+  compliance:        Shield,
+};
+
+function getChapterIcon(id: string): React.ElementType {
+  return CHAPTER_ICONS[id] ?? BookOpen;
 }
 
-const MANUAL_SECTIONS: ManualSection[] = [
-  {
-    id: 'getting-started',
-    title: '시작하기',
-    icon: BookOpen,
-    color: 'text-cyan-400',
-    articles: [
-      { title: '시스템 개요', description: 'EMS AIoT 시스템의 전체 구조와 주요 기능을 설명합니다.' },
-      { title: '초기 설정 가이드', description: '사이트 등록, 디바이스 연결, 센서 설정 방법을 안내합니다.' },
-      { title: '사용자 역할 및 권한', description: '뷰어, 운영자, 관리자 등 역할별 접근 권한을 설명합니다.' },
-      { title: '로그인 및 인증', description: 'Google OAuth, Naver 로그인, 이메일 인증 방법을 안내합니다.' },
-    ],
-  },
-  {
-    id: 'monitoring',
-    title: '모니터링',
-    icon: Monitor,
-    color: 'text-emerald-400',
-    articles: [
-      { title: '종합 모니터링 대시보드', description: '전력 사용량, 설비 상태, KPI를 실시간으로 확인합니다.' },
-      { title: '실시간 데이터 현황', description: '실시간 전력 소비 그래프와 피크 관리 방법을 설명합니다.' },
-      { title: '데이터 수집 상태', description: '센서/디바이스 연결 상태와 데이터 품질 모니터링 방법입니다.' },
-      { title: '설비 모니터링', description: '개별 설비의 가동 상태와 에너지 소비를 확인합니다.' },
-    ],
-  },
-  {
-    id: 'analytics',
-    title: '분석 & 예측',
-    icon: BarChart3,
-    color: 'text-yellow-400',
-    articles: [
-      { title: '에너지 분석', description: '기간별 전력 사용량 추이, 피크 분석, 부하율을 확인합니다.' },
-      { title: '비용 분석', description: '전력 요금 구성, 시간대별 비용, 절감 가능 금액을 분석합니다.' },
-      { title: '이상 탐지', description: 'AI 기반 에너지 사용 이상 패턴 탐지 기능을 설명합니다.' },
-      { title: '절감 시뮬레이터', description: 'LED, HVAC, 태양광 등 시나리오별 절감 효과를 시뮬레이션합니다.' },
-      { title: '분석 템플릿', description: '사전 정의된 분석 리포트를 빠르게 실행하는 방법입니다.' },
-      { title: '데이터 다운로드', description: '수집 데이터를 CSV, Excel, JSON으로 내보내는 방법입니다.' },
-    ],
-  },
-  {
-    id: 'control',
-    title: '설비 제어',
-    icon: Zap,
-    color: 'text-blue-400',
-    articles: [
-      { title: '수동 제어', description: '개별 설비에 직접 제어 명령을 보내는 방법을 설명합니다.' },
-      { title: '스케줄 제어', description: '시간 기반 자동 제어 스케줄을 설정하는 방법입니다.' },
-      { title: 'AI 최적 제어', description: 'AI가 에너지 효율을 최적화하는 자동 제어 기능입니다.' },
-      { title: 'DR 참여', description: '수요반응 이벤트 참여 및 관리 방법을 안내합니다.' },
-    ],
-  },
-  {
-    id: 'settings',
-    title: '설정 & 관리',
-    icon: Settings,
-    color: 'text-purple-400',
-    articles: [
-      { title: '알림 설정', description: '이메일, SMS, 웹훅 알림 규칙 설정 방법입니다.' },
-      { title: 'API 키 관리', description: '외부 시스템 연동을 위한 API 키 생성 및 관리 방법입니다.' },
-      { title: '사이트 관리', description: '사업장 정보, 운영 시간, 관리자 설정 방법입니다.' },
-      { title: '구독 관리', description: '플랜 변경, 결제 이력, 사용량 확인 방법입니다.' },
-    ],
-  },
-  {
-    id: 'compliance',
-    title: '규제 & 컴플라이언스',
-    icon: Shield,
-    color: 'text-amber-400',
-    articles: [
-      { title: '감사 추적', description: '시스템 활동 기록 조회 및 감사 로그 관리 방법입니다.' },
-      { title: '배출계수 관리', description: '탄소 배출 계산에 사용되는 배출계수 설정 방법입니다.' },
-      { title: '규제 리포트', description: '법정 보고서 생성 및 제출 관리 방법을 설명합니다.' },
-    ],
-  },
-];
+// ──────────────────────────────────────────────
+// 콘텐츠 블록 렌더러
+// ──────────────────────────────────────────────
+function BlockRenderer({ block }: { block: Block }) {
+  switch (block.type) {
+    case 'p':
+      return <p className="text-slate-300 text-sm leading-relaxed">{block.text}</p>;
 
-export default function ManualPage() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSection, setSelectedSection] = useState<string | null>(null);
+    case 'steps':
+      return (
+        <ol className="space-y-2">
+          {block.items.map((item, i) => (
+            <li key={i} className="flex gap-3 text-sm text-slate-300">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 text-xs font-bold flex items-center justify-center mt-0.5">
+                {i + 1}
+              </span>
+              <span className="leading-relaxed">{item}</span>
+            </li>
+          ))}
+        </ol>
+      );
 
-  const filteredSections = MANUAL_SECTIONS.filter((section) => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      section.title.includes(query) ||
-      section.articles.some(
-        (a) => a.title.includes(query) || a.description.includes(query)
-      )
-    );
-  });
+    case 'list':
+      return (
+        <ul className="space-y-1.5">
+          {block.items.map((item, i) => (
+            <li key={i} className="flex gap-2 text-sm text-slate-300">
+              <ChevronRight className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" />
+              <span className="leading-relaxed">{item}</span>
+            </li>
+          ))}
+        </ul>
+      );
 
-  const activeSection = selectedSection
-    ? MANUAL_SECTIONS.find((s) => s.id === selectedSection)
-    : null;
+    case 'tip':
+      return (
+        <div className="flex gap-3 bg-cyan-500/10 border border-cyan-500/20 rounded-lg px-4 py-3">
+          <Lightbulb className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-cyan-300 leading-relaxed">{block.text}</p>
+        </div>
+      );
+
+    case 'warn':
+      return (
+        <div className="flex gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3">
+          <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-300 leading-relaxed">{block.text}</p>
+        </div>
+      );
+
+    case 'roles':
+      return (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b border-slate-700">
+                <th className="text-left py-2 pr-4 text-slate-400 font-medium w-48">역할</th>
+                <th className="text-left py-2 text-slate-400 font-medium">설명</th>
+              </tr>
+            </thead>
+            <tbody>
+              {block.items.map((row, i) => (
+                <tr key={i} className="border-b border-slate-800">
+                  <td className="py-2.5 pr-4 text-cyan-300 font-medium whitespace-nowrap">{row.role}</td>
+                  <td className="py-2.5 text-slate-300">{row.desc}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+
+    default:
+      return null;
+  }
+}
+
+// ──────────────────────────────────────────────
+// 뷰 타입
+// ──────────────────────────────────────────────
+type View =
+  | { type: 'toc' }
+  | { type: 'chapter'; chapterId: string }
+  | { type: 'article'; chapterId: string; articleId: string };
+
+// ──────────────────────────────────────────────
+// TOC 화면 — 챕터 그리드
+// ──────────────────────────────────────────────
+function TocView({ onSelectChapter }: { onSelectChapter: (id: string) => void }) {
+  const totalArticles = MANUAL_DATA.chapters.reduce(
+    (acc, c) => acc + c.articles.length, 0
+  );
 
   return (
-    <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6 space-y-6">
-      {/* 헤더 */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-3">
-            <div className="p-2 bg-cyan-500/10 rounded-lg">
-              <BookOpen className="w-6 h-6 text-cyan-400" />
-            </div>
-            사용자 매뉴얼
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            EMS AIoT 시스템 사용 가이드
-          </p>
+    <div className="space-y-6">
+      {/* 메타 정보 */}
+      <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+        <span className="flex items-center gap-1.5">
+          <Hash className="w-3.5 h-3.5" />
+          {MANUAL_DATA.chapters.length}개 챕터
+        </span>
+        <span className="flex items-center gap-1.5">
+          <List className="w-3.5 h-3.5" />
+          {totalArticles}개 아티클
+        </span>
+        <span>최종 업데이트: {MANUAL_DATA.updatedAt}</span>
+        <span>v{MANUAL_DATA.version}</span>
+      </div>
+
+      {/* 챕터 카드 그리드 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {MANUAL_DATA.chapters.map((chapter, idx) => {
+          const Icon = getChapterIcon(chapter.id);
+          return (
+            <button
+              key={chapter.id}
+              onClick={() => onSelectChapter(chapter.id)}
+              className="group bg-slate-800/50 border border-slate-700/50 hover:border-slate-600 rounded-xl p-5 text-left transition-all hover:bg-slate-800"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="p-2 rounded-lg bg-slate-700/50">
+                  <Icon className={cn('w-5 h-5', chapter.color)} />
+                </div>
+                <span className="text-xs text-slate-600 font-mono">
+                  {String(idx + 1).padStart(2, '0')}
+                </span>
+              </div>
+              <h3 className="text-base font-semibold text-white mb-2 group-hover:text-cyan-300 transition-colors">
+                {chapter.title}
+              </h3>
+              <div className="space-y-1">
+                {chapter.articles.slice(0, 3).map((a) => (
+                  <div key={a.id} className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <ChevronRight className="w-3 h-3 text-slate-600 flex-shrink-0" />
+                    <span className="truncate">{a.title}</span>
+                  </div>
+                ))}
+                {chapter.articles.length > 3 && (
+                  <p className="text-xs text-slate-600 pl-4">
+                    +{chapter.articles.length - 3}개 더보기
+                  </p>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
+// 챕터 화면 — 아티클 목록
+// ──────────────────────────────────────────────
+function ChapterView({
+  chapter,
+  onSelectArticle,
+  onBack,
+}: {
+  chapter: Chapter;
+  onSelectArticle: (articleId: string) => void;
+  onBack: () => void;
+}) {
+  const Icon = getChapterIcon(chapter.id);
+  return (
+    <div className="space-y-5">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+      >
+        <ChevronLeft className="w-4 h-4" />
+        전체 목차
+      </button>
+
+      <div className="flex items-center gap-3">
+        <div className="p-2.5 bg-slate-800 rounded-xl">
+          <Icon className={cn('w-6 h-6', chapter.color)} />
         </div>
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setSelectedSection(null); }}
-            placeholder="매뉴얼 검색..."
-            className="w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-sm text-white placeholder:text-slate-600 focus:border-cyan-500 focus:outline-none"
-          />
+        <div>
+          <h2 className="text-xl font-bold text-white">{chapter.title}</h2>
+          <p className="text-xs text-slate-500">{chapter.articles.length}개 아티클</p>
         </div>
       </div>
 
-      {/* 콘텐츠 영역 */}
-      {activeSection ? (
-        /* 섹션 상세 */
-        <div>
+      <div className="space-y-2">
+        {chapter.articles.map((article, idx) => (
           <button
-            onClick={() => setSelectedSection(null)}
-            className="text-sm text-cyan-400 hover:text-cyan-300 mb-4 flex items-center gap-1 transition"
+            key={article.id}
+            onClick={() => onSelectArticle(article.id)}
+            className="w-full flex items-center gap-4 bg-slate-800/50 border border-slate-700/50 hover:border-slate-600 rounded-xl px-5 py-4 text-left transition-all hover:bg-slate-800 group"
           >
-            전체 목록으로 돌아가기
+            <span className="text-xs text-slate-600 font-mono w-6 flex-shrink-0">
+              {String(idx + 1).padStart(2, '0')}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white group-hover:text-cyan-300 transition-colors truncate">
+                {article.title}
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5 truncate">{article.description}</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-slate-400 flex-shrink-0 transition-colors" />
           </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-          <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <activeSection.icon className={`w-6 h-6 ${activeSection.color}`} />
-              <h2 className="text-xl font-bold">{activeSection.title}</h2>
+// ──────────────────────────────────────────────
+// 아티클 화면 — 상세 콘텐츠
+// ──────────────────────────────────────────────
+function ArticleView({
+  chapterId,
+  article,
+  onBack,
+  onNavigate,
+}: {
+  chapterId: string;
+  article: Article;
+  onBack: () => void;
+  onNavigate: (chapterId: string, articleId: string) => void;
+}) {
+  const chapter = getChapter(chapterId)!;
+  const { prev, next } = getAdjacentArticles(chapterId, article.id);
+
+  return (
+    <div className="space-y-6">
+      {/* 브레드크럼 */}
+      <nav className="flex items-center gap-1.5 text-sm text-slate-500 flex-wrap">
+        <button
+          onClick={() => onNavigate('', '')}
+          className="hover:text-slate-300 transition-colors"
+        >
+          매뉴얼
+        </button>
+        <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" />
+        <button onClick={onBack} className="hover:text-slate-300 transition-colors">
+          {chapter.title}
+        </button>
+        <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" />
+        <span className="text-slate-300 font-medium">{article.title}</span>
+      </nav>
+
+      {/* 아티클 헤더 */}
+      <div className="border-b border-slate-700/50 pb-5">
+        <h2 className="text-2xl font-bold text-white mb-1">{article.title}</h2>
+        <p className="text-slate-400 text-sm">{article.description}</p>
+      </div>
+
+      {/* 본문 */}
+      <div className="space-y-5">
+        {article.body.map((block, i) => (
+          <BlockRenderer key={i} block={block} />
+        ))}
+      </div>
+
+      {/* 이전 / 다음 */}
+      <div className="grid grid-cols-2 gap-3 pt-6 border-t border-slate-700/50">
+        {prev ? (
+          <button
+            onClick={() => onNavigate(prev.chapterId, prev.article.id)}
+            className="flex items-start gap-3 p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl hover:border-slate-600 transition text-left group"
+          >
+            <ChevronLeft className="w-4 h-4 text-slate-500 group-hover:text-slate-300 flex-shrink-0 mt-0.5 transition-colors" />
+            <div className="min-w-0">
+              <p className="text-xs text-slate-500 mb-0.5">이전</p>
+              <p className="text-sm text-slate-300 group-hover:text-white truncate transition-colors">
+                {prev.article.title}
+              </p>
             </div>
-            <div className="space-y-4">
-              {activeSection.articles.map((article, idx) => (
-                <div
-                  key={idx}
-                  className="p-4 bg-slate-800/30 border border-slate-700/30 rounded-lg hover:border-slate-600 transition cursor-pointer"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-base font-semibold text-white mb-1">{article.title}</h3>
-                      <p className="text-sm text-slate-400">{article.description}</p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-500 flex-shrink-0" />
-                  </div>
-                </div>
-              ))}
+          </button>
+        ) : <div />}
+
+        {next ? (
+          <button
+            onClick={() => onNavigate(next.chapterId, next.article.id)}
+            className="flex items-start gap-3 p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl hover:border-slate-600 transition text-right group justify-end"
+          >
+            <div className="min-w-0">
+              <p className="text-xs text-slate-500 mb-0.5">다음</p>
+              <p className="text-sm text-slate-300 group-hover:text-white truncate transition-colors">
+                {next.article.title}
+              </p>
             </div>
-          </div>
+            <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 flex-shrink-0 mt-0.5 transition-colors" />
+          </button>
+        ) : <div />}
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
+// 검색 결과 화면
+// ──────────────────────────────────────────────
+function SearchResultsView({
+  query,
+  onSelectArticle,
+  onClear,
+}: {
+  query: string;
+  onSelectArticle: (chapterId: string, articleId: string) => void;
+  onClear: () => void;
+}) {
+  const results = useMemo(() => searchManual(query), [query]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-400">
+          <span className="text-white font-medium">"{query}"</span> 검색 결과{' '}
+          <span className="text-cyan-400">{results.length}건</span>
+        </p>
+        <button
+          onClick={onClear}
+          className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+        >
+          <X className="w-3.5 h-3.5" />
+          초기화
+        </button>
+      </div>
+
+      {results.length === 0 ? (
+        <div className="text-center py-16 text-slate-600">
+          <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-base">검색 결과가 없습니다.</p>
+          <p className="text-sm mt-1">다른 키워드로 검색해보세요.</p>
         </div>
       ) : (
-        /* 섹션 그리드 */
-        <>
-          {/* 퀵 링크 */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-5">
-              <HelpCircle className="w-6 h-6 text-cyan-400 mb-3" />
-              <h3 className="text-base font-semibold text-white mb-1">빠른 시작 가이드</h3>
-              <p className="text-sm text-slate-400 mb-3">처음 사용하시나요? 5분만에 시작하세요.</p>
-              <button
-                onClick={() => setSelectedSection('getting-started')}
-                className="text-sm text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition"
-              >
-                가이드 보기 <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-5">
-              <Bell className="w-6 h-6 text-emerald-400 mb-3" />
-              <h3 className="text-base font-semibold text-white mb-1">알림 설정</h3>
-              <p className="text-sm text-slate-400 mb-3">중요한 이벤트 알림을 설정하세요.</p>
-              <button
-                onClick={() => setSelectedSection('settings')}
-                className="text-sm text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition"
-              >
-                설정 가이드 <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-5">
-              <ExternalLink className="w-6 h-6 text-blue-400 mb-3" />
-              <h3 className="text-base font-semibold text-white mb-1">API 문서</h3>
-              <p className="text-sm text-slate-400 mb-3">외부 시스템 연동을 위한 API 문서입니다.</p>
-              <a
-                href="/docs/api"
-                className="text-sm text-blue-400 hover:text-blue-300 flex items-center gap-1 transition"
-              >
-                API 문서 보기 <ChevronRight className="w-4 h-4" />
-              </a>
-            </div>
-          </div>
-
-          {/* 섹션 목록 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredSections.map((section) => {
-              const Icon = section.icon;
-              return (
-                <button
-                  key={section.id}
-                  onClick={() => setSelectedSection(section.id)}
-                  className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-5 text-left hover:border-slate-600 transition"
-                >
-                  <div className="flex items-center gap-3 mb-3">
-                    <Icon className={`w-5 h-5 ${section.color}`} />
-                    <h3 className="text-base font-semibold text-white">{section.title}</h3>
-                  </div>
-                  <div className="space-y-1.5">
-                    {section.articles.slice(0, 3).map((article, idx) => (
-                      <div key={idx} className="flex items-center gap-2 text-sm text-slate-400">
-                        <ChevronRight className="w-3 h-3 text-slate-600 flex-shrink-0" />
-                        <span className="truncate">{article.title}</span>
-                      </div>
-                    ))}
-                    {section.articles.length > 3 && (
-                      <p className="text-xs text-slate-500 pl-5">
-                        +{section.articles.length - 3}개 더보기
-                      </p>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {filteredSections.length === 0 && (
-            <div className="text-center py-16 text-slate-500">
-              <Search className="w-12 h-12 mx-auto mb-4 opacity-30" />
-              <p className="text-lg">검색 결과가 없습니다.</p>
-            </div>
-          )}
-        </>
+        <div className="space-y-2">
+          {results.map(({ chapterId, chapterTitle, article, matchIn }) => (
+            <button
+              key={`${chapterId}-${article.id}`}
+              onClick={() => onSelectArticle(chapterId, article.id)}
+              className="w-full flex items-start gap-4 bg-slate-800/50 border border-slate-700/50 hover:border-slate-600 rounded-xl px-5 py-4 text-left transition-all hover:bg-slate-800 group"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] text-slate-500 bg-slate-700/60 px-1.5 py-0.5 rounded">
+                    {chapterTitle}
+                  </span>
+                  {matchIn === 'title' && (
+                    <span className="text-[10px] text-cyan-500 bg-cyan-500/10 px-1.5 py-0.5 rounded">
+                      제목 일치
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm font-medium text-white group-hover:text-cyan-300 transition-colors">
+                  {article.title}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5 truncate">{article.description}</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-slate-400 flex-shrink-0 mt-1 transition-colors" />
+            </button>
+          ))}
+        </div>
       )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
+// 메인 페이지
+// ──────────────────────────────────────────────
+export default function ManualPage() {
+  const [view, setView] = useState<View>({ type: 'toc' });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isPdfLoading, setIsPdfLoading] = useState(false);
+
+  const goToc     = ()                                       => { setView({ type: 'toc' }); setSearchQuery(''); };
+  const goChapter = (chapterId: string)                     => setView({ type: 'chapter', chapterId });
+  const goArticle = (chapterId: string, articleId: string)  => {
+    if (!chapterId && !articleId) { goToc(); return; }
+    setView({ type: 'article', chapterId, articleId });
+    setSearchQuery('');
+  };
+
+  const currentChapter = view.type !== 'toc' ? getChapter(view.chapterId) : undefined;
+  const currentArticle = view.type === 'article' ? getArticle(view.chapterId, view.articleId) : undefined;
+
+  async function handleDownloadPdf() {
+    setIsPdfLoading(true);
+    try {
+      const res = await fetch('/api/manual/pdf');
+      if (!res.ok) throw new Error('PDF 생성 실패');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = generateDownloadFilename('사용자매뉴얼', '', 'pdf');
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('PDF 다운로드 중 오류가 발생했습니다.');
+    } finally {
+      setIsPdfLoading(false);
+    }
+  }
+
+  const isSearching = searchQuery.trim().length > 0;
+
+  return (
+    <div className="flex h-[calc(100vh-64px)] bg-[#051225] text-white overflow-hidden">
+
+      {/* ─── 좌측 TOC 사이드바 ─────────────────── */}
+      <aside className="hidden lg:flex flex-col w-64 xl:w-72 bg-slate-900/60 border-r border-slate-700/50 overflow-y-auto flex-shrink-0">
+        {/* 헤더 */}
+        <div className="px-4 py-5 border-b border-slate-700/50">
+          <button
+            onClick={goToc}
+            className="flex items-center gap-2 text-sm font-semibold text-white hover:text-cyan-300 transition-colors"
+          >
+            <BookOpen className="w-4 h-4 text-cyan-400" />
+            사용자 매뉴얼
+          </button>
+          <p className="text-[10px] text-slate-500 mt-1">
+            v{MANUAL_DATA.version} · {MANUAL_DATA.updatedAt}
+          </p>
+        </div>
+
+        {/* 챕터 + 아티클 목록 */}
+        <nav className="flex-1 px-3 py-4 space-y-1">
+          {MANUAL_DATA.chapters.map((chapter, idx) => {
+            const Icon = getChapterIcon(chapter.id);
+            const isActiveChapter = view.type !== 'toc' && view.chapterId === chapter.id;
+
+            return (
+              <div key={chapter.id}>
+                <button
+                  onClick={() => goChapter(chapter.id)}
+                  className={cn(
+                    'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors',
+                    isActiveChapter
+                      ? 'bg-slate-800 text-white'
+                      : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                  )}
+                >
+                  <Icon className={cn('w-4 h-4 flex-shrink-0', chapter.color)} />
+                  <span className="font-medium truncate">{chapter.title}</span>
+                  <span className="ml-auto text-[10px] text-slate-600">{idx + 1}</span>
+                </button>
+
+                {/* 활성 챕터의 아티클 서브 목록 */}
+                {isActiveChapter && (
+                  <div className="ml-3 pl-3 border-l border-slate-700/50 mt-1 mb-2 space-y-0.5">
+                    {chapter.articles.map((article) => {
+                      const isActive =
+                        view.type === 'article' && view.articleId === article.id;
+                      return (
+                        <button
+                          key={article.id}
+                          onClick={() => goArticle(chapter.id, article.id)}
+                          className={cn(
+                            'w-full text-left px-3 py-1.5 rounded-md text-xs transition-colors truncate',
+                            isActive
+                              ? 'text-cyan-400 bg-cyan-500/10 font-medium'
+                              : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/40'
+                          )}
+                        >
+                          {article.title}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </nav>
+
+        {/* PDF 다운로드 */}
+        <div className="p-3 border-t border-slate-700/50">
+          <button
+            onClick={handleDownloadPdf}
+            disabled={isPdfLoading}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-cyan-600/80 hover:bg-cyan-600 disabled:bg-slate-700 disabled:cursor-not-allowed text-white text-xs font-medium rounded-lg transition-colors"
+          >
+            {isPdfLoading
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <FileDown className="w-3.5 h-3.5" />}
+            {isPdfLoading ? 'PDF 생성 중...' : 'PDF 전체 다운로드'}
+          </button>
+        </div>
+      </aside>
+
+      {/* ─── 본문 영역 ──────────────────────────── */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-4 md:px-8 py-6 space-y-6">
+
+          {/* 헤더 */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-bold flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-cyan-400" />
+                사용자 매뉴얼
+              </h1>
+              <p className="text-slate-500 text-xs mt-0.5">EMS AIoT 에너지 관리 시스템 가이드</p>
+            </div>
+
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              {/* PDF 다운로드 (모바일) */}
+              <button
+                onClick={handleDownloadPdf}
+                disabled={isPdfLoading}
+                className="lg:hidden flex items-center gap-1.5 px-3 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white text-xs font-medium rounded-lg transition-colors flex-shrink-0"
+              >
+                {isPdfLoading
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <FileDown className="w-3.5 h-3.5" />}
+                PDF
+              </button>
+
+              {/* 검색 */}
+              <div className="relative flex-1 sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="매뉴얼 전체 검색..."
+                  className="w-full pl-9 pr-8 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-sm text-white placeholder:text-slate-600 focus:border-cyan-500 focus:outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 콘텐츠 라우팅 */}
+          {isSearching ? (
+            <SearchResultsView
+              query={searchQuery}
+              onSelectArticle={goArticle}
+              onClear={() => setSearchQuery('')}
+            />
+          ) : view.type === 'toc' ? (
+            <>
+              <TocView onSelectChapter={goChapter} />
+              <div className="pt-2 border-t border-slate-700/50">
+                <Link
+                  href="/docs/api"
+                  className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-cyan-300 transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                  외부 연동용 API 문서 보기
+                </Link>
+              </div>
+            </>
+          ) : view.type === 'chapter' && currentChapter ? (
+            <ChapterView
+              chapter={currentChapter}
+              onSelectArticle={(aId) => goArticle(view.chapterId, aId)}
+              onBack={goToc}
+            />
+          ) : view.type === 'article' && currentArticle ? (
+            <ArticleView
+              chapterId={view.chapterId}
+              article={currentArticle}
+              onBack={() => goChapter(view.chapterId)}
+              onNavigate={goArticle}
+            />
+          ) : null}
+        </div>
+      </main>
     </div>
   );
 }

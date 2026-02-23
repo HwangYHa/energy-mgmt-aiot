@@ -26,6 +26,7 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
+  BookOpen,
 } from 'lucide-react';
 import { iconMap } from './icon-map';
 import { cn } from '@/lib/utils';
@@ -58,6 +59,19 @@ interface SidebarProps {
   onCollapsedChange?: (collapsed: boolean) => void;
   className?: string;
 }
+
+// 5-섹션 분류: 그룹 code → 섹션 레이블
+const SIDEBAR_SECTIONS: Record<string, string> = {
+  dashboard:  '운영 현황',
+  monitoring: '운영 현황',
+  analytics:  '분석 & 예측',
+  control:    '설비 제어',
+  alerts:     '운영 관리',
+  management: '운영 관리',
+  compliance: '운영 관리',
+  settings:   '운영 관리',
+  admin:      '시스템',
+};
 
 // 역할별 스타일 설정
 const roleStyles: Record<
@@ -220,8 +234,10 @@ export default function Sidebar({
       className={cn(
         'h-screen bg-slate-900 border-r border-slate-700/50 flex flex-col transition-all duration-300',
         effectiveCollapsed ? 'w-16' : 'w-64',
-        // 마우스 hover로 일시 확장된 경우 그림자 추가 (오버레이 느낌)
-        collapsed && isHovering ? 'shadow-2xl shadow-black/60 z-50' : '',
+        // hover로 일시 확장 시: absolute 오버레이로 콘텐츠를 밀지 않음
+        collapsed && isHovering
+          ? 'absolute left-0 top-0 z-50 shadow-2xl shadow-black/70'
+          : 'relative',
         className
       )}
       onMouseEnter={handleMouseEnter}
@@ -235,14 +251,14 @@ export default function Sidebar({
         )}
       >
         <Link href="/dashboard" className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/20">
+          <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 flex-shrink-0">
             <Zap className="w-6 h-6 text-white" />
           </div>
           {!effectiveCollapsed && (
             <div>
-              <h1 className="text-lg font-bold text-white">EMS</h1>
-              <p className="text-[10px] text-slate-500 -mt-0.5">
-                Energy Management
+              <h1 className="text-base font-bold text-white leading-tight">EMS AIoT</h1>
+              <p className="text-[10px] text-slate-500 leading-tight">
+                에너지 관리 시스템
               </p>
             </div>
           )}
@@ -302,38 +318,28 @@ export default function Sidebar({
                 (item) => pathname === item.path
               );
 
-              // 모니터링 / 관리 섹션 구분
-              const monitoringCodes = ['dashboard', 'monitoring', 'analytics', 'carbon'];
-              const isMonitoring = monitoringCodes.includes(group.code);
-              const prevGroup = index > 0 ? filteredGroups[index - 1] : null;
-              const prevIsMonitoring = prevGroup ? monitoringCodes.includes(prevGroup.code) : true;
-              const showSectionDivider = !isMonitoring && prevIsMonitoring && index > 0;
-              const showMonitoringLabel = isMonitoring && index === 0;
+              // 5-섹션 구분
+              const currentSection = SIDEBAR_SECTIONS[group.code] ?? '운영 관리';
+              const prevSection = index > 0
+                ? (SIDEBAR_SECTIONS[filteredGroups[index - 1]!.code] ?? '운영 관리')
+                : null;
+              const showSectionLabel = prevSection !== currentSection;
 
               return (
                 <div key={group.id}>
-                  {/* 모니터링 섹션 라벨 */}
-                  {showMonitoringLabel && !effectiveCollapsed && (
-                    <div className="mb-2 mx-2">
+                  {/* 섹션 레이블 / 구분선 */}
+                  {showSectionLabel && !effectiveCollapsed && (
+                    <div className={cn('mx-2', index === 0 ? 'mb-2' : 'my-3')}>
                       <div className="flex items-center gap-2">
                         <div className="flex-1 h-px bg-slate-700/50" />
-                        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">모니터링</span>
+                        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-medium whitespace-nowrap">
+                          {currentSection}
+                        </span>
                         <div className="flex-1 h-px bg-slate-700/50" />
                       </div>
                     </div>
                   )}
-
-                  {/* 섹션 구분선: 모니터링 → 관리 */}
-                  {showSectionDivider && !effectiveCollapsed && (
-                    <div className="my-3 mx-2">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-px bg-slate-700/50" />
-                        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">관리</span>
-                        <div className="flex-1 h-px bg-slate-700/50" />
-                      </div>
-                    </div>
-                  )}
-                  {showSectionDivider && effectiveCollapsed && (
+                  {showSectionLabel && effectiveCollapsed && index > 0 && (
                     <div className="my-2 mx-2 h-px bg-slate-700/50" />
                   )}
 
@@ -436,8 +442,26 @@ export default function Sidebar({
         )}
       </nav>
 
+      {/* 하단 고정: 매뉴얼 링크 */}
+      <div className="border-t border-slate-700/50 px-2 pt-2">
+        <Link
+          href="/manual"
+          className={cn(
+            'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+            pathname === '/manual'
+              ? 'bg-cyan-500/10 text-cyan-400'
+              : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200',
+            effectiveCollapsed ? 'justify-center' : ''
+          )}
+          title={effectiveCollapsed ? '사용자 매뉴얼' : undefined}
+        >
+          <BookOpen className="w-4 h-4 flex-shrink-0" />
+          {!effectiveCollapsed && <span>사용자 매뉴얼</span>}
+        </Link>
+      </div>
+
       {/* 하단: 접기/펴기 버튼 */}
-      <div className="border-t border-slate-700/50 p-2">
+      <div className="p-2">
         <button
           onClick={() => {
             // hover로 일시 확장 중이면 hover 해제 후 영구 상태 토글

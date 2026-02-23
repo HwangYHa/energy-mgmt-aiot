@@ -21,12 +21,25 @@ export default function Icon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'linear-gradient(135deg, #10b981, #06b6d4)',
-          borderRadius: '6px',
-          fontSize: '22px',
+          background: 'linear-gradient(135deg, #10b981 0%, #0891b2 100%)',
+          borderRadius: '7px',
         }}
       >
-        ⚡
+        {/* 번개 아이콘을 SVG path로 렌더링 */}
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          style={{ display: 'flex' }}
+        >
+          <polygon
+            points="13,2 4,14 12,14 11,22 20,10 12,10"
+            fill="white"
+            stroke="rgba(255,255,255,0.3)"
+            strokeWidth="0.5"
+          />
+        </svg>
       </div>
     ),
     { ...size }

@@ -1,9 +1,12 @@
 /**
  * 다운로드 파일명 생성 유틸리티
  *
- * 규칙: [한글설명]_[단축ID]_[YYYYMMDD]_[HHMM].[확장자]
- * 예시: 에너지보고서_A1B2C3D4_20260219_1430.pdf
+ * 규칙: [EMS]_[한글설명]_[YYYYMMDD]_[HHMM].[확장자]
+ * 예시: [EMS]_에너지보고서_20260219_1430.pdf
+ *       [EMS]_탄소배출데이터_20260219_1430.csv
  */
+
+const PROJECT_PREFIX = '[EMS]';
 
 /**
  * 날짜를 YYYYMMDD 형식으로 포맷
@@ -28,27 +31,25 @@ function formatTime(date: Date): string {
  * 다운로드용 파일명 생성
  *
  * @param koreanName - 한글 설명 (예: '에너지보고서', '원시데이터', '탄소배출보고서')
- * @param uniqueId   - UUID 또는 레코드 ID (앞 8자를 사용)
+ * @param _uniqueId  - (deprecated, 무시됨) 하위 호환 유지용
  * @param extension  - 파일 확장자 (pdf, xlsx, csv 등, 점 제외)
  * @param date       - 기준 날짜 (기본값: 현재 시각)
  * @returns 파일명 문자열
  *
  * @example
- * generateDownloadFilename('에너지보고서', 'abc123', 'pdf')
- * // → '에너지보고서_ABC12300_20260219_1430.pdf'
+ * generateDownloadFilename('에너지보고서', '', 'pdf')
+ * // → '[EMS]_에너지보고서_20260219_1430.pdf'
  */
 export function generateDownloadFilename(
   koreanName: string,
-  uniqueId: string,
+  _uniqueId: string,
   extension: string,
   date: Date = new Date(),
 ): string {
-  // UUID 하이픈 제거 후 앞 8자 대문자
-  const shortId = uniqueId.replace(/-/g, '').slice(0, 8).toUpperCase();
-  // 파일명에 사용 불가한 문자 제거
+  // 파일명에 사용 불가한 문자 제거 ([ ] 는 허용 — PROJECT_PREFIX에서 사용)
   const safeName = koreanName.replace(/[/\\:*?"<>|\s]/g, '_');
   const safeExt = extension.replace(/^\./, ''); // 앞 점 제거
-  return `${safeName}_${shortId}_${formatDate(date)}_${formatTime(date)}.${safeExt}`;
+  return `${PROJECT_PREFIX}_${safeName}_${formatDate(date)}_${formatTime(date)}.${safeExt}`;
 }
 
 /**

@@ -141,6 +141,25 @@ async function main() {
       displayOrder: 10,
       minRole: 'operator' as const,
     },
+    {
+      code: 'analytics_carbon_trading',
+      name: '배출권 거래소',
+      icon: 'TrendingUp',
+      path: '/analytics/carbon/trading',
+      menuGroupId: groupMap.get('analytics'),
+      displayOrder: 11,
+      minRole: 'viewer' as const,
+      badgeType: 'new' as const,
+    },
+    {
+      code: 'analytics_carbon_roadmap',
+      name: '탄소중립 로드맵',
+      icon: 'Target',
+      path: '/analytics/carbon/roadmap',
+      menuGroupId: groupMap.get('analytics'),
+      displayOrder: 12,
+      minRole: 'viewer' as const,
+    },
 
     // 설비 제어 그룹
     {

@@ -49,7 +49,13 @@
       "Bash(cmd /c \"cd /d g:\\\\Dev\\\\react-workspace\\\\energy-mgmt-aiot && npx next build\")",
       "Bash(npx --yes npm install:*)",
       "Bash(npx prisma migrate dev:*)",
-      "Bash(PRISMA_HIDE_UPDATE_MESSAGE=1 npx prisma migrate:*)"
+      "Bash(PRISMA_HIDE_UPDATE_MESSAGE=1 npx prisma migrate:*)",
+      "Bash(cmd /c:*)",
+      "Bash(Get-Content \"g:/Dev/react-workspace/energy-mgmt-aiot/prisma/schema.prisma\")",
+      "Bash(Measure-Object -Line)",
+      "Bash(npx prisma validate:*)",
+      "Bash(npx prisma migrate:*)",
+      "Bash(python3:*)"
     ],
     "deny": [
       "Bash(sudo:*)",
