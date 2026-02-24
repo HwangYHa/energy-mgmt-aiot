@@ -16,12 +16,11 @@ export function Footer() {
             <div className="flex items-center gap-2 mb-4">
               <Zap className="w-8 h-8 text-emerald-400" />
               <span className="font-bold text-xl text-white">
-                Energy<span className="text-emerald-400">AI</span>
+                탄소<span className="text-emerald-400">이음</span>
               </span>
             </div>
             <p className="text-slate-400 mb-4 leading-relaxed">
-              AI 기반 에너지 관리 플랫폼으로 에너지 효율을 극대화하고 비용을
-              절감하세요.
+              에너지 데이터로 탄소중립을 실현하는 구독형 에너지 관리 SaaS.
             </p>
             {/* SNS 링크 - 계정 생성 후 활성화 */}
             {/* <div className="flex gap-4">
@@ -103,7 +102,7 @@ export function Footer() {
         {/* Bottom Footer */}
         <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-slate-400 text-sm">
-            © 2026 EnergyAI Platform. All rights reserved.
+            © 2026 탄소이음. All rights reserved.
           </p>
           <FooterLegalLinks />
         </div>

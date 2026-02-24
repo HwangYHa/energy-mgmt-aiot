@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import {
   ArrowRight,
@@ -13,12 +13,12 @@ import {
 } from 'lucide-react';
 
 export const metadata = {
-  title: 'API 빠른 시작 - EnergyAI',
+  title: 'API 빠른 시작 - 탄소이음',
   description:
-    'EnergyAI REST API를 5분 만에 시작하세요. API 키 발급부터 첫 번째 API 호출까지 단계별 가이드.',
+    '탄소이음 REST API를 5분 만에 시작하세요. API 키 발급부터 첫 번째 API 호출까지 단계별 가이드.',
   openGraph: {
-    title: 'API 빠른 시작 가이드 - EnergyAI',
-    description: '5분 만에 EnergyAI API를 시작하는 단계별 가이드',
+    title: 'API 빠른 시작 가이드 - 탄소이음',
+    description: '5분 만에 탄소이음 API를 시작하는 단계별 가이드',
   },
 };
 
@@ -27,7 +27,7 @@ export default function APIQuickstartPage() {
     {
       number: 1,
       title: '회원가입 및 로그인',
-      description: 'EnergyAI 계정을 만들고 대시보드에 접속합니다.',
+      description: '탄소이음 계정을 만들고 대시보드에 접속합니다.',
       icon: Shield,
       color: 'text-blue-400',
       bgColor: 'bg-blue-500/10',
@@ -61,7 +61,7 @@ export default function APIQuickstartPage() {
       color: 'text-yellow-400',
       bgColor: 'bg-yellow-500/10',
       code: `# 사이트 목록 조회
-curl https://api.energyai.io/api/sites \\
+curl https://api.탄소이음.io/api/sites \\
   -H "Authorization: Bearer ea_live_YOUR_API_KEY"
 
 # 응답 예시
@@ -92,11 +92,11 @@ curl https://api.energyai.io/api/sites \\
       color: 'text-purple-400',
       bgColor: 'bg-purple-500/10',
       code: `# 실시간 전력 데이터 조회
-curl https://api.energyai.io/api/realtime?siteId=site_abc123 \\
+curl https://api.탄소이음.io/api/realtime?siteId=site_abc123 \\
   -H "Authorization: Bearer ea_live_YOUR_API_KEY"
 
 # AI 부하 예측 실행
-curl -X POST https://api.energyai.io/api/ai/forecast \\
+curl -X POST https://api.탄소이음.io/api/ai/forecast \\
   -H "Authorization: Bearer ea_live_YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -110,11 +110,11 @@ curl -X POST https://api.energyai.io/api/ai/forecast \\
   const sdkExamples = [
     {
       lang: 'Node.js / TypeScript',
-      install: 'npm install @energyai/sdk',
-      code: `import { EnergyAI } from '@energyai/sdk';
+      install: 'npm install @탄소이음/sdk',
+      code: `import { 탄소이음 } from '@탄소이음/sdk';
 
-const client = new EnergyAI({
-  apiKey: process.env.ENERGYAI_API_KEY!
+const client = new 탄소이음({
+  apiKey: process.env.탄소이음_API_KEY!
 });
 
 // 사이트 목록 조회
@@ -130,10 +130,10 @@ console.log(forecast.predictions);`,
     },
     {
       lang: 'Python',
-      install: 'pip install energyai',
-      code: `from energyai import EnergyAI
+      install: 'pip install 탄소이음',
+      code: `from 탄소이음 import 탄소이음
 
-client = EnergyAI(api_key="ea_live_YOUR_API_KEY")
+client = 탄소이음(api_key="ea_live_YOUR_API_KEY")
 
 # 사이트 목록 조회
 sites = client.sites.list()
@@ -170,7 +170,7 @@ print(forecast.predictions)`,
             API 빠른 시작 가이드
           </h1>
           <p className="text-xl text-slate-300 mb-2">
-            5분 만에 EnergyAI API를 시작하세요
+            5분 만에 탄소이음 API를 시작하세요
           </p>
           <p className="text-slate-400">
             이 가이드를 따라 API 키를 발급받고 첫 번째 API 호출을 해보세요.

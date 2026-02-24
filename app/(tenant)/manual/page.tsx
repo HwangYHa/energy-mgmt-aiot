@@ -32,6 +32,7 @@ import {
   type Article,
   type Block,
 } from '@/lib/data/manual-content';
+import { toast } from '@/lib/toast';
 
 // ──────────────────────────────────────────────
 // 아이콘 매핑 (챕터별)
@@ -442,7 +443,7 @@ export default function ManualPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      alert('PDF 다운로드 중 오류가 발생했습니다.');
+      toast.error('PDF 다운로드 중 오류가 발생했습니다.');
     } finally {
       setIsPdfLoading(false);
     }
@@ -545,7 +546,7 @@ export default function ManualPage() {
                 <BookOpen className="w-5 h-5 text-cyan-400" />
                 사용자 매뉴얼
               </h1>
-              <p className="text-slate-500 text-xs mt-0.5">EMS AIoT 에너지 관리 시스템 가이드</p>
+              <p className="text-slate-500 text-xs mt-0.5">탄소이음 에너지 관리 시스템 가이드</p>
             </div>
 
             <div className="flex items-center gap-3 w-full sm:w-auto">

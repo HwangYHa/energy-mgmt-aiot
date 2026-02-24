@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import {
   Book,
@@ -17,8 +17,8 @@ import {
  * 문서화 메인 페이지
  */
 export const metadata = {
-  title: '문서 - EnergyAI',
-  description: 'EnergyAI 플랫폼 사용 가이드 및 API 문서',
+  title: '문서 - 탄소이음',
+  description: '탄소이음 플랫폼 사용 가이드 및 API 문서',
 };
 
 export default function DocsPage() {
@@ -26,7 +26,7 @@ export default function DocsPage() {
     {
       icon: Rocket,
       title: '시작하기',
-      description: 'EnergyAI를 처음 사용하시나요? 빠른 시작 가이드를 확인하세요',
+      description: '탄소이음를 처음 사용하시나요? 빠른 시작 가이드를 확인하세요',
       href: '/docs/getting-started',
       color: 'text-emerald-400',
       bgColor: 'bg-emerald-500/10',
@@ -35,7 +35,7 @@ export default function DocsPage() {
     {
       icon: Code,
       title: 'API 문서',
-      description: 'REST API를 사용하여 EnergyAI를 통합하세요',
+      description: 'REST API를 사용하여 탄소이음를 통합하세요',
       href: '/docs/api',
       color: 'text-blue-400',
       bgColor: 'bg-blue-500/10',
@@ -124,7 +124,7 @@ export default function DocsPage() {
               <span className="text-emerald-400 font-semibold">Documentation</span>
             </div>
             <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
-              EnergyAI 문서
+              탄소이음 문서
             </h1>
             <p className="text-xl text-slate-300 max-w-3xl mx-auto mb-8">
               플랫폼 사용 가이드, API 문서, 튜토리얼 등 필요한 모든 정보를

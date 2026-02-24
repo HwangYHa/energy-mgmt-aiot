@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import {
   Rocket,
@@ -15,8 +15,8 @@ import {
  * 시작 가이드 페이지
  */
 export const metadata = {
-  title: '시작하기 - EnergyAI',
-  description: '5분 만에 EnergyAI 시작하기',
+  title: '시작하기 - 탄소이음',
+  description: '5분 만에 탄소이음 시작하기',
 };
 
 export default function GettingStartedPage() {
@@ -116,7 +116,7 @@ export default function GettingStartedPage() {
             5분 만에 시작하기
           </h1>
           <p className="text-xl text-slate-300 mb-8">
-            간단한 4단계로 EnergyAI를 시작하고 에너지 관리를 혁신하세요
+            간단한 4단계로 탄소이음를 시작하고 에너지 관리를 혁신하세요
           </p>
           <Link href="/register">
             <Button

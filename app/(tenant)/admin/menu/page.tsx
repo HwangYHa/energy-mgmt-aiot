@@ -15,6 +15,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { apiGet, apiPost } from '@/lib/api/client';
+import { toast } from '@/lib/toast';
 
 interface MenuItem {
   id: string;
@@ -175,9 +176,9 @@ export default function MenuManagementPage() {
     try {
       await apiPost('/api/admin/menus', { groups: menuGroups });
       setHasChanges(false);
-      alert('메뉴 설정이 저장되었습니다.');
+      toast.success('메뉴 설정이 저장되었습니다.');
     } catch {
-      alert('저장에 실패했습니다. 다시 시도해주세요.');
+      toast.error('저장에 실패했습니다. 다시 시도해주세요.');
     } finally {
       setSaving(false);
     }

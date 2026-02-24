@@ -306,8 +306,8 @@ async function generatePDF(reportId: string, data: any): Promise<string> {
   </table>
 
   <div class="footer">
-    <span>EMS AIoT 에너지 관리 시스템</span>
-    <span>© 2026 EMS AIoT Platform. All rights reserved.</span>
+    <span>탄소이음 | 에너지 데이터로 세상을 잇다</span>
+    <span>© 2026 탄소이음. All rights reserved.</span>
   </div>
 </body>
 </html>`;

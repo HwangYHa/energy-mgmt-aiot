@@ -203,6 +203,24 @@ async function main() {
       displayOrder: 3,
       minRole: 'tenant_admin' as const,
     },
+    {
+      code: 'settings_gateways',
+      name: '게이트웨이 관리',
+      icon: 'Router',
+      path: '/settings/gateways',
+      menuGroupId: groupMap.get('settings'),
+      displayOrder: 4,
+      minRole: 'site_manager' as const,
+    },
+    {
+      code: 'settings_system',
+      name: '시스템 설정',
+      icon: 'Settings',
+      path: '/settings/system',
+      menuGroupId: groupMap.get('settings'),
+      displayOrder: 5,
+      minRole: 'tenant_admin' as const,
+    },
 
     // Super Admin 그룹
     {
@@ -213,6 +231,48 @@ async function main() {
       menuGroupId: groupMap.get('admin'),
       displayOrder: 20,
       minRole: 'super_admin' as const,
+    },
+    {
+      code: 'admin_traffic',
+      name: '트래픽 관리',
+      icon: 'Activity',
+      path: '/admin/traffic',
+      menuGroupId: groupMap.get('admin'),
+      displayOrder: 30,
+      minRole: 'tenant_admin' as const,
+      badgeType: 'new' as const,
+    },
+    {
+      code: 'admin_support',
+      name: '고객 지원 관리',
+      icon: 'MessageSquare',
+      path: '/admin/support',
+      menuGroupId: groupMap.get('admin'),
+      displayOrder: 40,
+      minRole: 'tenant_admin' as const,
+    },
+
+    // Super Admin 그룹 - 파트너 포털
+    {
+      code: 'admin_partners',
+      name: '파트너 포털',
+      icon: 'Link2',
+      path: '/admin/partners',
+      menuGroupId: groupMap.get('admin'),
+      displayOrder: 50,
+      minRole: 'super_admin' as const,
+      badgeType: 'new' as const,
+    },
+
+    // 설정 그룹 - 지원
+    {
+      code: 'settings_support',
+      name: '문의 / 피드백',
+      icon: 'MessageSquare',
+      path: '/settings/support',
+      menuGroupId: groupMap.get('settings'),
+      displayOrder: 10,
+      minRole: 'viewer' as const,
     },
   ];
 

@@ -79,7 +79,7 @@ function PrivacyContent() {
 
       <section>
         <h3 className="text-lg font-bold text-white mb-3">1. 수집하는 개인정보</h3>
-        <p className="mb-2">EnergyAI는 다음과 같은 개인정보를 수집합니다:</p>
+        <p className="mb-2">탄소이음는 다음과 같은 개인정보를 수집합니다:</p>
         <ul className="list-disc list-inside space-y-1 ml-4 text-sm">
           <li>필수 정보: 이메일, 이름, 회사명</li>
           <li>선택 정보: 전화번호, 부서, 직책</li>
@@ -129,7 +129,7 @@ function PrivacyContent() {
           <li>개인정보 삭제 요구</li>
           <li>개인정보 처리 정지 요구</li>
         </ul>
-        <p className="mt-3 text-sm">권리 행사는 설정 페이지 또는 support@energyai.io로 요청 가능합니다.</p>
+        <p className="mt-3 text-sm">권리 행사는 설정 페이지 또는 support@carboneum.kr로 요청 가능합니다.</p>
       </section>
 
       <section>
@@ -146,7 +146,7 @@ function PrivacyContent() {
         <h3 className="text-lg font-bold text-white mb-3">7. 문의</h3>
         <p>개인정보 관련 문의사항이 있으시면 아래로 연락주세요:</p>
         <ul className="mt-2 space-y-1 text-sm">
-          <li>이메일: privacy@energyai.io</li>
+          <li>이메일: privacy@carboneum.kr</li>
           <li>전화: 1588-1234</li>
           <li>주소: 서울특별시 강남구 테헤란로 123</li>
         </ul>
@@ -162,7 +162,7 @@ function TermsContent() {
 
       <section>
         <h3 className="text-lg font-bold text-white mb-3">1. 서비스 이용</h3>
-        <p className="mb-2">EnergyAI 서비스를 이용함으로써 귀하는 본 약관에 동의하게 됩니다.</p>
+        <p className="mb-2">탄소이음 서비스를 이용함으로써 귀하는 본 약관에 동의하게 됩니다.</p>
         <ul className="list-disc list-inside space-y-1 ml-4 text-sm">
           <li>서비스는 만 14세 이상만 이용 가능합니다</li>
           <li>정확한 정보를 제공해야 합니다</li>
@@ -243,7 +243,7 @@ function TermsContent() {
         <h3 className="text-lg font-bold text-white mb-3">9. 문의</h3>
         <p>약관 관련 문의사항:</p>
         <ul className="mt-2 space-y-1 text-sm">
-          <li>이메일: legal@energyai.io</li>
+          <li>이메일: legal@carboneum.kr</li>
           <li>전화: 1588-1234</li>
         </ul>
       </section>
@@ -346,7 +346,7 @@ function SecurityContent() {
 
       <section className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
         <p className="text-green-400 font-semibold mb-1">보안 취약점 신고</p>
-        <p className="text-sm">보안 취약점 발견 시 security@energyai.io로 신고해주세요. 심각한 취약점에 대해 최대 $10,000의 보상을 제공합니다.</p>
+        <p className="text-sm">보안 취약점 발견 시 security@carboneum.kr로 신고해주세요. 심각한 취약점에 대해 최대 $10,000의 보상을 제공합니다.</p>
       </section>
     </div>
   );

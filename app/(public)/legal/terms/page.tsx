@@ -1,11 +1,11 @@
-import { FileText } from 'lucide-react';
+﻿import { FileText } from 'lucide-react';
 
 /**
  * 이용약관 페이지
  */
 export const metadata = {
-  title: '이용약관 - EnergyAI',
-  description: 'EnergyAI 서비스 이용약관',
+  title: '이용약관 - 탄소이음',
+  description: '탄소이음 서비스 이용약관',
 };
 
 export default function TermsPage() {
@@ -24,7 +24,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold text-white mb-4">1. 서비스 이용</h2>
             <div className="text-slate-300 space-y-3">
-              <p>EnergyAI 서비스를 이용함으로써 귀하는 본 약관에 동의하게 됩니다.</p>
+              <p>탄소이음 서비스를 이용함으로써 귀하는 본 약관에 동의하게 됩니다.</p>
               <ul className="list-disc list-inside space-y-2 ml-4">
                 <li>서비스는 만 14세 이상만 이용 가능합니다</li>
                 <li>정확한 정보를 제공해야 합니다</li>
@@ -121,7 +121,7 @@ export default function TermsPage() {
             <div className="text-slate-300">
               <p>약관 관련 문의사항:</p>
               <ul className="mt-4 space-y-2">
-                <li>이메일: legal@energyai.io</li>
+                <li>이메일: legal@탄소이음.io</li>
                 <li>전화: 1588-1234</li>
               </ul>
             </div>

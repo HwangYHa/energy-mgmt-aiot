@@ -10,7 +10,8 @@ import { SubscriptionOverview } from '@/components/subscription/SubscriptionOver
 import { UsageStats } from '@/components/subscription/UsageStats';
 import { PaymentTimeline } from '@/components/subscription/PaymentTimeline';
 import { PlanComparison } from '@/components/subscription/PlanComparison';
-import { CreditCard } from 'lucide-react';
+import { CreditCard, AlertCircle, CheckCircle, Clock, Wifi, Upload, FileText, Settings } from 'lucide-react';
+import Link from 'next/link';
 
 export default async function SubscriptionPage() {
   const auth = await requireServerRole('tenant_admin' as UserRole);
@@ -44,6 +45,50 @@ export default async function SubscriptionPage() {
           <h1 className="text-2xl font-bold text-white">구독 관리</h1>
           <p className="text-slate-400 text-sm">플랜 및 결제를 관리합니다</p>
         </div>
+      </div>
+
+      {/* ─── 서비스 특성 안내 (기대치 관리) ─── */}
+      <div className="mb-6 bg-slate-800/50 border border-amber-500/20 rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0" />
+          <h2 className="text-sm font-semibold text-amber-400">탄소이음은 설정형 SaaS입니다</h2>
+        </div>
+        <p className="text-sm text-slate-400 mb-4">
+          구독 즉시 사용 가능한 기능과 별도 설정이 필요한 기능이 구분됩니다.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+            <p className="text-xs font-semibold text-emerald-400 mb-2 flex items-center gap-1">
+              <CheckCircle className="w-3.5 h-3.5" /> 구독 즉시 사용 가능
+            </p>
+            <ul className="text-xs text-slate-400 space-y-1">
+              <li className="flex items-center gap-1.5"><FileText className="w-3 h-3 text-emerald-400" /> 고지서 업로드 → 탄소 배출량 계산</li>
+              <li className="flex items-center gap-1.5"><CheckCircle className="w-3 h-3 text-emerald-400" /> K-ETS 탄소 거래소 포트폴리오</li>
+              <li className="flex items-center gap-1.5"><CheckCircle className="w-3 h-3 text-emerald-400" /> 탄소 감축 로드맵 설정</li>
+              <li className="flex items-center gap-1.5"><CheckCircle className="w-3 h-3 text-emerald-400" /> 온실가스 명세서 (수동 데이터)</li>
+            </ul>
+          </div>
+          <div className="p-3 bg-slate-700/30 border border-slate-600/30 rounded-lg">
+            <p className="text-xs font-semibold text-slate-400 mb-2 flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" /> 별도 설정 후 활성화
+            </p>
+            <ul className="text-xs text-slate-400 space-y-1">
+              <li className="flex items-center gap-1.5"><Wifi className="w-3 h-3 text-slate-500" /> 실시간 에너지 모니터링 (센서 설치)</li>
+              <li className="flex items-center gap-1.5"><Wifi className="w-3 h-3 text-slate-500" /> AI 부하 예측 · 이상 탐지 (데이터 연동)</li>
+              <li className="flex items-center gap-1.5"><Wifi className="w-3 h-3 text-slate-500" /> 자동 배출량 계산 (IoT/PLC 연동)</li>
+              <li className="flex items-center gap-1.5"><Upload className="w-3 h-3 text-slate-500" /> 디지털 트윈 (시설 매핑)</li>
+            </ul>
+          </div>
+        </div>
+        {!subscription && (
+          <div className="mt-3">
+            <Link href="/onboarding">
+              <button className="text-sm text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition">
+                <Settings className="w-4 h-4" /> 서비스 시작 설정 가이드 →
+              </button>
+            </Link>
+          </div>
+        )}
       </div>
 
       {subscription ? (

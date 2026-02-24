@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import {
   Users,
@@ -12,11 +12,11 @@ import {
  * 커뮤니티 페이지
  */
 export const metadata = {
-  title: '커뮤니티 - EnergyAI',
+  title: '커뮤니티 - 탄소이음',
   description:
-    '12,000+ 에너지 전문가가 활동하는 EnergyAI 커뮤니티. 사용 팁, Q&A, 성공 사례를 공유하고 함께 성장하세요.',
+    '12,000+ 에너지 전문가가 활동하는 탄소이음 커뮤니티. 사용 팁, Q&A, 성공 사례를 공유하고 함께 성장하세요.',
   openGraph: {
-    title: 'EnergyAI 커뮤니티 - 에너지 전문가 네트워크',
+    title: '탄소이음 커뮤니티 - 에너지 전문가 네트워크',
     description: '12,000+ 에너지 전문가와 함께하는 지식 공유 커뮤니티',
   },
 };
@@ -74,7 +74,7 @@ export default function CommunityPage() {
             <span className="text-emerald-400 font-semibold">Community</span>
           </div>
           <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
-            EnergyAI 커뮤니티
+            탄소이음 커뮤니티
           </h1>
           <p className="text-xl text-slate-300 max-w-3xl mx-auto mb-8">
             전문가와 사용자들이 함께 성장하는 공간

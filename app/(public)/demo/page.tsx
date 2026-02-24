@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import {
   Zap,
@@ -13,11 +13,11 @@ import {
 } from 'lucide-react';
 
 export const metadata = {
-  title: '데모 보기 - EnergyAI',
+  title: '데모 보기 - 탄소이음',
   description:
-    'EnergyAI 에너지 관리 플랫폼의 실시간 데모를 체험하세요. AI 부하 예측, 이상 탐지, 에너지 최적화 대시보드를 직접 확인할 수 있습니다.',
+    '탄소이음 에너지 관리 플랫폼의 실시간 데모를 체험하세요. AI 부하 예측, 이상 탐지, 에너지 최적화 대시보드를 직접 확인할 수 있습니다.',
   openGraph: {
-    title: '데모 보기 - EnergyAI',
+    title: '데모 보기 - 탄소이음',
     description: 'AI 기반 에너지 관리 플랫폼 실시간 데모 체험',
   },
 };
@@ -67,7 +67,7 @@ export default function DemoPage() {
             </div>
 
             <h1 className="text-5xl sm:text-6xl font-bold text-white mb-6 leading-tight">
-              EnergyAI 플랫폼
+              탄소이음 플랫폼
               <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-blue-400">
                 실시간 데모
@@ -93,7 +93,7 @@ export default function DemoPage() {
                   데모 계정으로 시작하기
                 </h2>
                 <p className="text-slate-300 mb-6 leading-relaxed">
-                  완전히 기능하는 데모 환경에서 EnergyAI의 모든 기능을 탐색하세요.
+                  완전히 기능하는 데모 환경에서 탄소이음의 모든 기능을 탐색하세요.
                   샘플 데이터가 미리 로드되어 있어 즉시 시작할 수 있습니다.
                 </p>
 
@@ -106,7 +106,7 @@ export default function DemoPage() {
                     <div className="flex items-center gap-2">
                       <span className="text-slate-400">이메일:</span>
                       <code className="text-emerald-400 bg-slate-800 px-2 py-1 rounded">
-                        demo@energyai.com
+                        demo@탄소이음.com
                       </code>
                     </div>
                     <div className="flex items-center gap-2">
@@ -269,7 +269,7 @@ export default function DemoPage() {
       <footer className="bg-slate-900 border-t border-slate-800 py-8 px-4">
         <div className="max-w-7xl mx-auto text-center">
           <p className="text-slate-400 text-sm">
-            © 2026 EnergyAI Platform. All rights reserved.
+            © 2026 탄소이음 Platform. All rights reserved.
           </p>
         </div>
       </footer>

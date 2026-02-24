@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import {
   Building2,
@@ -17,11 +17,11 @@ import {
  * 상업용 빌딩의 에너지 효율 최적화 솔루션
  */
 export const metadata = {
-  title: '빌딩 에너지 관리 솔루션 - EnergyAI',
+  title: '빌딩 에너지 관리 솔루션 - 탄소이음',
   description:
     '상업용 빌딩의 냉난방, 조명, 환기 시스템을 AI로 최적화하여 에너지 비용을 최대 40% 절감. BEMS 스마트 빌딩 솔루션.',
   openGraph: {
-    title: '빌딩 에너지 관리 (BEMS) - EnergyAI',
+    title: '빌딩 에너지 관리 (BEMS) - 탄소이음',
     description: 'AI로 상업용 빌딩 에너지 비용 최대 40% 절감',
   },
 };

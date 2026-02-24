@@ -53,6 +53,10 @@ model Tenant {
   settings Json?
   metadata Json?
 
+  // 온보딩
+  onboardingStep        Int       @default(0) @map("onboarding_step")
+  onboardingCompletedAt DateTime? @map("onboarding_completed_at")
+
   // 타임스탬프
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -76,8 +80,10 @@ model Tenant {
   apiKeys           ApiKey[]
   physicalSpaces    PhysicalSpace[]
   twinNodes         TwinNode[]
-  carbonCredits     CarbonCredit[]
-  carbonTrades      CarbonTrade[]
+  carbonCredits         CarbonCredit[]
+  carbonTrades          CarbonTrade[]
+  emissionsRecords      EmissionsRecord[]
+  complianceSetting     TenantComplianceSetting?
 
   @@index([status])
   @@index([industryType])
@@ -1423,6 +1429,9 @@ model EmissionFactor {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // Relations
+  emissionsRecords EmissionsRecord[]
+
   @@index([category])
   @@index([tenantId])
   @@index([year, region])
@@ -1455,6 +1464,9 @@ model CalcEngineVersion {
   changelog String? @db.Text
 
   createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  emissionsRecords EmissionsRecord[]
 
   @@index([isActive])
   @@map("calc_engine_version")
@@ -1693,4 +1705,93 @@ model CarbonTrade {
   @@index([creditId])
   @@index([tradeType])
   @@map("carbon_trade")
+}
+
+// ========================================
+// COMPLIANCE: 테넌트 규제 설정
+// ========================================
+
+model TenantComplianceSetting {
+  id       String @id @default(uuid())
+  tenantId String @unique @map("tenant_id")
+
+  // 지역/표준
+  region            String  @default("KR") @db.VarChar(10)
+  reportingStandard String  @default("GHG Protocol") @map("reporting_standard") @db.VarChar(100)
+
+  // 배출계수 설정
+  factorSource         String  @default("환경부") @map("factor_source") @db.VarChar(200)
+  defaultEngineVersion String? @map("default_engine_version") @db.VarChar(20)
+  electricityFactor    Decimal @default(0.4567) @map("electricity_factor") @db.Decimal(10, 6)
+
+  // 기준 연도 / 감축 목표
+  baseYear           Int      @default(2020) @map("base_year")
+  targetReductionPct Decimal? @map("target_reduction_pct") @db.Decimal(5, 2)
+
+  // 보고 주기
+  reportingFrequency String @default("monthly") @map("reporting_frequency") @db.VarChar(20)
+  fiscalYearStart    Int    @default(1) @map("fiscal_year_start") // 월(1~12)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_compliance_setting")
+}
+
+// ========================================
+// COMPLIANCE: 불변 배출량 계산 레코드
+// 원본 Overwrite 금지 — 재계산 시 isArchived=true 후 신규 생성
+// ========================================
+
+model EmissionsRecord {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  siteId   String? @map("site_id")
+
+  // 계산 기준 (감사 추적 핵심)
+  engineVersionId     String  @map("engine_version_id")
+  emissionFactorId    String  @map("emission_factor_id")
+  emissionFactorValue Decimal @map("emission_factor_value") @db.Decimal(15, 8)
+  emissionFactorUnit  String  @map("emission_factor_unit") @db.VarChar(50)
+
+  // 배출원 분류
+  scope      String @db.VarChar(10)    // scope1 / scope2 / scope3
+  sourceType String @map("source_type") @db.VarChar(100)
+
+  // 활동 데이터
+  activityData Decimal @map("activity_data") @db.Decimal(15, 4)
+  activityUnit String  @map("activity_unit") @db.VarChar(50)
+
+  // 계산 결과
+  emissions Decimal @db.Decimal(15, 6)
+  unit      String  @default("tCO2eq") @db.VarChar(20)
+
+  // 기간
+  period String @db.VarChar(7) // YYYY-MM
+
+  // 불변성 보장
+  isArchived    Boolean   @default(false) @map("is_archived")
+  archivedAt    DateTime? @map("archived_at")
+  archivedBy    String?   @map("archived_by")
+  archiveReason String?   @map("archive_reason") @db.Text
+
+  // 재계산 연결 (부모 → 자식 체인)
+  parentId String? @map("parent_id") // 재계산 원본 레코드 ID
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  // Relations
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  engineVersion  CalcEngineVersion @relation(fields: [engineVersionId], references: [id])
+  emissionFactor EmissionFactor    @relation(fields: [emissionFactorId], references: [id])
+
+  @@index([tenantId, period])
+  @@index([scope])
+  @@index([isArchived])
+  @@index([engineVersionId])
+  @@map("emissions_record")
 }

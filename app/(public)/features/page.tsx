@@ -1,14 +1,14 @@
-import { Features } from '@/components/landing/Features';
+﻿import { Features } from '@/components/landing/Features';
 
 /**
  * 기능 소개 페이지
  */
 export const metadata = {
-  title: '기능 - EnergyAI',
+  title: '기능 - 탄소이음',
   description:
-    'AI 부하 예측(MAPE 8%), 이상 탐지(F1 0.92), 자동 최적화, 수요반응(DR), 탄소 추적까지. EnergyAI의 6대 핵심 에너지 관리 기능.',
+    'AI 부하 예측(MAPE 8%), 이상 탐지(F1 0.92), 자동 최적화, 수요반응(DR), 탄소 추적까지. 탄소이음의 6대 핵심 에너지 관리 기능.',
   openGraph: {
-    title: 'AI 에너지 관리 핵심 기능 - EnergyAI',
+    title: 'AI 에너지 관리 핵심 기능 - 탄소이음',
     description: '부하 예측, 이상 탐지, 에너지 최적화, DR, 탄소 추적, 보안 컴플라이언스',
   },
 };

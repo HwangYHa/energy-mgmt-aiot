@@ -1,8 +1,10 @@
 /**
- * Dynamic Favicon
+ * Dynamic Favicon — 탄소이음
+ *
+ * 철학: 기술이 아니라 연결
+ * 아이콘: 두 원이 겹쳐 이어진 체인링크 — "이음(連)" 심볼
  *
  * Next.js App Router 자동 생성: /icon
- * 브라우저 탭에 표시되는 파비콘
  */
 
 import { ImageResponse } from 'next/og';
@@ -25,19 +27,31 @@ export default function Icon() {
           borderRadius: '7px',
         }}
       >
-        {/* 번개 아이콘을 SVG path로 렌더링 */}
+        {/* 연결 고리 (이음 심볼): 두 원이 겹쳐 "연결"을 표현 */}
         <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
+          width="22"
+          height="14"
+          viewBox="0 0 22 14"
           fill="none"
           style={{ display: 'flex' }}
         >
-          <polygon
-            points="13,2 4,14 12,14 11,22 20,10 12,10"
-            fill="white"
-            stroke="rgba(255,255,255,0.3)"
-            strokeWidth="0.5"
+          {/* 왼쪽 원 */}
+          <circle
+            cx="7"
+            cy="7"
+            r="5.5"
+            fill="none"
+            stroke="white"
+            strokeWidth="2.5"
+          />
+          {/* 오른쪽 원 */}
+          <circle
+            cx="15"
+            cy="7"
+            r="5.5"
+            fill="none"
+            stroke="white"
+            strokeWidth="2.5"
           />
         </svg>
       </div>

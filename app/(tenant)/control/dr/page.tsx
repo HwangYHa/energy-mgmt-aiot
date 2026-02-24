@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { fetchWithCsrf } from '@/hooks/use-csrf';
+import { toast } from '@/lib/toast';
 
 interface DREvent {
   id: string;
@@ -73,10 +74,10 @@ export default function DRDashboardPage() {
         await fetchEvents();
       } else {
         const err = await res.json().catch(() => null);
-        alert(err?.error?.message || '작업에 실패했습니다.');
+        toast.error(err?.error?.message || '작업에 실패했습니다.');
       }
     } catch {
-      alert('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+      toast.error('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
       setActionLoading(null);
     }
@@ -100,10 +101,10 @@ export default function DRDashboardPage() {
         await fetchEvents();
       } else {
         const err = await res.json().catch(() => null);
-        alert(err?.error?.message || '이벤트 생성에 실패했습니다.');
+        toast.error(err?.error?.message || '이벤트 생성에 실패했습니다.');
       }
     } catch {
-      alert('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+      toast.error('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
     }
   };
 

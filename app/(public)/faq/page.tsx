@@ -1,13 +1,13 @@
-/**
+﻿/**
  * FAQ 페이지
  */
 export const metadata = {
-  title: 'FAQ - EnergyAI',
+  title: 'FAQ - 탄소이음',
   description:
-    'EnergyAI 에너지 관리 플랫폼에 대해 자주 묻는 질문과 답변. 시작하기, 요금, AI 기능, 보안 등 카테고리별 FAQ.',
+    '탄소이음 에너지 관리 플랫폼에 대해 자주 묻는 질문과 답변. 시작하기, 요금, AI 기능, 보안 등 카테고리별 FAQ.',
   openGraph: {
-    title: '자주 묻는 질문 (FAQ) - EnergyAI',
-    description: 'EnergyAI 에너지 관리 플랫폼 FAQ',
+    title: '자주 묻는 질문 (FAQ) - 탄소이음',
+    description: '탄소이음 에너지 관리 플랫폼 FAQ',
   },
 };
 
@@ -16,12 +16,12 @@ const faqs = [
     category: '시작하기',
     questions: [
       {
-        q: 'EnergyAI를 어떻게 시작하나요?',
+        q: '탄소이음를 어떻게 시작하나요?',
         a: '회원가입 후 무료 체험을 시작하실 수 있습니다. 신용카드 등록 없이 14일간 모든 기능을 사용해보세요.',
       },
       {
         q: '설치가 필요한가요?',
-        a: '아니요, EnergyAI는 클라우드 기반 SaaS 서비스입니다. 웹 브라우저만 있으면 어디서든 접속 가능합니다.',
+        a: '아니요, 탄소이음는 클라우드 기반 SaaS 서비스입니다. 웹 브라우저만 있으면 어디서든 접속 가능합니다.',
       },
       {
         q: '기존 시스템과 연동이 가능한가요?',

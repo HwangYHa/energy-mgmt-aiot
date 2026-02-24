@@ -16,6 +16,7 @@ import {
   MonitorSmartphone,
 } from 'lucide-react';
 import { fetchWithCsrf } from '@/hooks/use-csrf';
+import { toast } from '@/lib/toast';
 
 interface Schedule {
   id: string;
@@ -118,7 +119,7 @@ export default function ScheduleControlPage() {
         body: JSON.stringify({ id, action }),
       });
       if (res.ok) fetchSchedules();
-    } catch { alert('작업 실패'); }
+    } catch { toast.error('작업 실패'); }
   };
 
   const filteredSchedules = schedules;

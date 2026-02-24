@@ -17,6 +17,7 @@ import {
   forbiddenResponse,
   validationErrorResponse,
   serverErrorResponse,
+  notFoundResponse,
 } from '@/lib/api/response';
 
 const generateSchema = z.object({
@@ -60,6 +61,11 @@ function generateValue(sensorType: string, hour: number, baseMin: number, baseMa
 }
 
 export async function POST(request: NextRequest) {
+  // 프로덕션 환경에서는 시뮬레이션 데이터 생성 비활성화
+  if (process.env.NODE_ENV === 'production') {
+    return notFoundResponse('이 API는 개발/스테이징 환경에서만 사용 가능합니다.');
+  }
+
   try {
     const auth = await verifyAuth(request);
     if (!auth) return unauthorizedResponse();

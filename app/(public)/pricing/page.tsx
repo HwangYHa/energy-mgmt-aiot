@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Check, ArrowRight, HelpCircle } from 'lucide-react';
 
@@ -6,11 +6,11 @@ import { Check, ArrowRight, HelpCircle } from 'lucide-react';
  * 가격 플랜 페이지
  */
 export const metadata = {
-  title: '가격 플랜 - EnergyAI',
+  title: '가격 플랜 - 탄소이음',
   description:
-    '무료 Starter부터 Enterprise까지. EnergyAI 에너지 관리 플랫폼의 합리적인 가격 플랜을 비교하세요. 14일 무료 체험 가능.',
+    '무료 Starter부터 Enterprise까지. 탄소이음 에너지 관리 플랫폼의 합리적인 가격 플랜을 비교하세요. 14일 무료 체험 가능.',
   openGraph: {
-    title: '가격 플랜 비교 - EnergyAI',
+    title: '가격 플랜 비교 - 탄소이음',
     description: 'Starter(무료) · Professional(₩299,000/월) · Enterprise(맞춤). 14일 무료 체험.',
   },
 };

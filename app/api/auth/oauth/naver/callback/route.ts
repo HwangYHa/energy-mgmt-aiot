@@ -148,6 +148,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // 구독 플랜 apiRateLimit 조회 (미들웨어 Rate Limiting용)
+    let apiRateLimit = 1000;
+    try {
+      const sub = await prisma.subscription.findFirst({
+        where: { tenantId: user.tenantId, status: { in: ['ACTIVE', 'EXPIRE_SOON'] } },
+        select: { plan: { select: { apiRateLimit: true } } },
+        orderBy: { startDate: 'desc' },
+      });
+      apiRateLimit = sub?.plan.apiRateLimit ?? 1000;
+    } catch {
+      // 폴백: 기본값 유지
+    }
+
     // JWT 토큰 생성
     const secret = new TextEncoder().encode(env.JWT_SECRET);
     const token = await new SignJWT({
@@ -155,6 +168,7 @@ export async function GET(request: NextRequest) {
       tenantId: user.tenantId,
       role: user.role,
       email: naverUser.email,
+      apiRateLimit,
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()

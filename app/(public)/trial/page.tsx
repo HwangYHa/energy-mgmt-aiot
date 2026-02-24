@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Check, ArrowRight } from 'lucide-react';
 
@@ -6,11 +6,11 @@ import { Check, ArrowRight } from 'lucide-react';
  * 무료 평가판 페이지
  */
 export const metadata = {
-  title: '14일 무료 체험 - EnergyAI',
+  title: '14일 무료 체험 - 탄소이음',
   description:
-    '신용카드 없이 14일간 EnergyAI의 모든 기능을 무료로 체험하세요. AI 부하 예측, 이상 탐지, 에너지 최적화를 직접 경험.',
+    '신용카드 없이 14일간 탄소이음의 모든 기능을 무료로 체험하세요. AI 부하 예측, 이상 탐지, 에너지 최적화를 직접 경험.',
   openGraph: {
-    title: '14일 무료 체험 시작 - EnergyAI',
+    title: '14일 무료 체험 시작 - 탄소이음',
     description: '신용카드 불필요. AI 에너지 관리 플랫폼 14일 무료 체험',
   },
 };

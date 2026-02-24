@@ -262,7 +262,7 @@ class GatewaySimulator {
 // 실행
 // ==========================================
 if (require.main === module) {
-  const mqttUrl = process.env.MQTT_URL || 'mqtt://localhost:1883';
+  const mqttUrl = process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883';
   const publishInterval = parseInt(process.env.PUBLISH_INTERVAL || '5000', 10);
 
   const simulator = new GatewaySimulator(mqttUrl, publishInterval);

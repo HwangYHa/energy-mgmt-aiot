@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Script from 'next/script';
 import { Check, CreditCard } from 'lucide-react';
+import { toast } from '@/lib/toast';
 
 interface Plan {
   id: string;
@@ -92,14 +93,14 @@ export function PaymentForm({ plans, userId }: PaymentFormProps) {
       }
     } catch (error) {
       console.error('Stripe checkout error:', error);
-      alert(`결제 오류: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+      toast.error(`결제 오류: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
       setIsLoading(false);
     }
   };
 
   const handlePayment = async () => {
     if (!selectedPlan) {
-      alert('플랜을 선택해주세요');
+      toast.warn('플랜을 선택해주세요');
       return;
     }
 
@@ -122,7 +123,7 @@ export function PaymentForm({ plans, userId }: PaymentFormProps) {
 
     // Iamport 결제
     if (!iamportLoaded || !window.IMP) {
-      alert('결제 모듈을 로딩 중입니다. 잠시 후 다시 시도해주세요');
+      toast.warn('결제 모듈을 로딩 중입니다. 잠시 후 다시 시도해주세요');
       return;
     }
 
@@ -132,7 +133,7 @@ export function PaymentForm({ plans, userId }: PaymentFormProps) {
     const impCode = process.env.NEXT_PUBLIC_IAMPORT_IMP_CODE;
 
     if (!impCode) {
-      alert('결제 설정이 올바르지 않습니다');
+      toast.warn('결제 설정이 올바르지 않습니다');
       setIsLoading(false);
       return;
     }
@@ -174,19 +175,19 @@ export function PaymentForm({ plans, userId }: PaymentFormProps) {
             });
 
             if (verifyResponse.ok) {
-              alert('결제가 완료되었습니다!');
+              toast.success('결제가 완료되었습니다!');
               router.push('/settings/subscription');
             } else {
               const error = await verifyResponse.json();
-              alert(`결제 검증 실패: ${error.error}`);
+              toast.error(`결제 검증 실패: ${error.error}`);
             }
           } catch (error) {
             console.error('결제 검증 에러:', error);
-            alert('결제 검증 중 오류가 발생했습니다');
+            toast.error('결제 검증 중 오류가 발생했습니다');
           }
         } else {
           // 결제 실패
-          alert(`결제 실패: ${response.error_msg}`);
+          toast.error(`결제 실패: ${response.error_msg}`);
         }
       }
     );
@@ -209,15 +210,15 @@ export function PaymentForm({ plans, userId }: PaymentFormProps) {
       });
 
       if (response.ok) {
-        alert('무료 플랜 구독이 완료되었습니다!');
+        toast.success('무료 플랜 구독이 완료되었습니다!');
         router.push('/settings/subscription');
       } else {
         const error = await response.json();
-        alert(`구독 생성 실패: ${error.error}`);
+        toast.error(`구독 생성 실패: ${error.error}`);
       }
     } catch (error) {
       console.error('구독 생성 에러:', error);
-      alert('구독 생성 중 오류가 발생했습니다');
+      toast.error('구독 생성 중 오류가 발생했습니다');
     } finally {
       setIsLoading(false);
     }

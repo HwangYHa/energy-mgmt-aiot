@@ -14,6 +14,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { fetchWithCsrf } from '@/hooks/use-csrf';
+import { toast } from '@/lib/toast';
 
 interface Sensor {
   id: string;
@@ -120,7 +121,7 @@ export default function SensorsPage() {
       const res = await fetchWithCsrf(`/api/sensors/${id}`, { method: 'DELETE' });
       if (res.ok) fetchSensors();
     } catch {
-      alert('삭제 실패');
+      toast.error('삭제 실패');
     }
   };
 
@@ -133,13 +134,13 @@ export default function SensorsPage() {
       });
       const json = await res.json();
       if (json.success) {
-        alert(`데이터 생성 완료: ${json.data.totalMeasurements}건`);
+        toast.success(`데이터 생성 완료: ${json.data.totalMeasurements}건`);
         fetchSensors();
       } else {
-        alert('데이터 생성 실패: ' + (json.error?.message || '오류'));
+        toast.error('데이터 생성 실패: ' + (json.error?.message || '오류'));
       }
     } catch {
-      alert('데이터 생성 중 오류');
+      toast.error('데이터 생성 중 오류');
     } finally {
       setIsGenerating(false);
     }

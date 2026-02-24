@@ -6,7 +6,7 @@ import { DigitalTwinDashboard } from '@/components/digital-twin/DigitalTwinDashb
  * 실시간 에너지 시설 모니터링 및 즉시 상태 판단
  */
 export const metadata: Metadata = {
-  title: '디지털 트윈 - EnergyAI',
+  title: '디지털 트윈 | 탄소이음',
   description: '실시간 에너지 시설 디지털 트윈 모니터링',
 };
 

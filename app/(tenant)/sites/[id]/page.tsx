@@ -30,6 +30,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from '@/lib/toast';
 
 // Types
 interface Device {
@@ -149,7 +150,7 @@ export default function SiteDetailPage() {
 
       router.push('/sites');
     } catch (err) {
-      alert(err instanceof Error ? err.message : '사이트 삭제에 실패했습니다.');
+      toast.error(err instanceof Error ? err.message : '사이트 삭제에 실패했습니다.');
     }
   };
 

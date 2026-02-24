@@ -17,6 +17,7 @@ import {
   Ban,
   ChevronRight,
 } from 'lucide-react';
+import { toast } from '@/lib/toast';
 
 interface TenantItem {
   id: string;
@@ -139,7 +140,7 @@ export default function SuperAdminTenantsPage() {
         }
       }
     } catch {
-      alert('상태 변경 실패');
+      toast.error('상태 변경 실패');
     }
   };
 
@@ -176,7 +177,7 @@ export default function SuperAdminTenantsPage() {
       </div>
 
       {/* 전체 통계 */}
-      <div className="grid grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-6">
         <StatCard icon={Building2} label="전체 테넌트" value={total} color="text-cyan-400" />
         <StatCard icon={CheckCircle2} label="활성" value={tenants.filter((t) => t.status === 'active').length} color="text-green-400" />
         <StatCard icon={AlertTriangle} label="정지" value={tenants.filter((t) => t.status === 'suspended').length} color="text-amber-400" />

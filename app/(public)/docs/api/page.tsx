@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import {
   Code,
@@ -17,8 +17,8 @@ import {
  * API 문서 페이지
  */
 export const metadata = {
-  title: 'API 문서 - EnergyAI',
-  description: 'EnergyAI REST API, WebSocket, Webhook 통합 가이드',
+  title: 'API 문서 - 탄소이음',
+  description: '탄소이음 REST API, WebSocket, Webhook 통합 가이드',
 };
 
 export default function APIDocsPage() {
@@ -92,7 +92,7 @@ export default function APIDocsPage() {
         },
         {
           method: 'WS',
-          endpoint: 'wss://api.energyai.io/ws',
+          endpoint: 'wss://api.탄소이음.io/ws',
           description: 'WebSocket 실시간 스트리밍',
         },
       ],
@@ -141,11 +141,11 @@ export default function APIDocsPage() {
   ];
 
   const authExample = `# 사이트 목록 조회
-curl https://api.energyai.io/api/sites \\
+curl https://api.탄소이음.io/api/sites \\
   -H "Authorization: Bearer ea_live_YOUR_API_KEY"
 
 # 디바이스 목록 조회
-curl https://api.energyai.io/api/devices \\
+curl https://api.탄소이음.io/api/devices \\
   -H "Authorization: Bearer ea_live_YOUR_API_KEY"`;
 
   const responseExample = `{
@@ -177,7 +177,7 @@ curl https://api.energyai.io/api/devices \\
       step: '3',
       title: 'API 호출',
       description: 'REST API를 호출하여 데이터를 조회하거나 제어합니다',
-      code: 'curl https://api.energyai.io/api/sites',
+      code: 'curl https://api.탄소이음.io/api/sites',
     },
     {
       step: '4',
@@ -190,11 +190,11 @@ curl https://api.energyai.io/api/devices \\
     {
       name: 'Node.js',
       description: 'JavaScript/TypeScript SDK',
-      install: 'npm install @energyai/sdk',
-      example: `import { EnergyAI } from '@energyai/sdk';
+      install: 'npm install @탄소이음/sdk',
+      example: `import { 탄소이음 } from '@탄소이음/sdk';
 
-const client = new EnergyAI({
-  apiKey: process.env.ENERGYAI_API_KEY
+const client = new 탄소이음({
+  apiKey: process.env.탄소이음_API_KEY
 });
 
 const sites = await client.sites.list();`,
@@ -202,10 +202,10 @@ const sites = await client.sites.list();`,
     {
       name: 'Python',
       description: 'Python SDK',
-      install: 'pip install energyai',
-      example: `from energyai import EnergyAI
+      install: 'pip install 탄소이음',
+      example: `from 탄소이음 import 탄소이음
 
-client = EnergyAI(api_key="ea_live_...")
+client = 탄소이음(api_key="ea_live_...")
 
 sites = client.sites.list()`,
     },
@@ -213,7 +213,7 @@ sites = client.sites.list()`,
       name: 'cURL',
       description: '직접 HTTP 호출',
       install: '별도 설치 불필요',
-      example: `curl https://api.energyai.io/api/sites \\
+      example: `curl https://api.탄소이음.io/api/sites \\
   -H "Authorization: Bearer ea_live_..."`,
     },
   ];
@@ -235,10 +235,10 @@ sites = client.sites.list()`,
               <span className="text-blue-400 font-semibold">API Documentation</span>
             </div>
             <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
-              EnergyAI API
+              탄소이음 API
             </h1>
             <p className="text-xl text-slate-300 max-w-3xl mx-auto mb-8">
-              REST API, WebSocket, Webhook을 통해 EnergyAI 플랫폼을 통합하세요
+              REST API, WebSocket, Webhook을 통해 탄소이음 플랫폼을 통합하세요
             </p>
             <div className="flex gap-4 justify-center">
               <Link href="/settings/api">

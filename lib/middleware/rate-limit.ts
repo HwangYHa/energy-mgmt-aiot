@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
-import { logSecurityEvent } from '@/lib/logger';
 
 /**
  * Upstash Redis 기반 레이트 제한
@@ -159,13 +158,7 @@ export async function rateLimitMiddleware(
   const result = await checkRateLimit(config);
 
   if (!result.allowed) {
-    // 보안 이벤트 로깅
-    logSecurityEvent({
-      type: 'RATE_LIMIT',
-      severity: 'medium',
-      reason: `Rate limit exceeded: ${config.key}`,
-      ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
-    });
+    console.warn('[RateLimit] exceeded:', config.key, request.headers.get('x-forwarded-for') ?? 'unknown');
 
     const response = NextResponse.json(
       {

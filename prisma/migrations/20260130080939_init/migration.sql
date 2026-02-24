@@ -1,0 +1,2 @@
+-- Migration placeholder: applied directly via prisma db push
+-- The actual schema was created before Prisma migration tracking began.

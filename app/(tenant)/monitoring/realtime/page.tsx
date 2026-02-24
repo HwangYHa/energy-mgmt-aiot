@@ -102,7 +102,7 @@ export default function RealtimeDashboardPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/dashboard/realtime');
+      const res = await fetch('/api/monitoring/realtime');
       const json = await res.json();
       if (json.success) {
         setData(json.data);

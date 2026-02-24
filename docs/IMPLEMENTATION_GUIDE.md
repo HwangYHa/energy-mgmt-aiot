@@ -252,7 +252,7 @@ NEXTAUTH_SECRET=your-secret-key
 NEXTAUTH_URL=https://yourapp.com
 
 # MQTT
-MQTT_URL=mqtt://mqtt-broker:1883
+MQTT_BROKER_URL=mqtt://mqtt-broker:1883
 ```
 
 ---

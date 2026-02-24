@@ -66,6 +66,28 @@ const systemSettingsSchema = z.object({
     aggregationEnabled: z.boolean().default(true),
     aggregationInterval: z.enum(['1m', '5m', '15m', '1h']).default('15m'),
   }).optional(),
+
+  // 로그 정책
+  logPolicy: z.object({
+    auditLogRetentionDays: z.number().int().min(30).max(3650).default(365),
+    accessLogRetentionDays: z.number().int().min(7).max(365).default(90),
+    compressionEnabled: z.boolean().default(true),
+    compressionAfterDays: z.number().int().min(7).max(365).default(30),
+    autoDeleteEnabled: z.boolean().default(true),
+    archiveEnabled: z.boolean().default(false),
+    archiveStoragePath: z.string().max(255).optional(),
+  }).optional(),
+
+  // 백업 설정
+  backup: z.object({
+    enabled: z.boolean().default(false),
+    schedule: z.enum(['daily', 'weekly', 'monthly', 'manual']).default('weekly'),
+    retentionCount: z.number().int().min(1).max(30).default(7),
+    includeAttachments: z.boolean().default(false),
+    notifyEmail: z.string().email().optional().or(z.literal('')),
+    storageType: z.enum(['local', 's3', 'gcs']).default('local'),
+    storagePath: z.string().max(255).optional(),
+  }).optional(),
 });
 
 type SystemSettings = z.infer<typeof systemSettingsSchema>;
@@ -104,6 +126,24 @@ const DEFAULT_SETTINGS: SystemSettings = {
     retentionDays: 365,
     aggregationEnabled: true,
     aggregationInterval: '15m',
+  },
+  logPolicy: {
+    auditLogRetentionDays: 365,
+    accessLogRetentionDays: 90,
+    compressionEnabled: true,
+    compressionAfterDays: 30,
+    autoDeleteEnabled: true,
+    archiveEnabled: false,
+    archiveStoragePath: undefined,
+  },
+  backup: {
+    enabled: false,
+    schedule: 'weekly',
+    retentionCount: 7,
+    includeAttachments: false,
+    notifyEmail: '',
+    storageType: 'local',
+    storagePath: undefined,
   },
 };
 

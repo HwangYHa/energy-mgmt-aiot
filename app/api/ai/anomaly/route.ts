@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth } from '@/lib/auth/verify';
+import { requireFeature } from '@/lib/auth/subscription';
 import { prisma } from '@/lib/db/prisma';
 import { anomalyRequestSchema, formatValidationError } from '@/lib/validation/schemas';
 import env from '@/lib/env';
@@ -103,6 +104,10 @@ export async function POST(request: NextRequest) {
     }
 
     const { tenantId } = auth;
+
+    // 구독 기반 기능 제한: PROFESSIONAL 이상 플랜 필요
+    const [, subErr] = await requireFeature(tenantId, 'ai_anomaly');
+    if (subErr) return subErr;
 
     const body = await request.json();
     let validated;

@@ -10,7 +10,8 @@ import {
   ImageGauge,
   StatDisplay,
 } from '@/components/dashboard';
-import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Wifi, WifiOff, FileText, Settings } from 'lucide-react';
+import Link from 'next/link';
 
 // 대시보드 통계 데이터 타입
 interface DashboardStats {
@@ -55,6 +56,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [dataConnectionStatus, setDataConnectionStatus] = useState<'connected' | 'invoice_only' | 'disconnected'>('disconnected');
 
   // 시간 업데이트
   useEffect(() => {
@@ -92,6 +94,15 @@ export default function DashboardPage() {
       if (result.success) {
         setStats(result.data);
         setLastUpdated(new Date());
+        // 데이터 연결 상태 추론 (실측값 존재 여부로 판단)
+        const kpis = result.data?.kpis;
+        if (kpis?.currentPower > 0 || result.data?.realtime?.currentPower > 0) {
+          setDataConnectionStatus('connected');
+        } else if (result.data?.meta?.hasInvoiceData) {
+          setDataConnectionStatus('invoice_only');
+        } else {
+          setDataConnectionStatus('disconnected');
+        }
       } else {
         throw new Error(result.error || '데이터 조회 실패');
       }
@@ -169,6 +180,62 @@ export default function DashboardPage() {
         title="에너지 운영 관리 시스템"
         subtitle={currentTime}
       />
+
+      {/* ─── 데이터 연결 상태 배너 ─── */}
+      {dataConnectionStatus !== 'connected' && (
+        <div className={`mb-3 p-3 border rounded-lg flex items-center justify-between gap-3 ${
+          dataConnectionStatus === 'invoice_only'
+            ? 'bg-blue-500/10 border-blue-500/30'
+            : 'bg-amber-500/10 border-amber-500/30'
+        }`}>
+          <div className="flex items-center gap-2.5">
+            {dataConnectionStatus === 'disconnected' ? (
+              <WifiOff className="w-4 h-4 text-amber-400 flex-shrink-0" />
+            ) : (
+              <FileText className="w-4 h-4 text-blue-400 flex-shrink-0" />
+            )}
+            <div>
+              <p className={`text-sm font-semibold ${dataConnectionStatus === 'invoice_only' ? 'text-blue-400' : 'text-amber-400'}`}>
+                {dataConnectionStatus === 'invoice_only' ? '고지서 데이터 수집 중' : '데이터 연결 대기 중'}
+              </p>
+              <p className="text-xs text-slate-400">
+                {dataConnectionStatus === 'invoice_only'
+                  ? '고지서 기반 데이터입니다. IoT 센서 연동 시 실시간 모니터링이 활성화됩니다.'
+                  : '아직 에너지 데이터가 연동되지 않았습니다. 고지서 업로드 또는 IoT 연동으로 시작하세요.'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {dataConnectionStatus === 'disconnected' && (
+              <Link href="/onboarding">
+                <button className="text-xs px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 rounded-lg flex items-center gap-1.5 transition">
+                  <Settings className="w-3 h-3" /> 시작 설정
+                </button>
+              </Link>
+            )}
+            <Link href="/analytics/carbon">
+              <button className={`text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition border ${
+                dataConnectionStatus === 'invoice_only'
+                  ? 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border-blue-500/30'
+                  : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border-amber-500/30'
+              }`}>
+                <FileText className="w-3 h-3" /> 고지서 업로드
+              </button>
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 연결 완료 상태 표시 (실측 데이터 수집 중) ─── */}
+      {dataConnectionStatus === 'connected' && lastUpdated && (
+        <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg w-fit">
+          <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="text-xs text-emerald-400 font-medium">실시간 데이터 수집 중</span>
+          <span className="text-xs text-slate-500">
+            업데이트: {lastUpdated.toLocaleTimeString('ko-KR')}
+          </span>
+        </div>
+      )}
 
       {/* 오류 알림 (데이터는 있지만 새로고침 실패 시) */}
       {error && stats && (

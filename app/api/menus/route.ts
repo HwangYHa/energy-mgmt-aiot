@@ -27,6 +27,7 @@ import {
   unauthorizedResponse,
   serverErrorResponse,
 } from '@/lib/api/response';
+import { getCached } from '@/lib/cache/redis';
 
 interface TenantMenuSettings {
   allowedGroups?: string[];
@@ -59,43 +60,43 @@ export async function GET() {
     const userRole = session.user.role as UserRole;
     const tenantId = session.user.tenantId as string;
 
-    // 테넌트 메뉴 설정 조회
-    let tenantMenuConfig: TenantMenuSettings = {};
-    if (tenantId) {
-      const tenant = await prisma.tenant.findUnique({
-        where: { id: tenantId },
-        select: { settings: true },
-      });
+    // 테넌트 메뉴 설정 + 메뉴 그룹: 60초 캐싱 (자주 변경되지 않는 데이터)
+    const cacheKey = `menu:${tenantId ?? 'global'}:${userRole}`;
+    const { tenantMenuConfig, menuGroups } = await getCached(
+      cacheKey,
+      60,
+      async () => {
+        // 테넌트 메뉴 설정 조회
+        let config: TenantMenuSettings = {};
+        if (tenantId) {
+          const tenant = await prisma.tenant.findUnique({
+            where: { id: tenantId },
+            select: { settings: true },
+          });
+          if (tenant?.settings) {
+            config = parseTenantMenuSettings(tenant.settings);
+          }
+        }
 
-      if (tenant?.settings) {
-        tenantMenuConfig = parseTenantMenuSettings(tenant.settings);
-      }
-    }
-
-    // 메뉴 그룹과 아이템 조회
-    const menuGroups = await prisma.menuGroup.findMany({
-      where: {
-        isActive: true,
-        isVisible: true,
-      },
-      include: {
-        menuItems: {
-          where: {
-            isActive: true,
-            isVisible: true,
-            menuGroupId: {
-              not: null,
+        // 메뉴 그룹과 아이템 조회
+        const groups = await prisma.menuGroup.findMany({
+          where: { isActive: true, isVisible: true },
+          include: {
+            menuItems: {
+              where: {
+                isActive: true,
+                isVisible: true,
+                menuGroupId: { not: null },
+              },
+              orderBy: { displayOrder: 'asc' },
             },
           },
-          orderBy: {
-            displayOrder: 'asc',
-          },
-        },
-      },
-      orderBy: {
-        displayOrder: 'asc',
-      },
-    });
+          orderBy: { displayOrder: 'asc' },
+        });
+
+        return { tenantMenuConfig: config, menuGroups: groups };
+      }
+    );
 
     // 필터링: 역할 + 테넌트 메뉴 설정
     const filteredGroups = menuGroups

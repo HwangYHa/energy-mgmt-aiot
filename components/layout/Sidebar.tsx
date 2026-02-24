@@ -9,13 +9,13 @@
  */
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { UserRole } from '@prisma/client';
 import {
-  Zap,
+  Link2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -27,6 +27,8 @@ import {
   AlertCircle,
   RefreshCw,
   BookOpen,
+  Star,
+  X,
 } from 'lucide-react';
 import { iconMap } from './icon-map';
 import { cn } from '@/lib/utils';
@@ -52,6 +54,18 @@ interface MenuGroup {
   displayOrder: number;
   minRole: UserRole;
   items: MenuItem[];
+}
+
+interface FavoriteItem {
+  menuItemId: string;
+  displayOrder: number;
+  menuItem: {
+    id: string;
+    code: string;
+    name: string;
+    icon: string | null;
+    path: string | null;
+  };
 }
 
 interface SidebarProps {
@@ -123,6 +137,8 @@ export default function Sidebar({
   const [menuGroups, setMenuGroups] = useState<MenuGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
+  const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
   // hover-to-expand: 접힌 상태에서 마우스 올리면 일시 확장
   const [isHovering, setIsHovering] = useState(false);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -193,6 +209,57 @@ export default function Sidebar({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.email, status]);
 
+  // 즐겨찾기 조회
+  const fetchFavorites = useCallback(async () => {
+    try {
+      const res = await fetch('/api/favorites');
+      const json = await res.json();
+      if (json.success) setFavorites(json.data.favorites ?? []);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (status === 'authenticated') fetchFavorites();
+  }, [status, fetchFavorites]);
+
+  const toggleFavorite = async (item: MenuItem) => {
+    const isFav = favorites.some((f) => f.menuItemId === item.id);
+    if (isFav) {
+      // 즐겨찾기 삭제
+      setFavorites((prev) => prev.filter((f) => f.menuItemId !== item.id));
+      try {
+        const csrfToken = document.cookie.match(/csrf-token=([^;]+)/)?.[1] ?? '';
+        await fetch(`/api/favorites?menuItemId=${item.id}`, {
+          method: 'DELETE',
+          headers: { 'x-csrf-token': csrfToken },
+        });
+      } catch { /* ignore */ }
+    } else {
+      // 즐겨찾기 추가 (낙관적 업데이트)
+      const newFav: FavoriteItem = {
+        menuItemId: item.id,
+        displayOrder: favorites.length,
+        menuItem: { id: item.id, code: item.code, name: item.name, icon: item.icon, path: item.path },
+      };
+      setFavorites((prev) => [...prev, newFav]);
+      try {
+        const csrfToken = document.cookie.match(/csrf-token=([^;]+)/)?.[1] ?? '';
+        const res = await fetch('/api/favorites', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+          body: JSON.stringify({ menuItemId: item.id }),
+        });
+        const json = await res.json();
+        if (!json.success) {
+          // 롤백
+          setFavorites((prev) => prev.filter((f) => f.menuItemId !== item.id));
+        }
+      } catch {
+        setFavorites((prev) => prev.filter((f) => f.menuItemId !== item.id));
+      }
+    }
+  };
+
   // 언마운트 시 타이머 정리
   useEffect(() => {
     return () => {
@@ -252,13 +319,13 @@ export default function Sidebar({
       >
         <Link href="/dashboard" className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 flex-shrink-0">
-            <Zap className="w-6 h-6 text-white" />
+            <Link2 className="w-6 h-6 text-white" />
           </div>
           {!effectiveCollapsed && (
             <div>
-              <h1 className="text-base font-bold text-white leading-tight">EMS AIoT</h1>
+              <h1 className="text-base font-bold text-white leading-tight">탄소이음</h1>
               <p className="text-[10px] text-slate-500 leading-tight">
-                에너지 관리 시스템
+                에너지 데이터로 세상을 잇다
               </p>
             </div>
           )}
@@ -284,6 +351,64 @@ export default function Sidebar({
 
       {/* 메뉴 영역 */}
       <nav className="flex-1 overflow-y-auto py-4 px-2">
+        {/* 즐겨찾기 섹션 */}
+        {!effectiveCollapsed && favorites.length > 0 && (
+          <div className="mb-3">
+            <div className="flex items-center gap-2 mx-2 mb-2">
+              <div className="flex-1 h-px bg-slate-700/50" />
+              <span className="text-[10px] text-amber-500/70 uppercase tracking-wider font-medium whitespace-nowrap flex items-center gap-1">
+                <Star className="w-3 h-3" />
+                즐겨찾기
+              </span>
+              <div className="flex-1 h-px bg-slate-700/50" />
+            </div>
+            <div className="space-y-0.5">
+              {favorites.map((fav) => {
+                const isActive = pathname === fav.menuItem.path;
+                const FavIcon = getIcon(fav.menuItem.icon || 'Activity');
+                return (
+                  <div
+                    key={fav.menuItemId}
+                    className="flex items-center group"
+                    onMouseEnter={() => setHoveredItemId(fav.menuItemId)}
+                    onMouseLeave={() => setHoveredItemId(null)}
+                  >
+                    <Link
+                      href={fav.menuItem.path || '#'}
+                      className={cn(
+                        'flex-1 flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all',
+                        isActive
+                          ? 'bg-amber-500/15 text-amber-400 font-medium'
+                          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                      )}
+                    >
+                      <FavIcon className={cn('w-4 h-4 flex-shrink-0', isActive ? 'text-amber-400' : 'text-slate-500 group-hover:text-slate-400')} />
+                      <span className="truncate">{fav.menuItem.name}</span>
+                    </Link>
+                    {hoveredItemId === fav.menuItemId && (
+                      <button
+                        onClick={() => toggleFavorite({
+                          id: fav.menuItemId,
+                          code: fav.menuItem.code,
+                          name: fav.menuItem.name,
+                          icon: fav.menuItem.icon,
+                          path: fav.menuItem.path,
+                          displayOrder: fav.displayOrder,
+                          minRole: 'viewer' as UserRole,
+                        })}
+                        className="p-1.5 mr-1 text-amber-400/60 hover:text-amber-400 transition"
+                        title="즐겨찾기 해제"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-32 text-slate-500">
             <Loader2 className="w-6 h-6 animate-spin mb-2" />
@@ -396,40 +521,62 @@ export default function Sidebar({
                       {group.items.map((item) => {
                         const isActive = pathname === item.path;
                         const ItemIcon = getIcon(item.icon || 'Activity');
+                        const isFav = favorites.some((f) => f.menuItemId === item.id);
 
                         return (
-                          <Link
+                          <div
                             key={item.id}
-                            href={item.path || '#'}
-                            className={cn(
-                              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all group',
-                              isActive
-                                ? 'bg-cyan-500/20 text-cyan-400 font-medium'
-                                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                            )}
+                            className="flex items-center group"
+                            onMouseEnter={() => setHoveredItemId(item.id)}
+                            onMouseLeave={() => setHoveredItemId(null)}
                           >
-                            <ItemIcon
+                            <Link
+                              href={item.path || '#'}
                               className={cn(
-                                'w-4 h-4 flex-shrink-0',
-                                isActive ? 'text-cyan-400' : 'text-slate-500 group-hover:text-slate-400'
+                                'flex-1 flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all',
+                                isActive
+                                  ? 'bg-cyan-500/20 text-cyan-400 font-medium'
+                                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                               )}
-                            />
-                            <span className="truncate">{item.name}</span>
-                            {item.badgeType && item.badgeType !== 'none' && (
-                              <span
+                            >
+                              <ItemIcon
                                 className={cn(
-                                  'ml-auto px-1.5 py-0.5 text-[10px] rounded font-medium',
-                                  item.badgeColor === 'red'
-                                    ? 'bg-red-500/20 text-red-400'
-                                    : item.badgeColor === 'yellow'
-                                    ? 'bg-amber-500/20 text-amber-400'
-                                    : 'bg-emerald-500/20 text-emerald-400'
+                                  'w-4 h-4 flex-shrink-0',
+                                  isActive ? 'text-cyan-400' : 'text-slate-500 group-hover:text-slate-400'
                                 )}
+                              />
+                              <span className="truncate">{item.name}</span>
+                              {item.badgeType && item.badgeType !== 'none' && (
+                                <span
+                                  className={cn(
+                                    'ml-auto px-1.5 py-0.5 text-[10px] rounded font-medium',
+                                    item.badgeColor === 'red'
+                                      ? 'bg-red-500/20 text-red-400'
+                                      : item.badgeColor === 'yellow'
+                                      ? 'bg-amber-500/20 text-amber-400'
+                                      : 'bg-emerald-500/20 text-emerald-400'
+                                  )}
+                                >
+                                  {item.badgeType}
+                                </span>
+                              )}
+                            </Link>
+                            {/* 즐겨찾기 버튼 (hover 시 표시) */}
+                            {(hoveredItemId === item.id || isFav) && (
+                              <button
+                                onClick={() => toggleFavorite(item)}
+                                className={cn(
+                                  'p-1.5 mr-0.5 transition opacity-0 group-hover:opacity-100',
+                                  isFav
+                                    ? 'text-amber-400 opacity-100'
+                                    : 'text-slate-500 hover:text-amber-400'
+                                )}
+                                title={isFav ? '즐겨찾기 해제' : '즐겨찾기 추가'}
                               >
-                                {item.badgeType}
-                              </span>
+                                <Star className={cn('w-3.5 h-3.5', isFav ? 'fill-amber-400' : '')} />
+                              </button>
                             )}
-                          </Link>
+                          </div>
                         );
                       })}
                     </div>

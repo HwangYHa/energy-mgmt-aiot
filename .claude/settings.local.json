@@ -55,7 +55,11 @@
       "Bash(Measure-Object -Line)",
       "Bash(npx prisma validate:*)",
       "Bash(npx prisma migrate:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(\"G:/Dev/react-workspace/energy-mgmt-aiot/app/api/analytics/carbon/recalculate/route.ts\":*)",
+      "Bash(\"G:/Dev/react-workspace/energy-mgmt-aiot/app/api/analytics/carbon/engine-versions/route.ts\":*)",
+      "Bash(\"G:/Dev/react-workspace/energy-mgmt-aiot/app/api/analytics/carbon/emission-factors/route.ts\":*)",
+      "Bash(npx pnpm add zustand swr)"
     ],
     "deny": [
       "Bash(sudo:*)",

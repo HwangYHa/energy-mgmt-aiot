@@ -1,5 +1,5 @@
 /**
- * Dynamic OpenGraph Image
+ * Dynamic OpenGraph Image — 탄소이음
  *
  * Next.js App Router 자동 생성: /opengraph-image
  * SNS 공유 시 표시되는 1200x630 미리보기 이미지
@@ -8,7 +8,7 @@
 import { ImageResponse } from 'next/og';
 
 export const runtime = 'edge';
-export const alt = 'EnergyAI - AI 기반 에너지 관리 플랫폼';
+export const alt = '탄소이음 - 에너지 데이터로 세상을 잇다';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -40,26 +40,27 @@ export default async function Image() {
         />
 
         {/* Logo + Name */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '24px' }}>
+          {/* 연결 고리 심볼 */}
           <div
             style={{
-              width: '64px',
-              height: '64px',
+              width: '72px',
+              height: '72px',
               background: 'linear-gradient(135deg, #10b981, #06b6d4)',
-              borderRadius: '16px',
+              borderRadius: '18px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '36px',
-              color: 'white',
-              fontWeight: 'bold',
             }}
           >
-            ⚡
+            <svg width="44" height="28" viewBox="0 0 44 28" fill="none">
+              <circle cx="14" cy="14" r="10" fill="none" stroke="white" strokeWidth="4" />
+              <circle cx="30" cy="14" r="10" fill="none" stroke="white" strokeWidth="4" />
+            </svg>
           </div>
-          <span style={{ fontSize: '48px', fontWeight: 'bold', color: 'white' }}>
-            Energy
-            <span style={{ color: '#10b981' }}>AI</span>
+          <span style={{ fontSize: '52px', fontWeight: 'bold', color: 'white' }}>
+            탄소
+            <span style={{ color: '#10b981' }}>이음</span>
           </span>
         </div>
 
@@ -73,12 +74,12 @@ export default async function Image() {
             maxWidth: '800px',
           }}
         >
-          AI 기반 에너지 관리 플랫폼
+          에너지 데이터로 세상을 잇다
         </div>
 
         {/* Feature pills */}
         <div style={{ display: 'flex', gap: '16px' }}>
-          {['부하 예측', '이상 탐지', '자동 최적화', '탄소 추적'].map((feature) => (
+          {['부하 예측', '이상 탐지', '탄소 추적', '에너지 절감'].map((feature) => (
             <div
               key={feature}
               style={{
@@ -97,8 +98,20 @@ export default async function Image() {
 
         {/* Bottom stat */}
         <div style={{ marginTop: '40px', fontSize: '20px', color: '#64748b' }}>
-          에너지 비용 15% 절감 · 월 ₩7.2M 절약 · 92% AI 정확도
+          에너지 비용 15% 절감 · 탄소 배출 20% 감축 · K-ETS 대응
         </div>
+
+        {/* Bottom accent bar */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: '2px',
+            background: 'linear-gradient(90deg, transparent, #10b981, #06b6d4, transparent)',
+          }}
+        />
       </div>
     ),
     { ...size }

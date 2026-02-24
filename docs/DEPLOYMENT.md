@@ -41,7 +41,7 @@ AI_ENGINE_URL=https://ai-engine.yourapp.com
 AI_ENGINE_API_KEY=your-api-key
 
 # MQTT
-MQTT_URL=mqtt://mqtt-broker:1883
+MQTT_BROKER_URL=mqtt://mqtt-broker:1883
 MQTT_USERNAME=user
 MQTT_PASSWORD=password
 

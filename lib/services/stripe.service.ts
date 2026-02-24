@@ -106,7 +106,7 @@ export async function createPaymentSession({
         price_data: {
           currency,
           product_data: {
-            name: 'EnergyAI 플랜',
+            name: '탄소이음 플랜',
           },
           unit_amount: amount,
         },

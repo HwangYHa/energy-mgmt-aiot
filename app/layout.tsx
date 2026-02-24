@@ -3,8 +3,8 @@ import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import { SessionProvider } from '@/components/providers/SessionProvider';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://energyai.io';
-const SITE_NAME = 'EnergyAI';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://carboneum.kr';
+const SITE_NAME = '탄소이음';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -16,11 +16,11 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'EnergyAI - AI 기반 에너지 관리 플랫폼',
-    template: '%s | EnergyAI',
+    default: '탄소이음 - 에너지 데이터로 세상을 잇다',
+    template: '%s | 탄소이음',
   },
   description:
-    'AI 부하 예측, 실시간 이상 탐지, 자동 최적화로 에너지 비용 15% 절감. 제조업·빌딩·데이터센터를 위한 탄소중립 에너지 관리 SaaS 플랫폼.',
+    '에너지 데이터로 탄소중립을 실현하는 구독형 에너지 관리 SaaS. AI 부하 예측, 실시간 이상 탐지, 자동 최적화로 에너지 비용 절감과 탄소 감축을 동시에.',
   keywords: [
     '에너지 관리', '에너지 관리 시스템', 'EMS', 'BEMS', 'FEMS',
     'AI 에너지', '부하 예측', '이상 탐지', '에너지 최적화',
@@ -42,16 +42,16 @@ export const metadata: Metadata = {
     locale: 'ko_KR',
     url: SITE_URL,
     siteName: SITE_NAME,
-    title: 'EnergyAI - AI 기반 에너지 관리 플랫폼',
+    title: '탄소이음 - 에너지 데이터로 세상을 잇다',
     description:
-      'AI 부하 예측, 실시간 이상 탐지, 자동 최적화로 에너지 비용 15% 절감. 제조업·빌딩·데이터센터를 위한 탄소중립 에너지 관리 SaaS.',
+      '에너지 데이터로 탄소중립을 실현하는 구독형 에너지 관리 SaaS. AI 부하 예측, 실시간 이상 탐지, 자동 최적화로 에너지 비용 절감과 탄소 감축을 동시에.',
     // OG 이미지는 app/opengraph-image.tsx에서 자동 생성
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'EnergyAI - AI 기반 에너지 관리 플랫폼',
+    title: '탄소이음 - 에너지 데이터로 세상을 잇다',
     description:
-      'AI 부하 예측, 실시간 이상 탐지, 자동 최적화로 에너지 비용 15% 절감.',
+      '에너지 데이터로 탄소중립을 실현하는 구독형 에너지 관리 SaaS. 에너지 비용 절감과 탄소 감축을 동시에.',
     // Twitter 이미지도 opengraph-image.tsx에서 자동 적용
   },
   robots: {
@@ -83,11 +83,11 @@ export default function RootLayout({
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
-    name: 'EnergyAI',
+    name: '탄소이음',
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web',
     description:
-      'AI 기반 에너지 관리 플랫폼. 부하 예측, 이상 탐지, 자동 최적화로 에너지 비용 15% 절감.',
+      '에너지 데이터로 탄소중립을 실현하는 SaaS 플랫폼. 부하 예측, 이상 탐지, 자동 최적화로 에너지 비용 절감과 탄소 감축을 동시에.',
     url: SITE_URL,
     offers: {
       '@type': 'AggregateOffer',

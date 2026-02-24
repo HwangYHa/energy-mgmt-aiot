@@ -61,7 +61,8 @@ export class MQTTClient extends EventEmitter {
       });
 
       this.client.on('error', (err: Error) => {
-        console.error('[MQTT] 연결 오류:', err.message);
+        const detail = err.message || (err as unknown as { code?: unknown }).code || String(err);
+        console.error('[MQTT] 연결 오류:', detail);
         this.isConnected = false;
       });
 

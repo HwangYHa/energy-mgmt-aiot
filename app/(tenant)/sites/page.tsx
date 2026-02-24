@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchWithCsrf } from '@/hooks/use-csrf';
+import { toast } from '@/lib/toast';
 
 // Types
 interface Site {
@@ -122,7 +123,7 @@ export default function SitesPage() {
       setSelectedSite(null);
       fetchSites();
     } catch (err) {
-      alert(err instanceof Error ? err.message : '사이트 삭제에 실패했습니다.');
+      toast.error(err instanceof Error ? err.message : '사이트 삭제에 실패했습니다.');
     }
   };
 

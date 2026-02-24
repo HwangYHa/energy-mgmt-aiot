@@ -3,50 +3,121 @@ import { getToken } from 'next-auth/jwt';
 import { jwtVerify } from 'jose';
 import { securityHeadersMiddleware } from '@/lib/middleware/security-headers';
 import { verifyCsrfToken } from '@/lib/middleware/csrf';
+import {
+  checkRateLimit,
+  getAuthRateLimit,
+} from '@/lib/middleware/rate-limit';
+
+// ──────────────────────────────────────────────────────────────
+// 공개 경로 (인증 불필요)
+// ──────────────────────────────────────────────────────────────
+
+const PUBLIC_PREFIXES = [
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/api/auth',
+  '/api/security/csrf',
+  '/api/csp-report',
+  '/api/support',       // 고객 문의 접수 (비로그인 가능)
+  '/_next',
+  '/api/docs',
+  '/pricing',
+  '/features',
+  '/about',
+  '/legal',
+  '/faq',
+  '/solutions',
+  '/docs',
+  '/community',
+  '/support',
+  '/demo',
+  '/trial',
+];
+
+const EXACT_PUBLIC = ['/'];
+
+// Rate Limit이 강화되는 인증 관련 경로
+const AUTH_PATHS = [
+  '/api/auth/credentials/login',
+  '/api/auth/oauth',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password',
+];
+
+// ──────────────────────────────────────────────────────────────
+// IP 추출 헬퍼
+// ──────────────────────────────────────────────────────────────
+
+function getClientIp(request: NextRequest): string {
+  return (
+    request.headers.get('cf-connecting-ip') ||       // Cloudflare
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    '127.0.0.1'
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
+// Rate Limit 응답 헤더 추가
+// ──────────────────────────────────────────────────────────────
+
+function withRateLimitHeaders(
+  response: NextResponse,
+  limit: number,
+  remaining: number,
+  resetAt: Date
+): NextResponse {
+  response.headers.set('X-RateLimit-Limit', String(limit));
+  response.headers.set('X-RateLimit-Remaining', String(Math.max(0, remaining)));
+  response.headers.set('X-RateLimit-Reset', resetAt.toISOString());
+  return response;
+}
+
+// ──────────────────────────────────────────────────────────────
+// 미들웨어 메인
+// ──────────────────────────────────────────────────────────────
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const method = request.method;
+  const ip = getClientIp(request);
 
-  // ✅ 인증 제외 경로 (public routes)
-  const publicRoutes = [
-    '/login',
-    '/register',
-    '/forgot-password',
-    '/api/auth',
-    '/api/security/csrf', // CSRF 토큰 발급 (회원가입 등 비로그인 상태에서도 필요)
-    '/api/csp-report',    // CSP 위반 리포트 (브라우저 자동 전송, 인증 불필요)
-    '/api/support',       // 고객 문의 접수 (비로그인 가능)
-    '/_next',
-    '/api/docs',
-    '/pricing',
-    '/features',
-    '/about',
-    '/legal',        // 개인정보처리방침, 이용약관, 보안정책
-    '/faq',          // FAQ
-    '/solutions',    // 솔루션 (제조업, 빌딩, 데이터센터, 산업단지)
-    '/docs',         // 문서
-    '/community',    // 커뮤니티
-    '/support',      // 고객센터
-    '/demo',         // 데모
-    '/trial',        // 무료 체험
-  ];
+  // ── 1. 공개 경로 처리 ─────────────────────────────────────
+  const isPublic =
+    PUBLIC_PREFIXES.some(p => pathname.startsWith(p)) ||
+    EXACT_PUBLIC.includes(pathname);
 
-  // 정확히 매칭되는 공개 경로
-  const exactPublicRoutes = [
-    '/', // 랜딩 페이지
-  ];
+  if (isPublic) {
+    // 인증 경로는 강화 Rate Limit 적용 (로그인 브루트포스 방지)
+    if (AUTH_PATHS.some(p => pathname.startsWith(p)) && method === 'POST') {
+      const authLimit = getAuthRateLimit(ip);
+      const result = await checkRateLimit(authLimit);
 
-  const isPublicRoute =
-    publicRoutes.some(route => pathname.startsWith(route)) ||
-    exactPublicRoutes.includes(pathname);
+      if (!result.allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: '요청 횟수를 초과했습니다. 잠시 후 다시 시도해주세요.',
+            retryAfter: result.retryAfter,
+          },
+          {
+            status: 429,
+            headers: {
+              'Retry-After': String(result.retryAfter ?? 60),
+              'X-RateLimit-Limit': String(authLimit.limit),
+              'X-RateLimit-Remaining': '0',
+              'X-RateLimit-Reset': result.resetAt.toISOString(),
+            },
+          }
+        );
+      }
+    }
 
-  if (isPublicRoute) {
     return securityHeadersMiddleware(NextResponse.next());
   }
 
-  // ✅ NextAuth 토큰 검증 (Google OAuth 등)
-  // CRITICAL: 개발환경에서는 쿠키 이름이 다름 (__Secure- 접두사 없음)
+  // ── 2. 인증 검증 ──────────────────────────────────────────
   const cookieName =
     process.env.NODE_ENV === 'production'
       ? '__Secure-next-auth.session-token'
@@ -58,81 +129,162 @@ export async function middleware(request: NextRequest) {
     cookieName,
   });
 
-  // ✅ Naver OAuth 토큰 확인 (별도 JWT) - 서명 검증 포함
+  // Naver OAuth JWT 검증 및 페이로드 추출
   const naverToken = request.cookies.get('auth-token')?.value;
   let naverTokenValid = false;
-
+  let naverPayload: { tenantId?: string; apiRateLimit?: number } = {};
   if (naverToken) {
     try {
       const jwtSecret = new TextEncoder().encode(process.env.JWT_SECRET!);
-      await jwtVerify(naverToken, jwtSecret);
+      const { payload } = await jwtVerify(naverToken, jwtSecret);
       naverTokenValid = true;
+      naverPayload = payload as typeof naverPayload;
     } catch {
-      // 서명 검증 실패 (만료, 위변조 등)
       naverTokenValid = false;
     }
   }
 
-  // 둘 중 하나라도 유효하면 인증된 것으로 간주
   if (!token && !naverTokenValid) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('callbackUrl', request.url);
     return NextResponse.redirect(loginUrl);
   }
 
-  // 🔒 CSRF 토큰 검증 (POST, PUT, DELETE, PATCH 요청만)
-  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
-    // CSRF 토큰 발급 엔드포인트는 제외
-    if (pathname === '/api/security/csrf') {
-      return securityHeadersMiddleware(NextResponse.next());
-    }
+  // ── 3. API Rate Limiting (인증된 사용자) ─────────────────
+  if (pathname.startsWith('/api/')) {
+    // NextAuth 토큰 우선, 없으면 Naver JWT에서 tenantId 추출
+    const tenantId =
+      ((token as Record<string, unknown>)?.tenantId as string | undefined) ??
+      naverPayload.tenantId;
 
-    const csrfTokenFromHeader = request.headers.get('x-csrf-token');
-    const csrfTokenFromCookie = request.cookies.get('csrf-token')?.value;
+    // 테넌트 키 우선, 없으면 IP 키 사용
+    const rateLimitKey = tenantId
+      ? `ratelimit:api:tenant:${tenantId}`
+      : `ratelimit:api:ip:${ip}`;
 
-    // 토큰이 없거나 검증 실패 시
-    if (!csrfTokenFromHeader || !csrfTokenFromCookie) {
-      console.warn('[Security] CSRF token missing:', {
-        pathname,
-        method,
-        hasHeader: !!csrfTokenFromHeader,
-        hasCookie: !!csrfTokenFromCookie,
-      });
+    // 플랜별 실제 Rate Limit: JWT에 포함된 값 사용 (로그인 시점 기준)
+    // NextAuth JWT → token.apiRateLimit, Naver JWT → naverPayload.apiRateLimit
+    const planLimit =
+      ((token as Record<string, unknown>)?.apiRateLimit as number | undefined) ??
+      naverPayload.apiRateLimit;
+    const limit = tenantId ? (planLimit ?? 1000) : 100;
+    const result = await checkRateLimit({
+      key: rateLimitKey,
+      limit,
+      windowMs: 60 * 60 * 1000, // 1시간
+      message: '요청 한도를 초과했습니다.',
+    });
 
+    if (!result.allowed) {
       return NextResponse.json(
         {
-          error: 'CSRF 토큰 유효성 검사에 실패했습니다.',
-          code: 'CSRF_TOKEN_MISSING',
-          message: 'CSRF 토큰이 누락되었습니다. 페이지를 새로고침해주세요.',
+          success: false,
+          code: 'RATE_LIMIT_EXCEEDED',
+          error: `API 요청 한도(${limit}회/시간)를 초과했습니다.`,
+          retryAfter: result.retryAfter,
+          upgradeUrl: '/settings/subscription',
         },
-        { status: 403 }
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(result.retryAfter ?? 3600),
+            'X-RateLimit-Limit': String(limit),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': result.resetAt.toISOString(),
+          },
+        }
       );
     }
 
-    // Timing-safe 비교로 CSRF 토큰 검증
-    const isValid = verifyCsrfToken(csrfTokenFromHeader, csrfTokenFromCookie);
+    // 남은 요청 수를 헤더로 전달
+    const response = securityHeadersMiddleware(NextResponse.next());
+    withRateLimitHeaders(response, limit, result.remaining, result.resetAt);
+    // CSRF 검증 (POST/PUT/DELETE/PATCH)
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+      if (pathname !== '/api/security/csrf') {
+        const csrfHeader = request.headers.get('x-csrf-token');
+        const csrfCookie = request.cookies.get('csrf-token')?.value;
 
-    if (!isValid) {
-      console.error('[보안] CSRF 토큰 유효성 검사 실패:', {
-        pathname,
-        method,
-        userId: token?.id || 'unknown',
-        ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
-      });
+        if (!csrfHeader || !csrfCookie) {
+          return NextResponse.json(
+            {
+              error: 'CSRF 토큰이 누락되었습니다. 페이지를 새로고침해주세요.',
+              code: 'CSRF_TOKEN_MISSING',
+            },
+            { status: 403 }
+          );
+        }
 
-      return NextResponse.json(
-        {
-          error: 'CSRF 토큰 유효성 검사에 실패했습니다.',
-          code: 'CSRF_TOKEN_INVALID',
-          message: 'CSRF 토큰 검증에 실패했습니다. 페이지를 새로고침해주세요.',
-        },
-        { status: 403 }
-      );
+        if (!verifyCsrfToken(csrfHeader, csrfCookie)) {
+          return NextResponse.json(
+            {
+              error: 'CSRF 토큰 검증에 실패했습니다. 페이지를 새로고침해주세요.',
+              code: 'CSRF_TOKEN_INVALID',
+            },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
+    return response;
+  }
+
+  // ── 4. 온보딩 리다이렉트 (신규 사용자 → /onboarding) ────────
+  if (
+    method === 'GET' &&
+    !pathname.startsWith('/api/') &&
+    !pathname.startsWith('/onboarding') &&
+    !pathname.startsWith('/payment') &&
+    !pathname.startsWith('/settings') &&
+    !pathname.startsWith('/manual')
+  ) {
+    const onboardingCompleted =
+      (token as Record<string, unknown>)?.onboardingCompleted as boolean | undefined;
+    if (onboardingCompleted === false) {
+      return NextResponse.redirect(new URL('/onboarding', request.url));
     }
   }
 
-  let response = NextResponse.next();
-  return securityHeadersMiddleware(response);
+  // ── 5. 페이지 라우트 CSRF 처리 ──────────────────────────────
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+    if (pathname !== '/api/security/csrf') {
+      const csrfHeader = request.headers.get('x-csrf-token');
+      const csrfCookie = request.cookies.get('csrf-token')?.value;
+
+      if (!csrfHeader || !csrfCookie) {
+        console.warn('[Security] CSRF token missing:', { pathname, method });
+        return NextResponse.json(
+          {
+            error: 'CSRF 토큰 유효성 검사에 실패했습니다.',
+            code: 'CSRF_TOKEN_MISSING',
+            message: 'CSRF 토큰이 누락되었습니다. 페이지를 새로고침해주세요.',
+          },
+          { status: 403 }
+        );
+      }
+
+      const isValid = verifyCsrfToken(csrfHeader, csrfCookie);
+      if (!isValid) {
+        console.error('[Security] CSRF 검증 실패:', {
+          pathname,
+          method,
+          userId: (token as Record<string, unknown>)?.id ?? 'unknown',
+          ip,
+        });
+        return NextResponse.json(
+          {
+            error: 'CSRF 토큰 유효성 검사에 실패했습니다.',
+            code: 'CSRF_TOKEN_INVALID',
+            message: 'CSRF 토큰 검증에 실패했습니다. 페이지를 새로고침해주세요.',
+          },
+          { status: 403 }
+        );
+      }
+    }
+  }
+
+  return securityHeadersMiddleware(NextResponse.next());
 }
 
 export const config = {

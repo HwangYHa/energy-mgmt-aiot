@@ -48,6 +48,8 @@ module.exports = {
         'float': 'float 6s ease-in-out infinite',
         'glow': 'glow 2s ease-in-out infinite alternate',
         'shimmer': 'shimmer 2s linear infinite',
+        'slide-in-up': 'slideInUp 0.25s ease-out',
+        'fade-out-down': 'fadeOutDown 0.3s ease-in forwards',
       },
       keyframes: {
         float: {
@@ -61,6 +63,14 @@ module.exports = {
         shimmer: {
           '0%': { backgroundPosition: '-1000px 0' },
           '100%': { backgroundPosition: '1000px 0' },
+        },
+        slideInUp: {
+          '0%': { opacity: '0', transform: 'translateY(12px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        fadeOutDown: {
+          '0%': { opacity: '1', transform: 'translateY(0)' },
+          '100%': { opacity: '0', transform: 'translateY(8px)' },
         },
       },
     },

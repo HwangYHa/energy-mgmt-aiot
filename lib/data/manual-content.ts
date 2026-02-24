@@ -60,11 +60,11 @@ export const MANUAL_DATA: ManualData = {
         {
           id: 'overview',
           title: '시스템 개요',
-          description: 'EMS AIoT 시스템의 전체 구조와 주요 기능을 설명합니다.',
+          description: '탄소이음 시스템의 전체 구조와 주요 기능을 설명합니다.',
           body: [
             {
               type: 'p',
-              text: 'EMS AIoT는 AI 기반 에너지 관리 플랫폼으로, 제조업·빌딩·데이터센터를 위한 탄소중립 SaaS 솔루션입니다.',
+              text: '탄소이음은 에너지 데이터로 탄소중립을 실현하는 구독형 에너지 관리 SaaS 플랫폼입니다. 제조업·빌딩·데이터센터를 위한 AI 기반 에너지 관리 솔루션입니다.',
             },
             {
               type: 'list',

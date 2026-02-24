@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import {
   Server,
@@ -16,11 +16,11 @@ import {
  * 데이터센터의 냉각 및 전력 효율 최적화 솔루션
  */
 export const metadata = {
-  title: '데이터센터 에너지 관리 솔루션 - EnergyAI',
+  title: '데이터센터 에너지 관리 솔루션 - 탄소이음',
   description:
     '데이터센터의 PUE를 1.2 이하로 낮추고 냉각 효율을 극대화하는 AI 기반 솔루션. DCIM 통합, 전력 모니터링, 냉각 최적화.',
   openGraph: {
-    title: '데이터센터 에너지 관리 (DCIM) - EnergyAI',
+    title: '데이터센터 에너지 관리 (DCIM) - 탄소이음',
     description: 'AI로 PUE 1.2 이하 달성, 냉각 효율 극대화',
   },
 };

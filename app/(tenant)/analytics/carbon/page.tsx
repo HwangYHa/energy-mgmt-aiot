@@ -36,6 +36,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { generateDownloadFilename } from '@/lib/utils/filename';
+import { toast } from '@/lib/toast';
 
 /**
  * 탄소 배출 분석 대시보드
@@ -321,7 +322,7 @@ export default function CarbonAnalyticsPage() {
       a.click();
       window.URL.revokeObjectURL(url);
     } catch {
-      alert('CSV 생성 중 오류가 발생했습니다.');
+      toast.error('CSV 생성 중 오류가 발생했습니다.');
     }
   };
 
@@ -337,7 +338,25 @@ export default function CarbonAnalyticsPage() {
       a.click();
       window.URL.revokeObjectURL(url);
     } catch {
-      alert('JSON 내보내기 중 오류가 발생했습니다.');
+      toast.error('JSON 내보내기 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleExportCompliancePDF = async () => {
+    try {
+      toast.info?.('규제 리포트 PDF 생성 중...');
+      const response = await fetch(`/api/analytics/carbon/compliance-report/pdf?year=${year}`);
+      if (!response.ok) throw new Error('PDF 생성 실패');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = generateDownloadFilename('온실가스명세서', '', 'pdf');
+      a.click();
+      window.URL.revokeObjectURL(url);
+      toast.success('규제 리포트 PDF가 생성되었습니다.');
+    } catch {
+      toast.error('PDF 생성 중 오류가 발생했습니다.');
     }
   };
 
@@ -442,6 +461,16 @@ export default function CarbonAnalyticsPage() {
             JSON
           </button>
 
+          {/* 규제 리포트 PDF */}
+          <button
+            onClick={handleExportCompliancePDF}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-400 rounded-lg font-medium transition-colors text-sm"
+            title="K-MRV 온실가스 명세서 PDF (환경부 규제 대응)"
+          >
+            <Download className="w-4 h-4" />
+            규제 리포트 PDF
+          </button>
+
           {/* 새로고침 */}
           <button
             onClick={fetchCarbonData}
@@ -464,7 +493,7 @@ export default function CarbonAnalyticsPage() {
 
       {/* 주요 지표 (KPI Cards) */}
       {footprint && (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* 총 배출량 */}
           <div className="bg-slate-800/50 rounded-lg p-6 border-2 border-green-500 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/10 rounded-full -mr-16 -mt-16" />
@@ -645,7 +674,7 @@ export default function CarbonAnalyticsPage() {
         </ResponsiveContainer>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Scope 분석 */}
         <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
           <h2 className="text-xl font-bold mb-4">Scope별 배출 비율</h2>
@@ -745,7 +774,7 @@ export default function CarbonAnalyticsPage() {
       <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
         <h2 className="text-xl font-bold mb-4">배출원별 상세</h2>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="p-4 bg-red-900/20 border border-red-700 rounded">
             <h3 className="font-bold mb-2 text-red-400">
               Scope 1 (직접 배출)

@@ -1,0 +1,2 @@
+-- Migration placeholder: applied directly via prisma db push
+-- Extended models were added before migration tracking was established.

@@ -24,6 +24,7 @@ import {
   UserCog,
 } from 'lucide-react';
 import { apiGet, apiPost, apiPut, apiDelete, ApiError } from '@/lib/api/client';
+import { toast } from '@/lib/toast';
 
 interface User {
   id: string;
@@ -277,13 +278,13 @@ export default function UsersPage() {
         setSelectedUser(null);
         fetchUsers();
       } else {
-        alert(response.error || '사용자 삭제에 실패했습니다');
+        toast.error(response.error || '사용자 삭제에 실패했습니다');
       }
     } catch (err) {
       if (err instanceof ApiError) {
-        alert(err.message);
+        toast.error(err.message);
       } else {
-        alert('네트워크 오류가 발생했습니다');
+        toast.error('네트워크 오류가 발생했습니다');
       }
     } finally {
       setActionLoading(false);

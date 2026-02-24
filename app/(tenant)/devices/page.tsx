@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchWithCsrf } from '@/hooks/use-csrf';
+import { toast } from '@/lib/toast';
 
 // Types
 interface Device {
@@ -154,7 +155,7 @@ function DevicesPageContent() {
       setSelectedDevice(null);
       fetchDevices();
     } catch (err) {
-      alert(err instanceof Error ? err.message : '설비 삭제에 실패했습니다.');
+      toast.error(err instanceof Error ? err.message : '설비 삭제에 실패했습니다.');
     }
   };
 

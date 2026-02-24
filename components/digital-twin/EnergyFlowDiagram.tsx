@@ -1,7 +1,17 @@
 'use client';
 
-import { Equipment } from './DigitalTwinDashboard';
 import { Zap, Wind, Droplets, Server } from 'lucide-react';
+
+interface Equipment {
+  id: string;
+  name: string;
+  type: string;
+  status: 'online' | 'warning' | 'offline';
+  power: number;
+  efficiency: number;
+  temperature?: number;
+  lastUpdate: string;
+}
 
 interface EnergyFlowDiagramProps {
   equipment: Equipment[];

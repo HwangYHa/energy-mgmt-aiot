@@ -1,7 +1,17 @@
 'use client';
 
-import { Equipment } from './DigitalTwinDashboard';
 import { Activity, AlertTriangle, XCircle, Zap, Thermometer } from 'lucide-react';
+
+interface Equipment {
+  id: string;
+  name: string;
+  type: string;
+  status: 'online' | 'warning' | 'offline';
+  power: number;
+  efficiency: number;
+  temperature?: number;
+  lastUpdate: string;
+}
 
 interface EquipmentStatusCardProps {
   equipment: Equipment;

@@ -1,11 +1,11 @@
-import { Shield } from 'lucide-react';
+﻿import { Shield } from 'lucide-react';
 
 /**
  * 개인정보 처리방침 페이지
  */
 export const metadata = {
-  title: '개인정보 처리방침 - EnergyAI',
-  description: 'EnergyAI 개인정보 처리방침',
+  title: '개인정보 처리방침 - 탄소이음',
+  description: '탄소이음 개인정보 처리방침',
 };
 
 export default function PrivacyPolicyPage() {
@@ -26,7 +26,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-2xl font-bold text-white mb-4">1. 수집하는 개인정보</h2>
             <div className="text-slate-300 space-y-3">
-              <p>EnergyAI는 다음과 같은 개인정보를 수집합니다:</p>
+              <p>탄소이음는 다음과 같은 개인정보를 수집합니다:</p>
               <ul className="list-disc list-inside space-y-2 ml-4">
                 <li>필수 정보: 이메일, 이름, 회사명</li>
                 <li>선택 정보: 전화번호, 부서, 직책</li>
@@ -84,7 +84,7 @@ export default function PrivacyPolicyPage() {
                 <li>개인정보 삭제 요구</li>
                 <li>개인정보 처리 정지 요구</li>
               </ul>
-              <p className="mt-4">권리 행사는 설정 페이지 또는 support@energyai.io로 요청 가능합니다.</p>
+              <p className="mt-4">권리 행사는 설정 페이지 또는 support@탄소이음.io로 요청 가능합니다.</p>
             </div>
           </section>
 
@@ -105,7 +105,7 @@ export default function PrivacyPolicyPage() {
             <div className="text-slate-300">
               <p>개인정보 관련 문의사항이 있으시면 아래로 연락주세요:</p>
               <ul className="mt-4 space-y-2">
-                <li>이메일: privacy@energyai.io</li>
+                <li>이메일: privacy@탄소이음.io</li>
                 <li>전화: 1588-1234</li>
                 <li>주소: 서울특별시 강남구 테헤란로 123</li>
               </ul>

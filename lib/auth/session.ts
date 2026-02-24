@@ -220,6 +220,29 @@ export const authOptions: NextAuthOptions = {
         token.role = (user as any).role;
         token.email = user.email || '';
         token.name = user.name || '';
+
+        // 구독 플랜 apiRateLimit + 온보딩 완료 여부를 JWT에 포함
+        const tid = (user as any).tenantId as string | undefined;
+        if (tid) {
+          try {
+            const [sub, tenant] = await Promise.all([
+              prisma.subscription.findFirst({
+                where: { tenantId: tid, status: { in: ['ACTIVE', 'EXPIRE_SOON'] } },
+                select: { plan: { select: { apiRateLimit: true } } },
+                orderBy: { startDate: 'desc' },
+              }),
+              prisma.tenant.findUnique({
+                where: { id: tid },
+                select: { onboardingCompletedAt: true },
+              }),
+            ]);
+            token.apiRateLimit = sub?.plan.apiRateLimit ?? 1000;
+            token.onboardingCompleted = !!tenant?.onboardingCompletedAt;
+          } catch {
+            token.apiRateLimit = 1000;
+            token.onboardingCompleted = false;
+          }
+        }
       }
 
       if (account) {
@@ -335,5 +358,6 @@ declare module 'next-auth/jwt' {
     name: string;
     accessToken?: string;
     provider?: string;
+    apiRateLimit?: number;
   }
 }

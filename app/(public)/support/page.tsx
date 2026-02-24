@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { ContactForm } from '@/components/support/ContactForm';
 import {
@@ -18,7 +18,7 @@ import {
  * 고객 지원 페이지
  */
 export const metadata = {
-  title: '고객 지원 - EnergyAI',
+  title: '고객 지원 - 탄소이음',
   description: '24/7 고객 지원 서비스',
 };
 
@@ -38,9 +38,9 @@ export default function SupportPage() {
       icon: Mail,
       title: '이메일 문의',
       description: '자세한 내용을 전달하고 싶으신가요?',
-      detail: 'support@energyai.io',
+      detail: 'support@탄소이음.io',
       action: '이메일 보내기',
-      href: 'mailto:support@energyai.io',
+      href: 'mailto:support@탄소이음.io',
       color: 'text-blue-400',
       bgColor: 'bg-blue-500/10',
     },

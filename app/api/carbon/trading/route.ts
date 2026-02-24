@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { verifyAuth } from '@/lib/auth/verify';
+import { requireFeature } from '@/lib/auth/subscription';
 
 // K-ETS 참고 시장 가격 (환경변수 미설정 시 기본값)
 const MARKET_PRICE = Number(process.env.KETS_MARKET_PRICE ?? 8500);
@@ -15,6 +16,9 @@ export async function GET(request: NextRequest) {
     if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const [, subErr] = await requireFeature(auth.tenantId, 'analytics_carbon_trading');
+    if (subErr) return subErr;
 
     const [credits, recentTrades] = await Promise.all([
       prisma.carbonCredit.findMany({

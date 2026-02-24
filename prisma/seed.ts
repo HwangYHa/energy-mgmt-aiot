@@ -466,6 +466,43 @@ async function main() {
       displayOrder: 2,
       minRole: 'super_admin' as UserRole,
     },
+    {
+      code: 'admin_traffic',
+      name: '트래픽 관리',
+      icon: 'Activity',
+      path: '/admin/traffic',
+      menuGroupCode: 'admin',
+      displayOrder: 3,
+      minRole: 'tenant_admin' as UserRole,
+    },
+    {
+      code: 'admin_support',
+      name: '지원 관리',
+      icon: 'MessageSquare',
+      path: '/admin/support',
+      menuGroupCode: 'admin',
+      displayOrder: 4,
+      minRole: 'tenant_admin' as UserRole,
+    },
+    {
+      code: 'admin_partners',
+      name: '파트너 포털',
+      icon: 'Link2',
+      path: '/admin/partners',
+      menuGroupCode: 'admin',
+      displayOrder: 5,
+      minRole: 'super_admin' as UserRole,
+      badgeType: 'new' as any,
+    },
+    {
+      code: 'settings_support',
+      name: '문의/피드백',
+      icon: 'MessageSquare',
+      path: '/settings/support',
+      menuGroupCode: 'settings',
+      displayOrder: 7,
+      minRole: 'viewer' as UserRole,
+    },
   ];
 
   console.log('Creating menu items...');
@@ -485,6 +522,87 @@ async function main() {
         ...itemData,
         menuGroupId: menuGroup?.id,
       } as any,
+    });
+  }
+
+  // ========================================
+  // 3. 구독 플랜 생성 (Plan)
+  // ========================================
+
+  console.log('Creating subscription plans...');
+
+  const plans = [
+    {
+      id: 'plan_trial',
+      name: '체험 (Trial)',
+      tier: 'trial' as const,
+      monthlyPrice: 0,
+      yearlyPrice: 0,
+      setupFee: 0,
+      maxSites: 1,
+      maxDevices: 10,
+      maxUsers: 2,
+      dataRetentionDays: 30,
+      apiRateLimit: 100,
+      features: { dashboard: true, monitoring: true },
+      isActive: true,
+      isPublic: true,
+    },
+    {
+      id: 'plan_basic',
+      name: '기본 (Basic)',
+      tier: 'basic' as const,
+      monthlyPrice: 99000,
+      yearlyPrice: 990000,
+      setupFee: 0,
+      maxSites: 3,
+      maxDevices: 50,
+      maxUsers: 10,
+      dataRetentionDays: 90,
+      apiRateLimit: 500,
+      features: { dashboard: true, monitoring: true, analytics: true, reports: true },
+      isActive: true,
+      isPublic: true,
+    },
+    {
+      id: 'plan_pro',
+      name: '전문 (Pro)',
+      tier: 'pro' as const,
+      monthlyPrice: 299000,
+      yearlyPrice: 2990000,
+      setupFee: 0,
+      maxSites: 10,
+      maxDevices: 200,
+      maxUsers: 30,
+      dataRetentionDays: 365,
+      apiRateLimit: 2000,
+      features: { dashboard: true, monitoring: true, analytics: true, reports: true, ai: true, carbon: true, digital_twin: true },
+      isActive: true,
+      isPublic: true,
+    },
+    {
+      id: 'plan_enterprise',
+      name: '기업 (Enterprise)',
+      tier: 'enterprise' as const,
+      monthlyPrice: null,
+      yearlyPrice: null,
+      setupFee: 0,
+      maxSites: null,
+      maxDevices: null,
+      maxUsers: null,
+      dataRetentionDays: 1095,
+      apiRateLimit: 10000,
+      features: { all: true },
+      isActive: true,
+      isPublic: false,
+    },
+  ];
+
+  for (const plan of plans) {
+    await prisma.plan.upsert({
+      where: { id: plan.id },
+      update: plan as any,
+      create: plan as any,
     });
   }
 

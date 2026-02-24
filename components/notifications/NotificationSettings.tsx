@@ -5,6 +5,7 @@ import { Plus, Loader2 } from 'lucide-react';
 import { NotificationRuleCard } from './NotificationRuleCard';
 import { NotificationLogList } from './NotificationLogList';
 import { apiPost } from '@/lib/api/client';
+import { toast } from '@/lib/toast';
 
 interface NotificationRule {
   id: string;
@@ -60,7 +61,7 @@ export function NotificationSettings({ initialRules }: Props) {
         setRules((prev) => [...prev, res.data as NotificationRule]);
       }
     } catch {
-      alert('알림 규칙 생성에 실패했습니다. 다시 시도해주세요.');
+      toast.error('알림 규칙 생성에 실패했습니다. 다시 시도해주세요.');
     } finally {
       setCreating(false);
     }

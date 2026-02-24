@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
+import ToastContainer from '@/components/ui/ToastContainer';
 import { cn } from '@/lib/utils';
 
 export default function TenantLayout({
@@ -68,6 +69,9 @@ export default function TenantLayout({
           {children}
         </main>
       </div>
+
+      {/* 전역 Toast 알림 */}
+      <ToastContainer />
     </div>
   );
 }

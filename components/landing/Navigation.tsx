@@ -84,7 +84,7 @@ export function Navigation() {
               <div className="absolute inset-0 bg-emerald-400 blur-xl opacity-20 group-hover:opacity-40 transition-opacity" />
             </div>
             <span className="font-bold text-xl text-white">
-              Energy<span className="text-emerald-400">AI</span>
+              탄소<span className="text-emerald-400">이음</span>
             </span>
           </Link>
 

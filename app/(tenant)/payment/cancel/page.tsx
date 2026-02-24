@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { XCircle, ArrowLeft, RefreshCw } from 'lucide-react';
 
@@ -6,7 +6,7 @@ import { XCircle, ArrowLeft, RefreshCw } from 'lucide-react';
  * 결제 취소 페이지
  */
 export const metadata = {
-  title: '결제 취소 - EnergyAI',
+  title: '결제 취소 - 탄소이음',
   description: '결제가 취소되었습니다.',
 };
 

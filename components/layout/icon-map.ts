@@ -28,6 +28,13 @@ import {
   LayoutGrid,
   AlertTriangle,
   FileBarChart,
+  Router,
+  Network,
+  HardDrive,
+  Server,
+  Wifi,
+  MessageSquare,
+  Link2,
 } from 'lucide-react';
 
 export const iconMap: Record<string, any> = {
@@ -60,6 +67,13 @@ export const iconMap: Record<string, any> = {
   LayoutGrid,
   AlertTriangle,
   FileBarChart,
+  Router,
+  Network,
+  HardDrive,
+  Server,
+  Wifi,
+  MessageSquare,
+  Link2,
   // Aliases for compatibility
   Gauge: Activity,
   Building: Building2,
@@ -72,6 +86,5 @@ export const iconMap: Record<string, any> = {
   Layers: BarChart3,
   FileSearch: Shield,
   History: Activity,
-  MessageSquare: Bell,
   Plug: Settings,
 };

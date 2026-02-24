@@ -1,0 +1,2 @@
+-- Migration placeholder: applied directly via prisma db push
+-- CarbonCredit and CarbonTrade models were added before migration tracking was established.
