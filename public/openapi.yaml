@@ -1,0 +1,830 @@
+openapi: 3.0.3
+info:
+  title: 탄소이음 EMS API
+  description: |
+    탄소이음(Carboneum) 에너지 관리 시스템 공개 API.
+    멀티테넌트 에너지 데이터 수집, 탄소 배출량 계산, 실시간 모니터링을 제공합니다.
+
+    ## 인증
+    모든 API 요청에는 `Authorization: Bearer {API_KEY}` 헤더가 필요합니다.
+    API 키는 **설정 → API 키 관리** 메뉴에서 발급받을 수 있습니다.
+
+    ## Rate Limit
+    | 플랜 | 한도 |
+    |------|------|
+    | Trial | 100회/시간 |
+    | Basic | 500회/시간 |
+    | Pro | 2,000회/시간 |
+    | Enterprise | 10,000회/시간 |
+
+    Rate Limit 초과 시 `429 Too Many Requests` 응답이 반환됩니다.
+    응답 헤더 `X-RateLimit-Remaining`, `X-RateLimit-Reset`으로 잔여 횟수를 확인하세요.
+  version: 1.0.0
+  contact:
+    name: 탄소이음 기술지원
+    email: support@carboneum.kr
+    url: https://carboneum.kr/support
+  license:
+    name: 상업용 라이선스
+    url: https://carboneum.kr/legal/terms
+
+servers:
+  - url: https://carboneum.kr/api
+    description: 프로덕션 서버
+  - url: http://localhost:3000/api
+    description: 로컬 개발 서버
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: 측정값
+    description: 에너지 측정값 수집 및 조회
+  - name: 센서
+    description: 센서 목록 및 상태
+  - name: 디바이스
+    description: 디바이스 관리
+  - name: 사이트
+    description: 사업장(사이트) 관리
+  - name: 탄소
+    description: 탄소 배출량 계산 및 조회
+  - name: AI
+    description: AI 이상 탐지, 예측, 최적화
+  - name: 게이트웨이
+    description: Edge 게이트웨이 데이터 수신
+
+paths:
+  # ─────────────────────────────────────────────────────
+  # 측정값
+  # ─────────────────────────────────────────────────────
+  /measurements:
+    get:
+      tags: [측정값]
+      summary: 측정값 목록 조회
+      description: 특정 센서 또는 사이트의 에너지 측정값을 시간 범위로 조회합니다.
+      parameters:
+        - name: sensorId
+          in: query
+          description: 센서 ID (sensorId 또는 siteId 중 하나 필수)
+          schema:
+            type: string
+        - name: siteId
+          in: query
+          description: 사이트 ID
+          schema:
+            type: string
+        - name: from
+          in: query
+          description: 시작 시간 (ISO 8601)
+          required: true
+          schema:
+            type: string
+            format: date-time
+            example: "2026-01-01T00:00:00Z"
+        - name: to
+          in: query
+          description: 종료 시간 (ISO 8601)
+          required: true
+          schema:
+            type: string
+            format: date-time
+            example: "2026-01-31T23:59:59Z"
+        - name: interval
+          in: query
+          description: 집계 간격
+          schema:
+            type: string
+            enum: [raw, 1m, 5m, 15m, 1h, 1d]
+            default: raw
+        - name: limit
+          in: query
+          description: 최대 반환 건수 (최대 10,000)
+          schema:
+            type: integer
+            default: 1000
+            maximum: 10000
+      responses:
+        '200':
+          description: 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeasurementListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /measurements/batch:
+    post:
+      tags: [측정값]
+      summary: 측정값 벌크 저장
+      description: 여러 센서의 측정값을 한 번에 저장합니다. 게이트웨이 데이터 수집에 사용됩니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [readings]
+              properties:
+                readings:
+                  type: array
+                  description: 측정값 배열 (최대 1,000개)
+                  maxItems: 1000
+                  items:
+                    $ref: '#/components/schemas/MeasurementInput'
+      responses:
+        '200':
+          description: 저장 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      saved:
+                        type: integer
+                        description: 저장된 측정값 수
+                      duplicates:
+                        type: integer
+                        description: 중복으로 무시된 수
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ─────────────────────────────────────────────────────
+  # 센서
+  # ─────────────────────────────────────────────────────
+  /sensors:
+    get:
+      tags: [센서]
+      summary: 센서 목록 조회
+      parameters:
+        - name: siteId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [online, offline, error, maintenance]
+        - name: sensorType
+          in: query
+          schema:
+            type: string
+            enum: [power_meter, energy_meter, temperature, humidity, pressure, flow_meter, co2, other]
+      responses:
+        '200':
+          description: 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SensorListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /sensors/{sensorId}:
+    get:
+      tags: [센서]
+      summary: 센서 상세 조회
+      parameters:
+        - name: sensorId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SensorDetailResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ─────────────────────────────────────────────────────
+  # 사이트
+  # ─────────────────────────────────────────────────────
+  /sites:
+    get:
+      tags: [사이트]
+      summary: 사업장 목록 조회
+      responses:
+        '200':
+          description: 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ─────────────────────────────────────────────────────
+  # 탄소 배출량
+  # ─────────────────────────────────────────────────────
+  /analytics/carbon:
+    get:
+      tags: [탄소]
+      summary: 탄소 배출량 조회
+      description: Scope 1/2/3 탄소 배출량을 기간별로 조회합니다.
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+            example: 2026
+        - name: siteId
+          in: query
+          schema:
+            type: string
+        - name: scope
+          in: query
+          description: 특정 Scope만 조회 (미지정 시 전체)
+          schema:
+            type: string
+            enum: [scope1, scope2, scope3]
+      responses:
+        '200':
+          description: 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CarbonSummaryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /analytics/carbon/export:
+    get:
+      tags: [탄소]
+      summary: 탄소 배출량 데이터 내보내기
+      description: 탄소 배출량 데이터를 CSV 또는 JSON 형식으로 내보냅니다.
+      parameters:
+        - name: format
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [csv, json]
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 내보내기 성공
+          content:
+            text/csv:
+              schema:
+                type: string
+            application/json:
+              schema:
+                type: object
+
+  # ─────────────────────────────────────────────────────
+  # AI
+  # ─────────────────────────────────────────────────────
+  /ai/anomaly:
+    post:
+      tags: [AI]
+      summary: 이상 탐지
+      description: 측정값 배열에서 통계적 이상값(Z-score + IQR)을 탐지합니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sensorId, values]
+              properties:
+                sensorId:
+                  type: string
+                values:
+                  type: array
+                  items:
+                    type: number
+                  description: 분석할 측정값 배열 (최소 10개)
+                  minItems: 10
+                sensitivity:
+                  type: number
+                  description: 탐지 민감도 (0=낮음, 1=높음)
+                  minimum: 0
+                  maximum: 1
+                  default: 0.5
+      responses:
+        '200':
+          description: 탐지 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnomalyResponse'
+
+  /ai/forecast:
+    post:
+      tags: [AI]
+      summary: 에너지 수요 예측
+      description: 과거 측정값을 기반으로 향후 에너지 수요를 예측합니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sensorId]
+              properties:
+                sensorId:
+                  type: string
+                horizon:
+                  type: integer
+                  description: 예측 시간 수 (기본 24시간)
+                  default: 24
+                  maximum: 168
+      responses:
+        '200':
+          description: 예측 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForecastResponse'
+
+  /ai/optimize:
+    post:
+      tags: [AI]
+      summary: 에너지 최적화 추천
+      description: 소비 패턴을 분석하여 에너지 절감 추천 규칙을 생성합니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [siteId]
+              properties:
+                siteId:
+                  type: string
+      responses:
+        '200':
+          description: 추천 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OptimizeResponse'
+
+  # ─────────────────────────────────────────────────────
+  # 게이트웨이
+  # ─────────────────────────────────────────────────────
+  /gateways/{gatewayId}/data:
+    post:
+      tags: [게이트웨이]
+      summary: 게이트웨이 측정값 수신
+      description: |
+        Edge 게이트웨이에서 수집한 측정값을 서버로 전송합니다.
+
+        **인증 방식 (택 1)**
+        - `Authorization: Bearer {API_KEY}` 헤더
+        - `X-Gateway-Token: {serial}:{secret}` 헤더
+      security:
+        - BearerAuth: []
+        - GatewayToken: []
+      parameters:
+        - name: gatewayId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GatewayPayload'
+      responses:
+        '200':
+          description: 수신 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      saved:
+                        type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+# ─────────────────────────────────────────────────────
+# 컴포넌트
+# ─────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: API 키 (설정 → API 키 관리에서 발급)
+    GatewayToken:
+      type: apiKey
+      in: header
+      name: X-Gateway-Token
+      description: 게이트웨이 토큰 ({serial}:{secret} 형식)
+
+  schemas:
+    # ── 공통 ──────────────────────────────────────────
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        error:
+          type: string
+        code:
+          type: string
+
+    Measurement:
+      type: object
+      properties:
+        id:
+          type: string
+        sensorId:
+          type: string
+        value:
+          type: number
+        unit:
+          type: string
+          example: kW
+        time:
+          type: string
+          format: date-time
+        quality:
+          type: string
+          enum: [good, uncertain, bad]
+
+    MeasurementInput:
+      type: object
+      required: [sensorId, value, time]
+      properties:
+        sensorId:
+          type: string
+        value:
+          type: number
+        unit:
+          type: string
+          default: kW
+        time:
+          type: string
+          format: date-time
+        quality:
+          type: string
+          enum: [good, uncertain, bad]
+          default: good
+
+    MeasurementListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                measurements:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Measurement'
+                total:
+                  type: integer
+                from:
+                  type: string
+                  format: date-time
+                to:
+                  type: string
+                  format: date-time
+
+    Sensor:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+          nullable: true
+        sensorType:
+          type: string
+        unit:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [online, offline, error, maintenance]
+        lastValue:
+          type: number
+          nullable: true
+        lastSeenAt:
+          type: string
+          format: date-time
+          nullable: true
+        quality:
+          type: string
+          enum: [good, uncertain, bad]
+
+    SensorListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                sensors:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Sensor'
+                total:
+                  type: integer
+
+    SensorDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Sensor'
+
+    Site:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+          nullable: true
+        industryType:
+          type: string
+          enum: [manufacturing, building, industrial_complex, datacenter, other]
+        isActive:
+          type: boolean
+        timezone:
+          type: string
+          example: Asia/Seoul
+
+    SiteListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                sites:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Site'
+
+    CarbonSummaryResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                year:
+                  type: integer
+                scope1:
+                  type: number
+                  description: 직접 배출량 (tCO₂eq)
+                scope2:
+                  type: number
+                  description: 간접 배출량 — 전력 (tCO₂eq)
+                scope3:
+                  type: number
+                  description: 기타 간접 배출량 (tCO₂eq)
+                total:
+                  type: number
+                  description: 총 배출량 (tCO₂eq)
+                unit:
+                  type: string
+                  example: tCO2eq
+
+    AnomalyResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                anomalies:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      index:
+                        type: integer
+                      value:
+                        type: number
+                      zScore:
+                        type: number
+                      type:
+                        type: string
+                        enum: [high, low]
+                method:
+                  type: string
+                  example: zscore_iqr
+                threshold:
+                  type: number
+
+    ForecastResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                forecasts:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      time:
+                        type: string
+                        format: date-time
+                      value:
+                        type: number
+                      lower:
+                        type: number
+                        description: 95% 신뢰 하한
+                      upper:
+                        type: number
+                        description: 95% 신뢰 상한
+
+    OptimizeResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                recommendations:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        enum: [peak_shift, standby_reduction, weekend_schedule, high_variance]
+                      title:
+                        type: string
+                      description:
+                        type: string
+                      estimatedSavings:
+                        type: number
+                        description: 예상 절감액 (원/월)
+                      priority:
+                        type: string
+                        enum: [high, medium, low]
+
+    GatewayPayload:
+      type: object
+      required: [readings]
+      properties:
+        gatewaySerial:
+          type: string
+          description: 게이트웨이 시리얼 번호
+        timestamp:
+          type: string
+          format: date-time
+          description: 데이터 수집 시각
+        readings:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required: [sensorId, value]
+            properties:
+              sensorId:
+                type: string
+              value:
+                type: number
+              unit:
+                type: string
+                default: kW
+              quality:
+                type: string
+                enum: [good, uncertain, bad]
+                default: good
+              time:
+                type: string
+                format: date-time
+                description: 개별 측정 시각 (미지정 시 timestamp 사용)
+
+  responses:
+    Unauthorized:
+      description: 인증 실패
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: 인증이 필요합니다.
+              code:
+                type: string
+                example: AUTH_REQUIRED
+
+    ValidationError:
+      description: 요청 유효성 검사 실패
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+              code:
+                type: string
+                example: VALIDATION_ERROR
+
+    NotFound:
+      description: 리소스를 찾을 수 없음
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: 요청한 리소스를 찾을 수 없습니다.
+              code:
+                type: string
+                example: NOT_FOUND
+
+    RateLimitExceeded:
+      description: API 호출 한도 초과
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: 재시도까지 대기 시간 (초)
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: string
+            format: date-time
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              error:
+                type: string
+                example: API 요청 한도를 초과했습니다.
+              code:
+                type: string
+                example: RATE_LIMIT_EXCEEDED
+              retryAfter:
+                type: integer
+              upgradeUrl:
+                type: string
+                example: /settings/subscription

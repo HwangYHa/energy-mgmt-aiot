@@ -16,15 +16,25 @@ import { Redis } from '@upstash/redis';
 let redis: Redis | null = null;
 
 try {
-  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-    redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    });
+  const _url   = process.env.UPSTASH_REDIS_URL   ?? '';
+  const _token = process.env.UPSTASH_REDIS_TOKEN ?? '';
+  // 플레이스홀더 URL 필터링 (에러 스팸 방지)
+  const _valid =
+    _url.startsWith('https://') &&
+    !_url.includes('your-') &&
+    !_url.includes('example') &&
+    _token.length > 10 &&
+    !_token.includes('your-');
+  if (_valid) {
+    redis = new Redis({ url: _url, token: _token });
   }
 } catch (error) {
-  console.warn('Redis 연결 실패, 로컬 메모리 사용:', error instanceof Error ? error.message : 'unknown');
+  console.warn('[RateLimit] Redis 초기화 실패, 로컬 메모리 사용:', error instanceof Error ? error.message : 'unknown');
 }
+
+// EVAL(Lua) 권한 없는 Redis 인스턴스 대응 (Upstash 무료 플랜 등)
+// 최초 NOPERM 감지 시 false로 전환 → 이후 INCR+EXPIRE 폴백 사용
+let evalSupported = true;
 
 // ========================================
 // 로컬 메모리 폴백 (개발 환경용)
@@ -76,33 +86,51 @@ export async function checkRateLimit(config: RateLimitConfig): Promise<{
 
   try {
     if (redis) {
-      // Redis 사용
-      const count = await redis.incr(key);
+      const ttlSeconds = Math.ceil(windowMs / 1000);
+      let count: number;
 
-      if (count === 1) {
-        // 첫 요청이면 TTL 설정
-        await redis.expire(key, Math.ceil(windowMs / 1000));
+      if (evalSupported) {
+        try {
+          // Lua 스크립트로 원자적 INCR+EXPIRE
+          count = await redis.eval(
+            `local c = redis.call('INCR', KEYS[1])
+             if c == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+             return c`,
+            [key],
+            [ttlSeconds]
+          ) as number;
+        } catch (evalErr) {
+          const msg = evalErr instanceof Error ? evalErr.message : String(evalErr);
+          if (msg.includes('NOPERM') || msg.includes('no permissions') || msg.includes('eval')) {
+            // 최초 1회만 경고 출력 후 플래그 전환
+            evalSupported = false;
+            console.warn('[RateLimit] Redis EVAL 권한 없음 — INCR 폴백으로 전환 (비원자적, 기능 정상)');
+            count = await redis.incr(key) as number;
+            if (count === 1) await redis.expire(key, ttlSeconds);
+          } else {
+            throw evalErr; // 다른 오류는 상위 catch로 전달
+          }
+        }
+      } else {
+        // EVAL 비지원 환경 — 단순 INCR+EXPIRE
+        count = await redis.incr(key) as number;
+        if (count === 1) await redis.expire(key, ttlSeconds);
       }
 
-      // 소수 자릿수 제거
-      const requests = Math.min(count, limit + 10);
-
-      if (requests > limit) {
-        const ttl = await redis.ttl(key);
-        const resetAt = new Date(now + (ttl ?? windowMs));
-        const retryAfter = Math.ceil(((ttl ?? 0) * 1000) / 1000);
-
+      if (count > limit) {
+        const remainingTtl = await redis.ttl(key);
+        const resetAt = new Date(now + Math.max(0, remainingTtl ?? ttlSeconds) * 1000);
         return {
           allowed: false,
           remaining: 0,
           resetAt,
-          retryAfter,
+          retryAfter: Math.ceil(Math.max(0, remainingTtl ?? ttlSeconds)),
         };
       }
 
       return {
         allowed: true,
-        remaining: limit - requests,
+        remaining: limit - count,
         resetAt: new Date(now + windowMs),
       };
     } else {

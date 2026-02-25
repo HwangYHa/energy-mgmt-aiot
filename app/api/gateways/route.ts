@@ -22,6 +22,7 @@ import {
   formatZodErrors,
 } from '@/lib/api/response';
 import { UserRole } from '@/lib/constants/roles';
+import { checkPlanLimit } from '@/lib/middleware/plan-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -121,6 +122,10 @@ export async function POST(request: NextRequest) {
     if (!requireRoleOrHigher(auth, 'site_manager' as UserRole)) {
       return forbiddenResponse();
     }
+
+    // ✅ 플랜 한도 확인 (게이트웨이 수 제한)
+    const limitErr = await checkPlanLimit(auth.tenantId, 'gateway');
+    if (limitErr) return limitErr;
 
     const body = await request.json();
     const parsed = createGatewaySchema.safeParse(body);

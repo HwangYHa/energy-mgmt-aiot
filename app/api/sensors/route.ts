@@ -19,6 +19,7 @@ import {
   serverErrorResponse,
   formatZodErrors,
 } from '@/lib/api/response';
+import { checkPlanLimit } from '@/lib/middleware/plan-limit';
 
 const createSensorSchema = z.object({
   deviceId: z.string().uuid(),
@@ -89,6 +90,10 @@ export async function POST(request: NextRequest) {
     if (!requireRoleOrHigher(auth, 'operator' as UserRole)) {
       return forbiddenResponse();
     }
+
+    // ✅ 플랜 한도 확인 (센서 수 제한)
+    const limitErr = await checkPlanLimit(auth.tenantId, 'sensor');
+    if (limitErr) return limitErr;
 
     const body = await request.json();
     const parsed = createSensorSchema.safeParse(body);

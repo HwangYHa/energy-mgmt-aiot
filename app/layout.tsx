@@ -112,6 +112,32 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
+        {/* PWA 서비스워커 등록 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then(function(reg) {
+        reg.addEventListener('updatefound', function() {
+          var newSW = reg.installing;
+          if (newSW) {
+            newSW.addEventListener('statechange', function() {
+              if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+                // 새 버전 감지 — 사용자에게 새로고침 안내는 ToastContainer에서 처리
+                window.dispatchEvent(new CustomEvent('sw-update-available'));
+              }
+            });
+          }
+        });
+      })
+      .catch(function(err) { console.warn('[SW] 등록 실패:', err); });
+  });
+}
+            `.trim(),
+          }}
+        />
       </head>
       <body className="bg-dark-bg text-white antialiased">
         <SessionProvider>

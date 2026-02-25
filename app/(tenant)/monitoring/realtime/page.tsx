@@ -19,6 +19,8 @@ import {
   Signal,
   Eye,
 } from 'lucide-react';
+import { useRealtime } from '@/hooks/use-realtime';
+import { useRealtimeStore } from '@/lib/stores/realtime.store';
 
 interface DeviceItem {
   id: string;
@@ -100,6 +102,11 @@ export default function RealtimeDashboardPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // SSE 단일 연결 (Zustand) — 탭 전환 시에도 연결 유지
+  const { status: sseStatus, isConnected: sseConnected } = useRealtime();
+  // 센서 실시간 값 오버레이: SSE 수신값이 있으면 API 값 대신 사용
+  const sseReadings = useRealtimeStore(s => s.readings);
+
   const fetchData = useCallback(async () => {
     try {
       const res = await fetch('/api/monitoring/realtime');
@@ -170,6 +177,17 @@ export default function RealtimeDashboardPage() {
               <Activity className="w-6 h-6 text-cyan-400" />
             </div>
             실시간 모니터링
+            {/* SSE 연결 상태 뱃지 */}
+            <span className={`text-xs px-2.5 py-1 rounded-full font-normal border flex items-center gap-1.5 ${
+              sseConnected
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : sseStatus === 'connecting'
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                : 'bg-slate-700/50 border-slate-600 text-slate-400'
+            }`}>
+              <Radio className={`w-3 h-3 ${sseConnected ? 'animate-pulse' : ''}`} />
+              {sseConnected ? 'SSE 연결됨' : sseStatus === 'connecting' ? '연결 중...' : 'SSE 대기'}
+            </span>
           </h1>
           <p className="text-slate-400 text-sm mt-1">
             설비·센서 상태 및 측정값 실시간 모니터링
@@ -311,7 +329,11 @@ export default function RealtimeDashboardPage() {
               const cfg = (STATUS_CONFIG[sensor.status] || STATUS_CONFIG.offline) as DeviceStatusCfg;
               const SensorIcon = SENSOR_ICONS[sensor.sensorType] || Gauge;
               const isAnomaly = data?.anomalies.some((a) => a.sensorId === sensor.id);
-              const valuePercent = getValuePercent(sensor.lastValue, sensor.minRange, sensor.maxRange);
+              // SSE 실시간 값 우선 사용 (없으면 API lastValue fallback)
+              const sseReading = sseReadings[sensor.id];
+              const displayValue = sseReading?.value ?? sensor.lastValue;
+              const isLive = !!sseReading;
+              const valuePercent = getValuePercent(displayValue, sensor.minRange, sensor.maxRange);
 
               return (
                 <div
@@ -336,9 +358,14 @@ export default function RealtimeDashboardPage() {
                   {/* 값 표시 */}
                   <div className="text-center mb-3">
                     <div className={`text-3xl font-bold ${isAnomaly ? 'text-red-400' : 'text-white'}`}>
-                      {sensor.lastValue !== null ? sensor.lastValue.toFixed(1) : '--'}
+                      {displayValue !== null ? displayValue.toFixed(1) : '--'}
                     </div>
-                    <div className="text-xs text-slate-400">{sensor.unit || '-'}</div>
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span className="text-xs text-slate-400">{sensor.unit || '-'}</span>
+                      {isLive && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" title="SSE 실시간" />
+                      )}
+                    </div>
                   </div>
 
                   {/* 범위 게이지 */}

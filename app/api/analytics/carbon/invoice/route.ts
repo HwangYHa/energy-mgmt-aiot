@@ -7,20 +7,19 @@
  * 처리 흐름:
  *   1. 파일 수신 (multipart/form-data)
  *   2. 파일 타입별 사용량 파싱 (현재: CSV/XLSX 직접 파싱, PDF/이미지: 수동 입력 안내)
- *   3. EmissionsData 레코드 생성 (Scope 2 전력 또는 Scope 1 가스)
- *   4. 감사 로그 기록
+ *   3. CarbonCalculatorService.calculateFromInvoice() — 계산 + 저장 + AuditLog
+ *   4. 결과 반환
  */
 import { NextRequest } from 'next/server';
 import { verifyAuth } from '@/lib/auth/verify';
 import { requirePermission } from '@/lib/auth/permissions';
 import { successResponse, errorResponse } from '@/lib/api/response';
-import { prisma } from '@/lib/db/prisma';
-import { getActiveEngineVersion, findEmissionFactor } from '@/lib/carbon/engine';
+import { CarbonCalculatorService, type InvoiceType } from '@/lib/services/carbon-calculator.service';
 
 export const dynamic = 'force-dynamic';
 
 // 고지서 유형 추론
-function inferInvoiceType(filename: string): 'electricity' | 'gas' | 'unknown' {
+function inferInvoiceType(filename: string): InvoiceType {
   const lower = filename.toLowerCase();
   if (lower.includes('전기') || lower.includes('electric') || lower.includes('kepco') || lower.includes('한전')) {
     return 'electricity';
@@ -28,7 +27,7 @@ function inferInvoiceType(filename: string): 'electricity' | 'gas' | 'unknown' {
   if (lower.includes('가스') || lower.includes('gas') || lower.includes('도시')) {
     return 'gas';
   }
-  return 'unknown';
+  return 'electricity'; // 기본값: 전력
 }
 
 // CSV 간단 파싱 (kWh 또는 m³ 값 추출)
@@ -74,15 +73,15 @@ export async function POST(request: NextRequest) {
     return errorResponse('VALIDATION_ERROR', { details: { message: 'multipart/form-data 파싱 오류' } });
   }
 
-  const file = formData.get('file') as File | null;
-  const manualUsage = formData.get('usage') as string | null;
-  const manualUnit = formData.get('unit') as string | null;
+  const file         = formData.get('file') as File | null;
+  const manualUsage  = formData.get('usage') as string | null;
+  const manualUnit   = formData.get('unit') as string | null;
   const manualPeriod = formData.get('period') as string | null;
 
   if (!file) return errorResponse('VALIDATION_ERROR', { details: { message: '파일이 필요합니다' } });
 
-  const filename = file.name;
-  const mimeType = file.type;
+  const filename    = file.name;
+  const mimeType    = file.type;
   const invoiceType = inferInvoiceType(filename);
 
   // 파일 크기 제한 (10MB)
@@ -91,17 +90,17 @@ export async function POST(request: NextRequest) {
   }
 
   let parsedUsage: number | null = null;
-  let parsedUnit = 'kWh';
+  let parsedUnit   = 'kWh';
   let parsedPeriod = new Date().toISOString().slice(0, 7);
 
   // CSV/TXT 파싱 시도
   if (mimeType === 'text/csv' || filename.endsWith('.csv') || filename.endsWith('.txt')) {
     try {
-      const text = await file.text();
+      const text   = await file.text();
       const parsed = parseSimpleCsv(text);
       if (parsed) {
-        parsedUsage = parsed.usage;
-        parsedUnit = parsed.unit;
+        parsedUsage  = parsed.usage;
+        parsedUnit   = parsed.unit;
         parsedPeriod = parsed.period;
       }
     } catch {
@@ -111,8 +110,8 @@ export async function POST(request: NextRequest) {
 
   // 수동 입력값 우선
   if (manualUsage) {
-    parsedUsage = parseFloat(manualUsage);
-    parsedUnit = manualUnit ?? 'kWh';
+    parsedUsage  = parseFloat(manualUsage);
+    parsedUnit   = manualUnit ?? 'kWh';
     parsedPeriod = manualPeriod ?? parsedPeriod;
   }
 
@@ -124,9 +123,9 @@ export async function POST(request: NextRequest) {
       filename,
       invoiceType,
       fields: [
-        { name: 'usage', label: '사용량', type: 'number', placeholder: '예: 1234.5' },
-        { name: 'unit', label: '단위', type: 'select', options: ['kWh', 'm³', 'MJ'] },
-        { name: 'period', label: '청구 월', type: 'text', placeholder: 'YYYY-MM' },
+        { name: 'usage',  label: '사용량',  type: 'number', placeholder: '예: 1234.5' },
+        { name: 'unit',   label: '단위',    type: 'select', options: ['kWh', 'm³', 'MJ'] },
+        { name: 'period', label: '청구 월', type: 'text',   placeholder: 'YYYY-MM' },
       ],
     });
   }
@@ -139,77 +138,35 @@ export async function POST(request: NextRequest) {
     parsedPeriod = new Date().toISOString().slice(0, 7);
   }
 
-  // 배출계수 조회
-  const category = invoiceType === 'gas' ? 'fuel' : 'electricity';
-  const sourceType = invoiceType === 'gas' ? 'natural_gas' : 'electricity';
-  const scope = invoiceType === 'gas' ? 'scope1' : 'scope2';
+  // ── CarbonCalculatorService: 계산 + 저장 + AuditLog 일괄 처리 ──
+  try {
+    const result = await CarbonCalculatorService.calculateFromInvoice({
+      tenantId:    auth.tenantId,
+      userId:      auth.userId,
+      usage:       parsedUsage,
+      unit:        parsedUnit,
+      period:      parsedPeriod,
+      invoiceType,
+      dataSource:  'INVOICE',
+    });
 
-  const factor = await findEmissionFactor({
-    tenantId: auth.tenantId,
-    category,
-    sourceType,
-    year: parseInt(parsedPeriod.slice(0, 4)),
-    region: 'KR',
-  });
-
-  // 배출계수 없으면 기본값 (전력: 0.4567, 가스: 2.176)
-  const factorValue = factor ? Number(factor.factor) : (invoiceType === 'gas' ? 2.176 : 0.4567);
-  const emissions = (parsedUsage * factorValue) / 1000; // tCO2eq (kWh × kgCO2/kWh / 1000)
-
-  // EmissionsData 저장 (기존 수동 등록 시스템과 통합)
-  // schema: emissionType(scope1/2/3), sourceType, amount, unit, emissionFactor, calculatedEmission, period
-  const engine = await getActiveEngineVersion();
-  const emissionTypeMap: Record<string, 'scope1' | 'scope2' | 'scope3'> = {
-    scope1: 'scope1', scope2: 'scope2', scope3: 'scope3',
-  };
-  const emissionType = emissionTypeMap[scope] ?? 'scope2';
-
-  const record = await prisma.emissionsData.create({
-    data: {
-      tenantId: auth.tenantId,
-      emissionType,
-      sourceType,
-      amount: parsedUsage,
-      unit: parsedUnit,
-      emissionFactor: factorValue,
-      calculatedEmission: emissions,
-      period: parsedPeriod,
-      calculationMethod: 'manual',
-      dataSource: 'MANUAL',
-    },
-  });
-
-  await prisma.auditLog.create({
-    data: {
-      tenantId: auth.tenantId,
-      userId: auth.userId,
-      action: 'INVOICE_UPLOADED',
-      resourceType: 'emissions_data',
-      resourceId: record.id,
-      changes: {
-        filename,
-        invoiceType,
-        usage: parsedUsage,
-        unit: parsedUnit,
-        period: parsedPeriod,
-        emissions,
-        factorValue,
-        engineVersion: engine.version,
-      },
-    },
-  }).catch(() => null);
-
-  return successResponse({
-    recordId: record.id,
-    filename,
-    invoiceType,
-    usage: parsedUsage,
-    unit: parsedUnit,
-    period: parsedPeriod,
-    emissions: Math.round(emissions * 1000) / 1000,
-    emissionsUnit: 'tCO2eq',
-    emissionFactor: factorValue,
-    scope,
-    message: `${parsedPeriod} 배출량 ${Math.round(emissions * 1000) / 1000} tCO₂eq 기록되었습니다.`,
-  });
+    return successResponse({
+      recordId:      result.recordId,
+      filename,
+      invoiceType,
+      usage:         parsedUsage,
+      unit:          parsedUnit,
+      period:        parsedPeriod,
+      emissions:     result.emissions,
+      emissionsUnit: result.emissionsUnit,
+      emissionFactor: result.factorValue,
+      factorSource:  result.factorSource,
+      scope:         result.scope,
+      engineVersion: result.engineVersion,
+      message:       result.message,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '계산 오류';
+    return errorResponse('SERVER_ERROR', { details: { message } });
+  }
 }

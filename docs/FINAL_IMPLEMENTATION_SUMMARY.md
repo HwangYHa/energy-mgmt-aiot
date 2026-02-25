@@ -130,7 +130,7 @@ logPerformance({ operation, duration, memoryUsage });
 
 ```typescript
 // Upstash Redis가 있으면 사용
-if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+if (process.env.UPSTASH_REDIS_URL && process.env.UPSTASH_REDIS_TOKEN) {
   // Redis 사용
 } else {
   // 로컬 메모리 사용 (개발 환경)
@@ -153,8 +153,8 @@ npm install winston redis@latest @upstash/redis
 cat .env.local
 
 # 3. 필요시 Upstash Redis 추가
-export UPSTASH_REDIS_REST_URL="https://..."
-export UPSTASH_REDIS_REST_TOKEN="..."
+export UPSTASH_REDIS_URL="https://..."
+export UPSTASH_REDIS_TOKEN="..."
 ```
 
 ### 2. 데이터베이스 마이그레이션
@@ -373,8 +373,8 @@ Retry-After: 45
   ```
 - [ ] Upstash Redis 설정
   ```
-  UPSTASH_REDIS_REST_URL=https://...
-  UPSTASH_REDIS_REST_TOKEN=...
+  UPSTASH_REDIS_URL=https://...
+  UPSTASH_REDIS_TOKEN=...
   ```
 - [ ] 데이터베이스 마이그레이션
   ```bash

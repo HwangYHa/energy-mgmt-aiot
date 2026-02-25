@@ -5,8 +5,8 @@
  * Redis 연속 실패 시 서킷브레이커(Circuit Breaker)가 동작하여 불필요한 요청과 로그를 억제.
  *
  * 환경변수:
- *   UPSTASH_REDIS_REST_URL   Upstash REST URL
- *   UPSTASH_REDIS_REST_TOKEN Upstash REST Token
+ *   UPSTASH_REDIS_URL   Upstash REST URL
+ *   UPSTASH_REDIS_TOKEN Upstash REST Token
  */
 
 import { Redis } from '@upstash/redis';
@@ -17,18 +17,25 @@ import { Redis } from '@upstash/redis';
 
 let redisClient: Redis | null = null;
 
-if (
-  process.env.UPSTASH_REDIS_REST_URL &&
-  process.env.UPSTASH_REDIS_REST_TOKEN
-) {
+// 플레이스홀더/미설정 URL 필터링 (배포 전 실수 방지)
+const _redisUrl   = process.env.UPSTASH_REDIS_URL   ?? '';
+const _redisToken = process.env.UPSTASH_REDIS_TOKEN ?? '';
+const _isRealRedis =
+  _redisUrl.startsWith('https://') &&
+  !_redisUrl.includes('your-') &&
+  !_redisUrl.includes('example') &&
+  _redisToken.length > 10 &&
+  !_redisToken.includes('your-');
+
+if (_isRealRedis) {
   try {
-    redisClient = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    });
+    redisClient = new Redis({ url: _redisUrl, token: _redisToken });
+    console.info('[Cache] Upstash Redis 초기화 완료');
   } catch (err) {
     console.warn('[Cache] Upstash Redis 초기화 실패, in-memory 폴백:', err instanceof Error ? err.message : err);
   }
+} else if (_redisUrl) {
+  console.info('[Cache] Redis 플레이스홀더 감지 → in-memory 캐시 사용');
 }
 
 // ──────────────────────────────────────────────

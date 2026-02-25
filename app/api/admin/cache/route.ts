@@ -42,8 +42,8 @@ export async function GET(request: NextRequest) {
       configured: boolean;
     } = { ok: false, configured: false };
 
-    const url = process.env.UPSTASH_REDIS_REST_URL;
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+    const url = process.env.UPSTASH_REDIS_URL;
+    const token = process.env.UPSTASH_REDIS_TOKEN;
 
     if (url && token) {
       redisTestResult.configured = true;
@@ -76,11 +76,11 @@ export async function GET(request: NextRequest) {
       },
       redisTest: redisTestResult,
       tips: !redisTestResult.configured
-        ? ['UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN 환경변수를 .env에 추가하세요.']
+        ? ['UPSTASH_REDIS_URL, UPSTASH_REDIS_TOKEN 환경변수를 .env에 추가하세요.']
         : !redisTestResult.ok
         ? [
             '1) Upstash 대시보드에서 Redis DB가 활성 상태인지 확인',
-            '2) UPSTASH_REDIS_REST_URL / TOKEN이 올바른지 확인',
+            '2) UPSTASH_REDIS_URL / TOKEN이 올바른지 확인',
             '3) 로컬 Docker: docker run -d -p 6379:6379 redis:alpine',
             '4) 개발 중에는 in-memory 폴백이 자동 사용됨 (기능 정상)',
           ]

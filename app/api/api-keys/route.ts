@@ -17,6 +17,7 @@ import {
 } from '@/lib/api/response';
 import { randomBytes, createHash } from 'crypto';
 import logger from '@/lib/logger';
+import { checkPlanLimit } from '@/lib/middleware/plan-limit';
 
 // API 키 생성: ea_live_ + 32자 랜덤
 function generateApiKey(): string {
@@ -78,18 +79,9 @@ export async function POST(request: NextRequest) {
       return validationErrorResponse({ name: 'API 키 이름은 200자 이내로 입력해주세요.' });
     }
 
-    // 기존 키 개수 제한 (최대 10개)
-    const existingCount = await prisma.apiKey.count({
-      where: {
-        tenantId: auth.tenantId,
-        userId: auth.userId,
-        isActive: true,
-      },
-    });
-
-    if (existingCount >= 10) {
-      return validationErrorResponse({ limit: 'API 키는 최대 10개까지 생성할 수 있습니다.' });
-    }
+    // ✅ 플랜 한도 확인 (API 키 수 제한 — 플랜별 차등)
+    const limitErr = await checkPlanLimit(auth.tenantId, 'apiKey');
+    if (limitErr) return limitErr;
 
     // 키 생성
     const rawKey = generateApiKey();

@@ -3,17 +3,45 @@
   "short_name": "탄소이음",
   "description": "에너지 데이터로 탄소중립을 실현하는 구독형 에너지 관리 SaaS",
   "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
+  "background_color": "#040e1c",
   "theme_color": "#0f172a",
   "orientation": "any",
   "categories": ["business", "utilities"],
   "lang": "ko",
+  "dir": "ltr",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/favicon.ico",
       "sizes": "any",
-      "type": "image/x-icon"
+      "type": "image/x-icon",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "대시보드",
+      "short_name": "대시보드",
+      "description": "에너지 현황 대시보드로 이동",
+      "url": "/dashboard",
+      "icons": [{ "src": "/favicon.ico", "sizes": "any" }]
+    },
+    {
+      "name": "탄소 분석",
+      "short_name": "탄소",
+      "description": "탄소 배출량 분석 페이지로 이동",
+      "url": "/analytics/carbon",
+      "icons": [{ "src": "/favicon.ico", "sizes": "any" }]
+    },
+    {
+      "name": "실시간 모니터링",
+      "short_name": "모니터링",
+      "description": "실시간 설비·센서 모니터링",
+      "url": "/monitoring/realtime",
+      "icons": [{ "src": "/favicon.ico", "sizes": "any" }]
     }
   ]
 }

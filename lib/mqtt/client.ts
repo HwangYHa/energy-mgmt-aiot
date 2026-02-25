@@ -21,7 +21,9 @@ export class MQTTClient extends EventEmitter {
 
   private constructor() {
     super();
-    this.setMaxListeners(50);
+    // SSE 연결 1개당 listener 1개 → 동시 SSE 연결 200개 지원
+    // 초과 시 Node.js가 메모리 누수 경고를 출력하므로 충분히 높게 설정
+    this.setMaxListeners(200);
   }
 
   static getInstance(): MQTTClient {

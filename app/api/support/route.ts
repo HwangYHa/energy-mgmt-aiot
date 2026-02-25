@@ -16,6 +16,10 @@ import {
 } from '@/lib/api/response';
 import { UserRole } from '@/lib/constants/roles';
 import logger from '@/lib/logger';
+import {
+  sendSupportNotificationToAdmin,
+  sendSupportConfirmationToUser,
+} from '@/lib/services/email.service';
 
 const VALID_CATEGORIES = ['general', 'technical', 'billing', 'account', 'feature', 'bug'];
 const VALID_STATUSES = ['pending', 'in_progress', 'resolved', 'closed'];
@@ -179,6 +183,25 @@ export async function POST(request: NextRequest) {
       inquiryId: inquiry.id,
       category,
       email: email.substring(0, 3) + '***',
+    });
+
+    // 이메일 발송 (비동기 — 발송 실패가 API 응답을 막지 않음)
+    const inquiryForEmail = {
+      id: inquiry.id,
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      category,
+      subject: subject.trim(),
+      message: message.trim(),
+    };
+    Promise.all([
+      sendSupportNotificationToAdmin(inquiryForEmail),
+      sendSupportConfirmationToUser(inquiryForEmail),
+    ]).catch((err) => {
+      logger.error('Support email send error', {
+        error: err instanceof Error ? err.message : String(err),
+        inquiryId: inquiry.id,
+      });
     });
 
     return NextResponse.json(

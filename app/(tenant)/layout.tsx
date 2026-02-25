@@ -12,6 +12,7 @@ import { useState } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import ToastContainer from '@/components/ui/ToastContainer';
+import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
 import { cn } from '@/lib/utils';
 
 export default function TenantLayout({
@@ -22,8 +23,9 @@ export default function TenantLayout({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // h-screen + [height:100dvh]: iOS Safari 주소창 포함 viewport 높이 정확히 계산
   return (
-    <div className="flex h-screen bg-slate-950 overflow-hidden">
+    <div className="flex h-screen [height:100dvh] bg-slate-950 overflow-hidden">
       {/* Mobile Sidebar Overlay */}
       {mobileMenuOpen && (
         <div
@@ -64,9 +66,11 @@ export default function TenantLayout({
         {/* Header */}
         <Header onMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)} />
 
-        {/* Page Content */}
+        {/* Page Content — ErrorBoundary로 페이지 오류가 레이아웃 전체를 crash하는 것 방지 */}
         <main className="flex-1 overflow-y-auto bg-slate-950">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </main>
       </div>
 

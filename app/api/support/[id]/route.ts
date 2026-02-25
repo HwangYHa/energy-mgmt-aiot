@@ -20,6 +20,7 @@ import {
   formatZodErrors,
 } from '@/lib/api/response';
 import { UserRole } from '@/lib/constants/roles';
+import { notifySupportStatusChanged } from '@/lib/services/notification.service';
 
 const patchSchema = z.object({
   status: z.enum(['pending', 'in_progress', 'resolved', 'closed']).optional(),
@@ -107,6 +108,18 @@ export async function PATCH(
         ...(parsed.data.adminNote !== undefined ? { adminNote: parsed.data.adminNote } : {}),
       },
     });
+
+    // 상태 변경 시 문의자에게 이메일 알림 (비동기 — 실패가 응답을 막지 않음)
+    if (parsed.data.status !== undefined && parsed.data.status !== inquiry.status) {
+      notifySupportStatusChanged({
+        id: updated.id,
+        email: updated.email,
+        name: updated.name,
+        subject: updated.subject,
+        status: updated.status,
+        adminNote: updated.adminNote,
+      }).catch(() => null);
+    }
 
     return successResponse({ inquiry: updated });
   } catch (error) {

@@ -6,6 +6,7 @@ import { anomalyRequestSchema, formatValidationError } from '@/lib/validation/sc
 import env from '@/lib/env';
 import logger from '@/lib/logger';
 import { z } from 'zod';
+import { notifyAnomalyDetected } from '@/lib/services/notification.service';
 
 // ─── 로컬 이상 탐지 ────────────────────────────────────────────────────────
 interface DataPoint {
@@ -206,6 +207,20 @@ export async function POST(request: NextRequest) {
     // 로컬 Z-score + IQR 이상 탐지 (폴백 or 기본)
     logger.info('Running local anomaly detection', { tenantId, siteId, dataPoints: formattedData.length });
     const localResult = runLocalAnomalyDetection(formattedData, sensitivity);
+
+    // critical/high 이상 탐지 시 역할별 알림 발송 (비동기)
+    const criticalCount = localResult.anomalies.filter((a) => a.severity === 'critical').length;
+    const highCount = localResult.anomalies.filter((a) => a.severity === 'high').length;
+    if ((criticalCount > 0 || highCount > 0) && localResult.anomalies[0]) {
+      notifyAnomalyDetected({
+        tenantId,
+        siteId: siteId ?? null,
+        anomalyCount: localResult.anomalies.length,
+        criticalCount,
+        highCount,
+        topAnomaly: localResult.anomalies[0],
+      }).catch(() => null);
+    }
 
     return NextResponse.json({
       success: true,

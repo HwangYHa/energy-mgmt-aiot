@@ -15,8 +15,8 @@ jest.mock('@upstash/redis', () => ({
 }));
 
 // 환경변수 제거 (Redis 클라이언트 초기화 방지)
-delete process.env.UPSTASH_REDIS_REST_URL;
-delete process.env.UPSTASH_REDIS_REST_TOKEN;
+delete process.env.UPSTASH_REDIS_URL;
+delete process.env.UPSTASH_REDIS_TOKEN;
 
 // 모듈을 환경변수 설정 후에 임포트
 const { getCached, invalidateCache, invalidateCacheByPrefix } = require('@/lib/cache/redis');

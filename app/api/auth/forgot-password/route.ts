@@ -17,6 +17,7 @@ import { prisma } from '@/lib/db/prisma';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { logHttpRequest, logHttpResponse } from '@/lib/logger';
+import { sendPasswordResetEmail } from '@/lib/services/email.service';
 
 const emailSchema = z.object({
   email: z.string().email('올바른 이메일 주소를 입력해주세요.'),
@@ -58,11 +59,14 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // TODO: 실제 이메일 전송 구현
-      // 예: await sendPasswordResetEmail(validated.email, resetToken);
-
-      // Note: Password reset requests are logged but not as security events
-      // as they are expected user actions
+      // 비밀번호 재설정 이메일 발송 (비동기 — 발송 실패가 API 응답을 막지 않음)
+      sendPasswordResetEmail(
+        validated.email,
+        user.name || '사용자',
+        resetToken
+      ).catch((err) => {
+        console.error('[forgot-password] 이메일 발송 오류:', err instanceof Error ? err.message : err);
+      });
     }
 
     logHttpResponse({

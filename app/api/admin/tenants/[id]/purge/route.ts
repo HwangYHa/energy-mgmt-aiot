@@ -1,5 +1,5 @@
 /**
- * DELETE /api/admin/tenants/{tenantId}/purge
+ * DELETE /api/admin/tenants/{id}/purge
  *
  * 테넌트 데이터 완전 삭제 (Hard Delete) — Super Admin 전용
  *
@@ -29,7 +29,7 @@ export const dynamic = 'force-dynamic';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ tenantId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await verifyAuth(request);
   if (!auth) {
@@ -40,7 +40,7 @@ export async function DELETE(
   const permErr = requireSuperAdmin(auth.role);
   if (permErr) return permErr;
 
-  const { tenantId } = await params;
+  const { id: tenantId } = await params;
 
   // confirm 파라미터 필수 (실수 방지)
   const { searchParams } = new URL(request.url);
@@ -105,14 +105,14 @@ export async function DELETE(
       prisma.emissionsData.deleteMany({ where: { tenantId } }).catch(() => ({ count: 0 })),
     ]);
     stats.forecastResults = forecasts.count;
-    stats.emissionsData = emissions.count;
+    stats.emissionsData   = emissions.count;
 
     // ── 3. 탄소 거래 데이터 ───────────────────────────
     const [trades, credits] = await Promise.all([
       prisma.carbonTrade.deleteMany({ where: { tenantId } }).catch(() => ({ count: 0 })),
       prisma.carbonCredit.deleteMany({ where: { tenantId } }).catch(() => ({ count: 0 })),
     ]);
-    stats.carbonTrades = trades.count;
+    stats.carbonTrades  = trades.count;
     stats.carbonCredits = credits.count;
 
     // ── 4. 알림/규칙 ─────────────────────────────────
@@ -120,7 +120,7 @@ export async function DELETE(
       prisma.alertRule.deleteMany({ where: { tenantId } }),
       prisma.notificationRule.deleteMany({ where: { tenantId } }),
     ]);
-    stats.alertRules = alertRules.count;
+    stats.alertRules        = alertRules.count;
     stats.notificationRules = notifRules.count;
 
     // ── 5. 보고서/결제/감사 로그 ──────────────────────
@@ -129,9 +129,9 @@ export async function DELETE(
       prisma.paymentHistory.deleteMany({ where: { tenantId } }),
       prisma.auditLog.deleteMany({ where: { tenantId } }),
     ]);
-    stats.reports = reports.count;
+    stats.reports          = reports.count;
     stats.paymentHistories = payments.count;
-    stats.auditLogs = auditLogs.count;
+    stats.auditLogs        = auditLogs.count;
 
     // ── 6. API 키 ─────────────────────────────────────
     const apiKeys = await prisma.apiKey.deleteMany({ where: { tenantId } });
@@ -142,8 +142,8 @@ export async function DELETE(
       prisma.twinNode.deleteMany({ where: { tenantId } }),
       prisma.physicalSpace.deleteMany({ where: { tenantId } }),
     ]);
-    stats.twinNodes = twinNodes.count;
-    stats.physicalSpaces = spaces.count;
+    stats.twinNodes       = twinNodes.count;
+    stats.physicalSpaces  = spaces.count;
 
     // ── 8. 센서 → 메트릭 → 장치 → 게이트웨이 → 사업장 ──
     const sensors = await prisma.sensor.deleteMany({ where: { tenantId } });

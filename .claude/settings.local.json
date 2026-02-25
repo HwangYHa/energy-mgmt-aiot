@@ -59,7 +59,10 @@
       "Bash(\"G:/Dev/react-workspace/energy-mgmt-aiot/app/api/analytics/carbon/recalculate/route.ts\":*)",
       "Bash(\"G:/Dev/react-workspace/energy-mgmt-aiot/app/api/analytics/carbon/engine-versions/route.ts\":*)",
       "Bash(\"G:/Dev/react-workspace/energy-mgmt-aiot/app/api/analytics/carbon/emission-factors/route.ts\":*)",
-      "Bash(npx pnpm add zustand swr)"
+      "Bash(npx pnpm add zustand swr)",
+      "Bash(npx prisma:*)",
+      "Bash(python:*)",
+      "Bash(/g/Dev/react-workspace/energy-mgmt-aiot/.env.local:*)"
     ],
     "deny": [
       "Bash(sudo:*)",

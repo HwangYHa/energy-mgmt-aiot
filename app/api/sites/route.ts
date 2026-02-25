@@ -22,6 +22,7 @@ import {
   validationErrorResponse,
   serverErrorResponse,
 } from '@/lib/api/response';
+import { checkPlanLimit } from '@/lib/middleware/plan-limit';
 
 export async function GET(request: NextRequest) {
   let auth: Awaited<ReturnType<typeof verifyAuth>> | undefined;
@@ -96,6 +97,10 @@ export async function POST(request: NextRequest) {
     if (!requireRoleOrHigher(auth, 'operator' as UserRole)) {
       return forbiddenResponse({ requiredRoles: ['operator', 'site_manager', 'tenant_admin'] });
     }
+
+    // ✅ 플랜 한도 확인 (사이트 수 제한)
+    const limitErr = await checkPlanLimit(auth.tenantId, 'site');
+    if (limitErr) return limitErr;
 
     const body = await request.json();
 

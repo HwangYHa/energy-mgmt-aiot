@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/prisma';
+import { notifyDrEventCreated } from '@/lib/services/notification.service';
 
 // GET: DR 이벤트 목록
 export async function GET(request: NextRequest) {
@@ -53,6 +54,17 @@ export async function POST(request: NextRequest) {
         status: 'scheduled',
       },
     });
+
+    // DR 이벤트 생성 알림 → operator 이상 모든 사용자 (비동기)
+    notifyDrEventCreated({
+      tenantId: session.user.tenantId,
+      eventId: event.id,
+      title: event.title,
+      startTime: event.startTime,
+      endTime: event.endTime,
+      targetReductionKw: event.targetReductionKw ?? 0,
+      createdByName: session.user.name ?? undefined,
+    }).catch(() => null);
 
     return NextResponse.json(event, { status: 201 });
 

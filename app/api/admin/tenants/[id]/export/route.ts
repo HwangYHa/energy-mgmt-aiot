@@ -1,5 +1,5 @@
 /**
- * GET /api/admin/tenants/{tenantId}/export
+ * GET /api/admin/tenants/{id}/export
  *
  * 테넌트 전체 데이터 JSON 내보내기 (GDPR / 계약 해지 시 데이터 반환)
  *
@@ -21,14 +21,14 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ tenantId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await verifyAuth(request);
   if (!auth) {
     return NextResponse.json({ success: false, error: '인증 필요' }, { status: 401 });
   }
 
-  const { tenantId } = await params;
+  const { id: tenantId } = await params;
   const { searchParams } = new URL(request.url);
   const scope = searchParams.get('scope') ?? 'user_data';
 
@@ -98,8 +98,8 @@ export async function GET(
     }),
   ]);
 
-  exportData.users        = users;
-  exportData.sites        = sites;
+  exportData.users         = users;
+  exportData.sites         = sites;
   exportData.subscriptions = subscriptions;
 
   if (scope === 'all' || scope === 'user_data') {
@@ -132,7 +132,7 @@ export async function GET(
       orderBy: { time: 'desc' },
       take: 50000,
     });
-    exportData.measurements = measurements;
+    exportData.measurements    = measurements;
     exportData.measurementNote = '최근 30일 데이터 최대 50,000건만 포함됩니다.';
   }
 
