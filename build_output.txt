@@ -55,7 +55,6 @@ Route (app)                                       Size  First Load JS
 ├ ƒ /api/control/optimization/recommendations    295 B         103 kB
 ├ ƒ /api/control/schedules                       295 B         103 kB
 ├ ƒ /api/dashboard/overview                      295 B         103 kB
-├ ƒ /api/dashboard/realtime                      295 B         103 kB
 ├ ƒ /api/dashboard/stats                         295 B         103 kB
 ├ ƒ /api/data-collection/generate                295 B         103 kB
 ├ ƒ /api/devices                                 295 B         103 kB
@@ -93,7 +92,6 @@ Route (app)                                       Size  First Load JS
 ├ ○ /control/optimization                      4.13 kB         213 kB
 ├ ○ /control/schedule                          5.46 kB         108 kB
 ├ ○ /dashboard                                 6.55 kB         224 kB
-├ ○ /dashboard/realtime                        5.78 kB         108 kB
 ├ ○ /dashboard/viewer                          4.72 kB         115 kB
 ├ ○ /demo                                      1.18 kB         115 kB
 ├ ○ /devices                                   7.75 kB         122 kB

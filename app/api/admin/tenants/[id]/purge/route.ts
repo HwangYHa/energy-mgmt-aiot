@@ -1,5 +1,5 @@
 /**
- * DELETE /api/admin/tenants/{tenantId}/purge
+ * DELETE /api/admin/tenants/{id}/purge
  *
  * 테넌트 데이터 완전 삭제 (Hard Delete) — Super Admin 전용
  *
@@ -29,7 +29,7 @@ export const dynamic = 'force-dynamic';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ tenantId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await verifyAuth(request);
   if (!auth) {
@@ -40,7 +40,7 @@ export async function DELETE(
   const permErr = requireSuperAdmin(auth.role);
   if (permErr) return permErr;
 
-  const { tenantId } = await params;
+  const { id: tenantId } = await params;
 
   // confirm 파라미터 필수 (실수 방지)
   const { searchParams } = new URL(request.url);

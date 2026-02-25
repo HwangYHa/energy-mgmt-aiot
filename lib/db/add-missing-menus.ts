@@ -36,16 +36,6 @@ async function main() {
   const newItems = [
     // 대시보드 그룹
     {
-      code: 'dashboard_realtime',
-      name: '실시간 현황',
-      icon: 'Activity',
-      path: '/dashboard/realtime',
-      menuGroupId: groupMap.get('dashboard'),
-      displayOrder: 2,
-      minRole: 'viewer' as const,
-      badgeType: 'new' as const,
-    },
-    {
       code: 'dashboard_viewer',
       name: '뷰어 대시보드',
       icon: 'Eye',

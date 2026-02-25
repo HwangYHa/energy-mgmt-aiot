@@ -1,0 +1,385 @@
+'use client';
+
+import { useState } from 'react';
+import {
+  BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+} from 'recharts';
+import {
+  Leaf, TrendingDown, TrendingUp, Target, Lightbulb,
+  Calendar, Plus, Download, RefreshCw, AlertCircle,
+  CheckCircle, Settings,
+} from 'lucide-react';
+import { FuelModal } from './FuelModal';
+import { TransportModal } from './TransportModal';
+import { useCarbonData, useCarbonExport } from '../hooks/use-carbon-data';
+
+const YEAR_OPTIONS = [2024, 2025, 2026] as const;
+
+export function CarbonDashboard() {
+  const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [openModal, setOpenModal] = useState<'fuel' | 'transport' | null>(null);
+
+  const { emissions, footprint, isLoading, error, refresh } = useCarbonData(year);
+  const { exportCSV, exportJSON, exportCompliancePDF } = useCarbonExport(year);
+
+  // ─── 로딩 ─────────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#051225] text-white">
+        <div className="text-center">
+          <RefreshCw className="w-12 h-12 animate-spin text-green-400 mx-auto mb-4" />
+          <p className="text-xl">탄소 배출 데이터 로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── 에러 ─────────────────────────────────────────────────────
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#051225] text-white">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+          <p className="text-xl mb-2">데이터 로딩 실패</p>
+          <p className="text-slate-400 mb-4">
+            {error instanceof Error ? error.message : '알 수 없는 오류'}
+          </p>
+          <button
+            onClick={refresh}
+            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
+          >
+            다시 시도
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Scope 파이 차트 데이터 ───────────────────────────────────
+  const scopeData = footprint
+    ? [
+        { name: 'Scope 1 (직접 배출)', value: footprint.emissions.scope1, color: '#EF4444' },
+        { name: 'Scope 2 (간접 배출)', value: footprint.emissions.scope2, color: '#F59E0B' },
+        { name: 'Scope 3 (기타)', value: footprint.emissions.scope3, color: '#10B981' },
+      ].filter((d) => d.value > 0)
+    : [];
+
+  return (
+    <div className="min-h-screen bg-[#051225] text-white p-6 space-y-6">
+
+      {/* 헤더 */}
+      <div className="flex justify-between items-center flex-wrap gap-3">
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <Leaf className="w-8 h-8 text-green-400" />
+            탄소 배출 분석
+          </h1>
+          <p className="text-slate-400 mt-1">온실가스 배출량 및 감축 현황 (ISO 14064, K-ETS 기준)</p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {/* 연도 선택 */}
+          {YEAR_OPTIONS.map((y) => (
+            <button
+              key={y}
+              onClick={() => setYear(y)}
+              className={`px-4 py-2 rounded font-medium transition-colors ${
+                year === y
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'
+              }`}
+            >
+              {y}
+            </button>
+          ))}
+
+          <button
+            onClick={exportCSV}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors text-sm"
+          >
+            <Download className="w-4 h-4" />CSV
+          </button>
+          <button
+            onClick={exportJSON}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors text-sm"
+          >
+            <Download className="w-4 h-4" />JSON
+          </button>
+          <button
+            onClick={exportCompliancePDF}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-400 rounded-lg font-medium transition-colors text-sm"
+            title="K-MRV 온실가스 명세서 PDF"
+          >
+            <Download className="w-4 h-4" />규제 리포트 PDF
+          </button>
+          <button
+            onClick={refresh}
+            className="p-2 bg-slate-800/50 hover:bg-slate-700/50 rounded-lg transition-colors"
+            title="새로고침"
+          >
+            <RefreshCw className="w-5 h-5" />
+          </button>
+          <button
+            className="p-2 bg-slate-800/50 rounded-lg opacity-50 cursor-not-allowed"
+            disabled
+            title="설정 (준비 중)"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* KPI 카드 */}
+      {footprint && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-slate-800/50 rounded-lg p-6 border-2 border-green-500 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/10 rounded-full -mr-16 -mt-16" />
+            <div className="relative">
+              <div className="flex items-center gap-2 mb-2">
+                <Leaf className="w-5 h-5 text-green-400" />
+                <span className="text-sm text-slate-400">총 배출량</span>
+              </div>
+              <div className="text-4xl font-bold text-green-400 mb-1">
+                {footprint.progress.current.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}
+              </div>
+              <div className="text-sm text-slate-400">tCO₂eq</div>
+            </div>
+          </div>
+
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <div className="flex items-center gap-2 mb-2">
+              <Target className="w-5 h-5 text-blue-400" />
+              <span className="text-sm text-slate-400">목표 대비</span>
+            </div>
+            <div className={`text-4xl font-bold mb-1 ${footprint.progress.achievement <= 100 ? 'text-green-400' : 'text-red-400'}`}>
+              {footprint.progress.achievement.toFixed(1)}%
+            </div>
+            <div className="text-sm text-slate-400">목표: {footprint.progress.target.toLocaleString('ko-KR')} tCO₂eq</div>
+            {footprint.progress.achievement <= 100 ? (
+              <div className="flex items-center gap-1 mt-2 text-green-400 text-xs">
+                <CheckCircle className="w-3 h-3" />목표 달성
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 mt-2 text-red-400 text-xs">
+                <AlertCircle className="w-3 h-3" />목표 초과
+              </div>
+            )}
+          </div>
+
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <div className="flex items-center gap-2 mb-2">
+              {footprint.progress.reductionRate > 0
+                ? <TrendingDown className="w-5 h-5 text-green-400" />
+                : <TrendingUp className="w-5 h-5 text-red-400" />}
+              <span className="text-sm text-slate-400">전년 대비</span>
+            </div>
+            <div className={`text-4xl font-bold mb-1 ${footprint.progress.reductionRate > 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {Math.abs(footprint.progress.reductionRate).toFixed(1)}%
+            </div>
+            <div className="text-sm text-slate-400">
+              {footprint.progress.reduction > 0 ? '감축' : '증가'}: {Math.abs(footprint.progress.reduction).toLocaleString('ko-KR', { maximumFractionDigits: 1 })} tCO₂eq
+            </div>
+          </div>
+
+          <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar className="w-5 h-5 text-yellow-400" />
+              <span className="text-sm text-slate-400">Scope 2 (전력)</span>
+            </div>
+            <div className="text-4xl font-bold text-yellow-400 mb-1">
+              {footprint.emissions.scope2.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}
+            </div>
+            <div className="text-sm text-slate-400">
+              {((footprint.emissions.scope2 / footprint.emissions.total) * 100).toFixed(1)}% (전체 대비)
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 데이터 입력 버튼 */}
+      <div className="flex gap-4 flex-wrap">
+        <button
+          onClick={() => setOpenModal('fuel')}
+          className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
+        >
+          <Plus className="w-5 h-5" />연료 사용량 등록
+        </button>
+        <button
+          onClick={() => setOpenModal('transport')}
+          className="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition-colors"
+        >
+          <Plus className="w-5 h-5" />운송 거리 등록
+        </button>
+      </div>
+
+      {/* 모달 */}
+      {openModal === 'fuel' && (
+        <FuelModal onClose={() => setOpenModal(null)} onSuccess={refresh} />
+      )}
+      {openModal === 'transport' && (
+        <TransportModal onClose={() => setOpenModal(null)} onSuccess={refresh} />
+      )}
+
+      {/* 월별 배출량 */}
+      <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+        <h2 className="text-xl font-bold mb-4">월별 배출량 추이</h2>
+        <ResponsiveContainer width="100%" height={400}>
+          <BarChart data={emissions}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+            <XAxis dataKey="monthName" stroke="#94a3b8" tick={{ fill: '#94a3b8' }} />
+            <YAxis stroke="#94a3b8" tick={{ fill: '#94a3b8' }}
+              label={{ value: 'tCO₂eq', angle: -90, position: 'insideLeft', fill: '#94a3b8' }} />
+            <Tooltip
+              contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff' }}
+              formatter={(value: number) => `${value.toFixed(2)} tCO₂eq`}
+            />
+            <Legend />
+            <Bar dataKey="scope1" name="Scope 1 (직접 배출)" stackId="a" fill="#EF4444" />
+            <Bar dataKey="scope2" name="Scope 2 (간접 배출)" stackId="a" fill="#F59E0B" />
+            <Bar dataKey="scope3" name="Scope 3 (기타)" stackId="a" fill="#10B981" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Scope 파이 */}
+        <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+          <h2 className="text-xl font-bold mb-4">Scope별 배출 비율</h2>
+          {scopeData.length > 0 && footprint && (
+            <>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={scopeData}
+                    cx="50%" cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name.split(' ')[0]} ${(percent * 100).toFixed(1)}%`}
+                    outerRadius={100}
+                    dataKey="value"
+                  >
+                    {scopeData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff' }}
+                    formatter={(value: number) => `${value.toFixed(2)} tCO₂eq`}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between p-2 bg-red-900/30 border border-red-700 rounded">
+                  <span className="text-sm">Scope 1 (직접 배출)</span>
+                  <span className="font-bold">{footprint.emissions.scope1.toFixed(2)} tCO₂eq</span>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-yellow-900/30 border border-yellow-700 rounded">
+                  <span className="text-sm">Scope 2 (간접 배출)</span>
+                  <span className="font-bold">{footprint.emissions.scope2.toFixed(2)} tCO₂eq</span>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-green-900/30 border border-green-700 rounded">
+                  <span className="text-sm">Scope 3 (기타)</span>
+                  <span className="font-bold">{footprint.emissions.scope3.toFixed(2)} tCO₂eq</span>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* AI 권장사항 */}
+        <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <Lightbulb className="w-5 h-5 text-yellow-400" />
+            AI 감축 권장사항
+          </h2>
+          {footprint && footprint.recommendations.length > 0 ? (
+            <div className="space-y-3">
+              {footprint.recommendations.map((rec, index) => (
+                <div key={index} className="flex items-start gap-3 p-4 bg-slate-700/50 rounded hover:bg-slate-700/70 transition-colors">
+                  <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
+                    {index + 1}
+                  </div>
+                  <p className="text-sm text-slate-300 pt-1">{rec}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center text-slate-400 py-8">
+              <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-2" />
+              <p className="text-lg">훌륭합니다!</p>
+              <p className="text-sm mt-2">목표를 달성하고 있습니다.</p>
+              <p className="text-xs text-gray-500 mt-1">현재 수준을 유지하세요.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 배출원별 설명 */}
+      <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+        <h2 className="text-xl font-bold mb-4">배출원별 상세</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-4 bg-red-900/20 border border-red-700 rounded">
+            <h3 className="font-bold mb-2 text-red-400">Scope 1 (직접 배출)</h3>
+            <ul className="text-sm space-y-1 text-slate-300">
+              <li>• 디젤 발전기</li>
+              <li>• LNG 보일러</li>
+              <li>• 차량 연료 (디젤, 가솔린)</li>
+              <li>• 냉매 누출 (R-22, R-134a)</li>
+            </ul>
+          </div>
+          <div className="p-4 bg-yellow-900/20 border border-yellow-700 rounded">
+            <h3 className="font-bold mb-2 text-yellow-400">Scope 2 (간접 배출)</h3>
+            <ul className="text-sm space-y-1 text-slate-300">
+              <li>• 한국전력 (그리드 전력)</li>
+              <li>• 배출계수: 0.4593 tCO₂/MWh</li>
+              <li>• 재생에너지 (0 tCO₂/MWh)</li>
+            </ul>
+          </div>
+          <div className="p-4 bg-green-900/20 border border-green-700 rounded">
+            <h3 className="font-bold mb-2 text-green-400">Scope 3 (기타)</h3>
+            <ul className="text-sm space-y-1 text-slate-300">
+              <li>• 운송 (화물차, 선박)</li>
+              <li>• 출장 (항공, 철도)</li>
+              <li>• 폐기물 처리</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* 배출원별 상세 테이블 */}
+      {footprint && footprint.breakdown.length > 0 && (
+        <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
+          <h2 className="text-xl font-bold mb-4">배출원별 상세 데이터</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-700/50">
+                  <th className="text-left py-3 px-4">카테고리</th>
+                  <th className="text-left py-3 px-4">배출원</th>
+                  <th className="text-right py-3 px-4">사용량</th>
+                  <th className="text-right py-3 px-4">배출량</th>
+                  <th className="text-right py-3 px-4">비율</th>
+                </tr>
+              </thead>
+              <tbody>
+                {footprint.breakdown.map((item, index) => (
+                  <tr key={index} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                    <td className="py-3 px-4">{item.category}</td>
+                    <td className="py-3 px-4">{item.sourceType}</td>
+                    <td className="text-right py-3 px-4">{item.amount.toFixed(2)} {item.unit}</td>
+                    <td className="text-right py-3 px-4 font-medium">{item.emission.toFixed(2)} tCO₂eq</td>
+                    <td className="text-right py-3 px-4">
+                      <span className="px-2 py-1 bg-green-600/20 text-green-400 rounded text-sm">
+                        {item.percentage.toFixed(1)}%
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

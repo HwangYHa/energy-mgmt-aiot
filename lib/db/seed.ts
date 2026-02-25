@@ -103,16 +103,6 @@ async function main() {
       minRole: 'viewer' as UserRole,
     },
     {
-      code: 'dashboard_realtime',
-      name: '실시간 현황',
-      icon: 'Activity',
-      path: '/dashboard/realtime',
-      menuGroupCode: 'dashboard',
-      displayOrder: 2,
-      minRole: 'viewer' as UserRole,
-      badgeType: 'new' as const,
-    },
-    {
       code: 'dashboard_viewer',
       name: '뷰어 대시보드',
       icon: 'Eye',

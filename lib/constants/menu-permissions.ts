@@ -27,12 +27,6 @@ export const MENU_GROUPS: MenuGroupConfig[] = [
         path: '/dashboard',
         minRole: 'viewer' as UserRole,
       },
-      {
-        name: '실시간 모니터링',
-        icon: 'Activity',
-        path: '/dashboard/realtime',
-        minRole: 'viewer' as UserRole,
-      },
     ],
   },
   {

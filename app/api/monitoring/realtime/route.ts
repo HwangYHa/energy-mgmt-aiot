@@ -1,5 +1,5 @@
 /**
- * /api/dashboard/realtime - 실시간 모니터링 데이터 API
+ * /api/monitoring/realtime - 실시간 모니터링 데이터 API
  *
  * GET: 센서/디바이스 실시간 상태 + 최근 측정값 (Polling 방식)
  */

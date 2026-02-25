@@ -95,7 +95,6 @@ ORDER BY mg.display_order, mi.display_order;
 | code | name | path | min_role | group_name |
 |------|------|------|----------|------------|
 | dashboard_overview | 개요 | /dashboard | viewer | 대시보드 |
-| dashboard_realtime | 실시간 모니터링 | /dashboard/realtime | viewer | 대시보드 |
 | dashboard_digital_twin | 디지털 트윈 | /digital-twin | viewer | 대시보드 |
 | control_manual | 수동 제어 | /control/manual | operator | 제어 |
 | control_dr | DR 참여 | /control/dr | tenant_admin | 제어 |
@@ -132,15 +131,6 @@ curl -X GET http://localhost:3003/api/menus \
           "icon": "LayoutDashboard",
           "path": "/dashboard",
           "displayOrder": 1,
-          "minRole": "viewer"
-        },
-        {
-          "id": "uuid",
-          "code": "dashboard_realtime",
-          "name": "실시간 모니터링",
-          "icon": "Activity",
-          "path": "/dashboard/realtime",
-          "displayOrder": 2,
           "minRole": "viewer"
         },
         {

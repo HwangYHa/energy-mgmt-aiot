@@ -91,7 +91,6 @@ export default function MenuManagementPage() {
         id: 'g1', code: 'dashboard', label: '대시보드', icon: 'LayoutDashboard', minRole: 'viewer', sortOrder: 0, section: 'monitoring',
         items: [
           { id: 'i1', code: 'dashboard-main', label: '메인 대시보드', path: '/dashboard', icon: 'LayoutDashboard', minRole: 'viewer', sortOrder: 0, enabled: true, featureRequired: null, badgeType: null },
-          { id: 'i2', code: 'dashboard-realtime', label: '실시간 현황', path: '/dashboard/realtime', icon: 'Activity', minRole: 'viewer', sortOrder: 1, enabled: true, featureRequired: null, badgeType: 'live' },
           { id: 'i3', code: 'dashboard-viewer', label: '뷰어 전용', path: '/dashboard/viewer', icon: 'Eye', minRole: 'viewer', sortOrder: 2, enabled: true, featureRequired: null, badgeType: null },
         ],
       },

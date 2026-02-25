@@ -133,7 +133,7 @@ export async function PATCH(request: NextRequest) {
           ruleId: existing.id,
           channel: 'email',
           recipient: user?.email || 'unknown',
-          subject: `[테스트] ${existing.name} 알림 테스트`,
+          subject: `[테스트] ${existing.name} 알림 발송`,
           body: `이 알림은 "${existing.name}" 규칙의 테스트 발송입니다.\n카테고리: ${existing.category}\n심각도: ${existing.severity}`,
           status: 'sent',
           sentAt: new Date(),

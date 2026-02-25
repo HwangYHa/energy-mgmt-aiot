@@ -3,6 +3,7 @@
  * PUT  /api/onboarding        - 온보딩 단계 갱신 / 완료 처리
  */
 import { NextRequest } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { verifyAuth } from '@/lib/auth/verify';
 import { successResponse, errorResponse } from '@/lib/api/response';
 import { prisma } from '@/lib/db/prisma';
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  if (!tenant) return errorResponse('NOT_FOUND');
+  if (!tenant) return errorResponse('RESOURCE_NOT_FOUND');
 
   return successResponse({
     step: tenant.onboardingStep,
@@ -44,7 +45,7 @@ export async function PUT(request: NextRequest) {
   const updateData: {
     onboardingStep?: number;
     onboardingCompletedAt?: Date;
-    settings?: Record<string, unknown>;
+    settings?: Prisma.InputJsonValue;
   } = {};
 
   if (typeof step === 'number') {
