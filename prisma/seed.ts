@@ -445,6 +445,7 @@ async function main() {
       menuGroupCode: 'settings',
       displayOrder: 6,
       minRole: 'viewer' as UserRole,
+      isVisible: false, // 사이드바 하단 버튼으로 대체
     },
 
     // ---- Super Admin ----
@@ -502,6 +503,7 @@ async function main() {
       menuGroupCode: 'settings',
       displayOrder: 7,
       minRole: 'viewer' as UserRole,
+      isVisible: false, // 헤더 상단 버튼으로 대체
     },
   ];
 

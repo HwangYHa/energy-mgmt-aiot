@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Target,
   TrendingDown,
@@ -14,6 +14,10 @@ import {
   Zap,
   Sun,
   ShoppingBag,
+  Pencil,
+  Check,
+  X,
+  RefreshCw,
 } from 'lucide-react';
 import {
   Bar,
@@ -26,12 +30,18 @@ import {
   Line,
   ComposedChart,
 } from 'recharts';
+import { apiGet, apiPost, apiPatch, apiDelete } from '@/lib/api/client';
+
+// ──────────────────────────────────────────────
+// 타입 정의
+// ──────────────────────────────────────────────
 
 interface Milestone {
   id: string;
   year: number;
   title: string;
   status: 'achieved' | 'in_progress' | 'pending';
+  displayOrder: number;
 }
 
 interface EmissionsPoint {
@@ -41,21 +51,15 @@ interface EmissionsPoint {
   label: string;
 }
 
-const STORAGE_KEY = 'ems:carbon-roadmap';
+// ──────────────────────────────────────────────
+// 상수
+// ──────────────────────────────────────────────
 
-const DEFAULT_GOAL = 1200; // tCO₂/year
+const GOAL_STORAGE_KEY = 'ems:carbon-roadmap-goal';
+const DEFAULT_GOAL = 1200;
 const BASE_YEAR = 2023;
-const BASE_EMISSION = 1850; // tCO₂
+const BASE_EMISSION = 1850;
 const TARGET_YEAR = 2030;
-
-const DEFAULT_MILESTONES: Milestone[] = [
-  { id: '1', year: 2024, title: 'ISO 14064 인증 취득', status: 'achieved' },
-  { id: '2', year: 2025, title: 'RE100 10% 달성', status: 'achieved' },
-  { id: '3', year: 2026, title: '에너지 효율화 15% 개선', status: 'in_progress' },
-  { id: '4', year: 2027, title: 'RE100 50% 달성', status: 'pending' },
-  { id: '5', year: 2028, title: '탄소중립 선언', status: 'pending' },
-  { id: '6', year: 2030, title: 'Net-Zero 달성', status: 'pending' },
-];
 
 const REDUCTION_MEASURES = [
   { id: 'efficiency', label: '에너지 효율 개선', icon: Zap, progress: 65, reduction: -85, color: 'text-cyan-400', barColor: 'bg-cyan-400' },
@@ -64,90 +68,192 @@ const REDUCTION_MEASURES = [
 ];
 
 const STATUS_CONFIG = {
-  achieved: { label: '달성', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30', icon: CheckCircle2 },
-  in_progress: { label: '진행중', color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30', icon: Loader2 },
-  pending: { label: '미달성', color: 'text-slate-400 bg-slate-500/10 border-slate-500/30', icon: Clock },
+  achieved:    { label: '달성',   color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30', icon: CheckCircle2 },
+  in_progress: { label: '진행중', color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30',         icon: Loader2 },
+  pending:     { label: '미달성', color: 'text-slate-400 bg-slate-500/10 border-slate-500/30',      icon: Clock },
 };
+
+// ──────────────────────────────────────────────
+// 유틸리티
+// ──────────────────────────────────────────────
 
 function buildChartData(goal: number): EmissionsPoint[] {
   const currentYear = new Date().getFullYear();
-  // 연도별 실적 (가상 데이터 — 실제는 DB에서)
-  const actuals: Record<number, number> = {
-    2023: 1850,
-    2024: 1720,
-    2025: 1643,
-  };
-
-  const years = Array.from({ length: TARGET_YEAR - BASE_YEAR + 1 }, (_, i) => BASE_YEAR + i);
-  return years.map((year) => {
+  const actuals: Record<number, number> = { 2023: 1850, 2024: 1720, 2025: 1643 };
+  return Array.from({ length: TARGET_YEAR - BASE_YEAR + 1 }, (_, i) => BASE_YEAR + i).map((year) => {
     const progress = (year - BASE_YEAR) / (TARGET_YEAR - BASE_YEAR);
     const target = Math.round(BASE_EMISSION - (BASE_EMISSION - goal) * progress);
-    return {
-      year,
-      actual: year <= currentYear ? (actuals[year] ?? null) : null,
-      target,
-      label: String(year),
-    };
+    return { year, actual: year <= currentYear ? (actuals[year] ?? null) : null, target, label: String(year) };
   });
 }
 
+// ──────────────────────────────────────────────
+// 페이지 컴포넌트
+// ──────────────────────────────────────────────
+
 export default function CarbonRoadmapPage() {
+  // 목표 (localStorage 유지)
   const [goal, setGoal] = useState(DEFAULT_GOAL);
   const [goalInput, setGoalInput] = useState(String(DEFAULT_GOAL));
-  const [milestones, setMilestones] = useState<Milestone[]>(DEFAULT_MILESTONES);
-  const [chartData, setChartData] = useState<EmissionsPoint[]>([]);
-  const [newMilestone, setNewMilestone] = useState({ year: new Date().getFullYear() + 1, title: '' });
-  const [isAddingMilestone, setIsAddingMilestone] = useState(false);
 
-  // localStorage 복원
+  // 마일스톤 (DB 연동)
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // 차트
+  const [chartData, setChartData] = useState<EmissionsPoint[]>(() => buildChartData(DEFAULT_GOAL));
+
+  // 추가 폼
+  const [isAddingMilestone, setIsAddingMilestone] = useState(false);
+  const [newMilestone, setNewMilestone] = useState({ year: new Date().getFullYear() + 1, title: '' });
+  const [isSaving, setIsSaving] = useState(false);
+
+  // 인라인 편집
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ year: 0, title: '' });
+  const editTitleRef = useRef<HTMLInputElement>(null);
+
+  // localStorage에서 goal 복원 (Hydration 방지: useEffect 내에서만)
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(GOAL_STORAGE_KEY);
       if (saved) {
-        const parsed = JSON.parse(saved) as { goal?: number; milestones?: Milestone[] };
-        if (parsed.goal) {
-          setGoal(parsed.goal);
-          setGoalInput(String(parsed.goal));
-        }
-        if (parsed.milestones) setMilestones(parsed.milestones);
+        const val = Number(saved);
+        if (!isNaN(val) && val > 0) { setGoal(val); setGoalInput(String(val)); }
       }
     } catch {}
   }, []);
 
-  // localStorage 저장
+  // goal 변경 시 localStorage 저장 + 차트 갱신
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ goal, milestones }));
-  }, [goal, milestones]);
-
-  // 차트 데이터 재계산
-  useEffect(() => {
+    localStorage.setItem(GOAL_STORAGE_KEY, String(goal));
     setChartData(buildChartData(goal));
   }, [goal]);
 
+  // 마일스톤 DB 로드
+  const loadMilestones = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await apiGet('/api/analytics/carbon/roadmap/milestones') as { data: Milestone[] };
+      console.log('로드된 마일스톤:', res.data);
+      setMilestones((res.data ?? []).sort((a, b) => a.displayOrder - b.displayOrder || a.year - b.year));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '마일스톤 조회 실패');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadMilestones(); }, [loadMilestones]);
+
+  // 인라인 편집 시작 시 포커스
+  useEffect(() => {
+    if (editingId) editTitleRef.current?.focus();
+  }, [editingId]);
+
+  // ── 목표 적용 ──
   const handleGoalApply = () => {
     const val = Number(goalInput);
     if (!isNaN(val) && val > 0) setGoal(val);
   };
 
-  const handleAddMilestone = () => {
-    if (!newMilestone.title.trim()) return;
-    setMilestones((prev) => [
-      ...prev,
-      { id: Date.now().toString(), ...newMilestone, status: 'pending' as Milestone['status'] },
-    ].sort((a, b) => a.year - b.year));
+  // ── 마일스톤 추가 ──
+  const handleAddMilestone = async () => {
+    const year = newMilestone.year;
+    const title = newMilestone.title.trim();
+    if (!title) return;
+
+    setIsSaving(true);
+    // 낙관적 UI (폼 리셋 전에 값을 지역변수로 캡처)
+    const tempId = `temp-${Date.now()}`;
+    const optimistic: Milestone = {
+      id: tempId,
+      year,
+      title,
+      status: 'pending',
+      displayOrder: milestones.length,
+    };
+    setMilestones((prev) => [...prev, optimistic].sort((a, b) => a.displayOrder - b.displayOrder || a.year - b.year));
     setNewMilestone({ year: new Date().getFullYear() + 1, title: '' });
     setIsAddingMilestone(false);
+
+    try {
+      const saved = await apiPost('/api/analytics/carbon/roadmap/milestones', {
+        year,
+        title,
+        status: 'pending',
+      }) as unknown as { id: string; displayOrder: number };
+      // tempId → 실제 id 교체 (낙관적 UI)
+      setMilestones((prev) =>
+        prev.map((m) => m.id === tempId ? { ...m, id: saved.id, displayOrder: Number(saved.displayOrder) } : m)
+      );
+      // DB 상태 확인: 실제 저장된 데이터로 UI 동기화
+      await loadMilestones();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '마일스톤 추가 실패');
+      setMilestones((prev) => prev.filter((m) => m.id !== tempId));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDeleteMilestone = (id: string) => {
-    setMilestones((prev) => prev.filter((m) => m.id !== id));
-  };
-
-  const handleStatusChange = (id: string, status: Milestone['status']) => {
+  // ── 상태 변경 ──
+  const handleStatusChange = async (id: string, status: Milestone['status']) => {
     setMilestones((prev) => prev.map((m) => m.id === id ? { ...m, status } : m));
+    try {
+      await apiPatch('/api/analytics/carbon/roadmap/milestones', { id, status });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '상태 변경 실패');
+      await loadMilestones(); // 롤백
+    }
   };
 
-  const currentEmission = 1643; // tCO₂ (2025 실적)
+  // ── 인라인 편집 시작 ──
+  const handleEditStart = (m: Milestone) => {
+    setEditingId(m.id);
+    setEditForm({ year: m.year, title: m.title });
+  };
+
+  // ── 인라인 편집 저장 ──
+  const handleEditSave = async (id: string) => {
+    if (!editForm.title.trim()) return;
+    const prev = milestones.find((m) => m.id === id);
+    // 낙관적 업데이트
+    setMilestones((list) =>
+      list.map((m) => m.id === id ? { ...m, year: editForm.year, title: editForm.title.trim() } : m)
+        .sort((a, b) => a.displayOrder - b.displayOrder || a.year - b.year)
+    );
+    setEditingId(null);
+    try {
+      await apiPatch('/api/analytics/carbon/roadmap/milestones', {
+        id,
+        year: editForm.year,
+        title: editForm.title.trim(),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '수정 실패');
+      if (prev) setMilestones((list) => list.map((m) => m.id === id ? prev : m));
+    }
+  };
+
+  // ── 삭제 ──
+  const handleDeleteMilestone = async (id: string) => {
+    const target = milestones.find((m) => m.id === id);
+    if (!confirm(`마일스톤 "${target?.title ?? ''}"을(를) 삭제하시겠습니까?`)) return;
+
+    const backup = [...milestones];
+    setMilestones((prev) => prev.filter((m) => m.id !== id));
+    try {
+      await apiDelete(`/api/analytics/carbon/roadmap/milestones?id=${encodeURIComponent(id)}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '삭제 실패');
+      setMilestones(backup);
+    }
+  };
+
+  const currentEmission = 1643;
   const requiredReduction = currentEmission - goal;
   const reductionPct = Math.round((requiredReduction / currentEmission) * 100);
 
@@ -163,6 +269,19 @@ export default function CarbonRoadmapPage() {
         </h1>
         <p className="text-slate-400 text-sm mt-1">장기 탄소 감축 목표 설정 및 마일스톤 관리</p>
       </div>
+
+      {/* 오류 배너 */}
+      {error && (
+        <div className="flex items-start gap-3 bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+          <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm text-red-300">{error}</p>
+          </div>
+          <button onClick={() => setError(null)} className="text-red-400/60 hover:text-red-400 transition">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* 목표 설정 카드 */}
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6">
@@ -190,17 +309,14 @@ export default function CarbonRoadmapPage() {
               </button>
             </div>
           </div>
-
           <div className="bg-slate-900/50 rounded-lg p-3">
             <p className="text-xs text-slate-500 mb-1">기준연도 ({BASE_YEAR})</p>
             <p className="text-lg font-bold text-white">{BASE_EMISSION.toLocaleString()} tCO₂</p>
           </div>
-
           <div className="bg-slate-900/50 rounded-lg p-3">
             <p className="text-xs text-slate-500 mb-1">현재 배출량 (2025)</p>
             <p className="text-lg font-bold text-white">{currentEmission.toLocaleString()} tCO₂</p>
           </div>
-
           <div className={`rounded-lg p-3 ${requiredReduction > 0 ? 'bg-emerald-500/5 border border-emerald-500/20' : 'bg-red-500/5 border border-red-500/20'}`}>
             <p className="text-xs text-slate-500 mb-1">추가 감축 필요</p>
             <p className={`text-lg font-bold ${requiredReduction > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -232,15 +348,7 @@ export default function CarbonRoadmapPage() {
                 ]}
               />
               <Bar dataKey="actual" name="actual" fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={40} />
-              <Line
-                type="monotone"
-                dataKey="target"
-                name="target"
-                stroke="#10b981"
-                strokeWidth={2}
-                strokeDasharray="5 5"
-                dot={{ fill: '#10b981', r: 3 }}
-              />
+              <Line type="monotone" dataKey="target" name="target" stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" dot={{ fill: '#10b981', r: 3 }} />
               <ReferenceLine y={goal} stroke="#f59e0b" strokeDasharray="3 3" label={{ value: `목표 ${goal.toLocaleString()}t`, fill: '#f59e0b', fontSize: 11 }} />
             </ComposedChart>
           </ResponsiveContainer>
@@ -253,25 +361,39 @@ export default function CarbonRoadmapPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 마일스톤 타임라인 */}
+        {/* 마일스톤 타임라인 (DB 연동) */}
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between">
             <h2 className="text-base font-semibold">마일스톤 타임라인</h2>
-            <button
-              onClick={() => setIsAddingMilestone(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg hover:bg-emerald-500/20 transition"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              마일스톤 추가
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={loadMilestones}
+                disabled={isLoading}
+                className="p-1.5 text-slate-500 hover:text-slate-300 transition"
+                title="새로고침"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={() => setIsAddingMilestone(true)}
+                disabled={isSaving}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg hover:bg-emerald-500/20 transition disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                마일스톤 추가
+              </button>
+            </div>
           </div>
 
+          {/* 추가 폼 */}
           {isAddingMilestone && (
             <div className="p-4 bg-slate-900/50 border-b border-slate-700/50 space-y-3">
               <div className="flex gap-3">
                 <input
                   type="number"
                   value={newMilestone.year}
+                  min={2024}
+                  max={2050}
                   onChange={(e) => setNewMilestone((f) => ({ ...f, year: Number(e.target.value) }))}
                   className="w-20 px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:border-emerald-500 focus:outline-none"
                 />
@@ -279,59 +401,131 @@ export default function CarbonRoadmapPage() {
                   type="text"
                   value={newMilestone.title}
                   onChange={(e) => setNewMilestone((f) => ({ ...f, title: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddMilestone()}
                   placeholder="마일스톤 내용"
+                  autoFocus
                   className="flex-1 px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
                 />
               </div>
               <div className="flex gap-2">
-                <button onClick={handleAddMilestone} className="px-3 py-1.5 bg-emerald-500 text-white text-xs rounded-lg hover:bg-emerald-600 transition">
-                  추가
+                <button
+                  onClick={handleAddMilestone}
+                  disabled={!newMilestone.title.trim() || isSaving}
+                  className="px-3 py-1.5 bg-emerald-500 text-white text-xs rounded-lg hover:bg-emerald-600 transition disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '추가'}
                 </button>
-                <button onClick={() => setIsAddingMilestone(false)} className="px-3 py-1.5 bg-slate-700/50 text-slate-300 text-xs rounded-lg hover:bg-slate-700 transition">
+                <button
+                  onClick={() => setIsAddingMilestone(false)}
+                  className="px-3 py-1.5 bg-slate-700/50 text-slate-300 text-xs rounded-lg hover:bg-slate-700 transition"
+                >
                   취소
                 </button>
               </div>
             </div>
           )}
 
+          {/* 마일스톤 목록 */}
           <div className="divide-y divide-slate-700/30">
-            {milestones.map((m) => {
-              const config = STATUS_CONFIG[m.status];
-              const StatusIcon = config.icon;
-              return (
-                <div key={m.id} className="p-4 flex items-start gap-3">
-                  <div className={`mt-0.5 flex-shrink-0 w-7 h-7 rounded-full border flex items-center justify-center ${config.color}`}>
-                    <StatusIcon className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-xs text-slate-500 font-mono">{m.year}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded border ${config.color}`}>
-                        {config.label}
-                      </span>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 className="w-5 h-5 animate-spin text-slate-500" />
+              </div>
+            ) : milestones.length === 0 ? (
+              <div className="py-10 text-center text-slate-500 text-sm">
+                마일스톤이 없습니다.
+              </div>
+            ) : (
+              milestones.map((m) => {
+                const config = STATUS_CONFIG[m.status];
+                const StatusIcon = config.icon;
+                const isEditing = editingId === m.id;
+
+                return (
+                  <div key={m.id} className="p-4 flex items-start gap-3 group">
+                    {/* 상태 아이콘 */}
+                    <div className={`mt-0.5 flex-shrink-0 w-7 h-7 rounded-full border flex items-center justify-center ${config.color}`}>
+                      <StatusIcon className="w-3.5 h-3.5" />
                     </div>
-                    <p className="text-sm text-white">{m.title}</p>
+
+                    {/* 내용 — 편집 모드 */}
+                    <div className="flex-1 min-w-0">
+                      {isEditing ? (
+                        <div className="flex gap-2 items-center">
+                          <input
+                            type="number"
+                            value={editForm.year}
+                            min={2020}
+                            max={2050}
+                            onChange={(e) => setEditForm((f) => ({ ...f, year: Number(e.target.value) }))}
+                            className="w-16 px-1.5 py-1 bg-slate-900 border border-slate-600 rounded text-xs text-white focus:border-emerald-500 focus:outline-none"
+                          />
+                          <input
+                            ref={editTitleRef}
+                            type="text"
+                            value={editForm.title}
+                            onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleEditSave(m.id);
+                              if (e.key === 'Escape') setEditingId(null);
+                            }}
+                            className="flex-1 px-1.5 py-1 bg-slate-900 border border-slate-600 rounded text-sm text-white focus:border-emerald-500 focus:outline-none"
+                          />
+                          <button onClick={() => handleEditSave(m.id)} className="p-1 text-emerald-400 hover:text-emerald-300 transition" title="저장 (Enter)">
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setEditingId(null)} className="p-1 text-slate-500 hover:text-slate-300 transition" title="취소 (Esc)">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-xs text-slate-500 font-mono">{m.year}</span>
+                            <span className={`text-xs px-1.5 py-0.5 rounded border ${config.color}`}>
+                              {config.label}
+                            </span>
+                          </div>
+                          <p className="text-sm text-white">{m.title}</p>
+                        </>
+                      )}
+                    </div>
+
+                    {/* 액션 */}
+                    {!isEditing && (
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {/* 상태 변경 */}
+                        <select
+                          value={m.status}
+                          onChange={(e) => handleStatusChange(m.id, e.target.value as Milestone['status'])}
+                          className="text-xs bg-slate-900 border border-slate-700/50 rounded px-1.5 py-1 text-slate-300 focus:outline-none"
+                        >
+                          <option value="achieved">달성</option>
+                          <option value="in_progress">진행중</option>
+                          <option value="pending">미달성</option>
+                        </select>
+                        {/* 편집 */}
+                        <button
+                          onClick={() => handleEditStart(m)}
+                          className="p-1 text-slate-600 hover:text-cyan-400 transition opacity-0 group-hover:opacity-100"
+                          title="편집"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        {/* 삭제 */}
+                        <button
+                          onClick={() => handleDeleteMilestone(m.id)}
+                          className="p-1 text-slate-600 hover:text-red-400 transition opacity-0 group-hover:opacity-100"
+                          title="삭제"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <select
-                      value={m.status}
-                      onChange={(e) => handleStatusChange(m.id, e.target.value as Milestone['status'])}
-                      className="text-xs bg-slate-900 border border-slate-700/50 rounded px-1.5 py-1 text-slate-300 focus:outline-none"
-                    >
-                      <option value="achieved">달성</option>
-                      <option value="in_progress">진행중</option>
-                      <option value="pending">미달성</option>
-                    </select>
-                    <button
-                      onClick={() => handleDeleteMilestone(m.id)}
-                      className="p-1 text-slate-600 hover:text-red-400 transition"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -352,17 +546,12 @@ export default function CarbonRoadmapPage() {
                       <span className="text-sm text-white">{m.label}</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className={`text-sm font-medium ${m.color}`}>
-                        {m.reduction} tCO₂
-                      </span>
+                      <span className={`text-sm font-medium ${m.color}`}>{m.reduction} tCO₂</span>
                       <span className="text-xs text-slate-500">{m.progress}%</span>
                     </div>
                   </div>
                   <div className="w-full h-2 bg-slate-700/50 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${m.barColor} rounded-full transition-all duration-500`}
-                      style={{ width: `${m.progress}%` }}
-                    />
+                    <div className={`h-full ${m.barColor} rounded-full transition-all duration-500`} style={{ width: `${m.progress}%` }} />
                   </div>
                 </div>
               );
@@ -384,7 +573,6 @@ export default function CarbonRoadmapPage() {
             </div>
           </div>
 
-          {/* 진행도 경고 */}
           {requiredReduction > REDUCTION_MEASURES.reduce((sum, m) => sum + Math.abs(m.reduction), 0) && (
             <div className="mx-5 mb-5 flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
               <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
@@ -400,7 +588,7 @@ export default function CarbonRoadmapPage() {
       {/* 안내 */}
       <div className="text-center text-xs text-slate-600 pb-2">
         <Leaf className="w-3.5 h-3.5 inline mr-1" />
-        마일스톤 및 목표값은 브라우저에 저장됩니다 (로컬 스토리지)
+        마일스톤은 데이터베이스에 저장됩니다 · 목표값은 브라우저에 저장됩니다
       </div>
     </div>
   );

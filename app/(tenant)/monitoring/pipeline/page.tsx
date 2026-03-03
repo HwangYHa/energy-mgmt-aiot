@@ -125,7 +125,7 @@ export default function PipelinePage() {
           </h1>
           <p className="text-slate-400 text-sm mt-1">
             센서 및 프로토콜 연결 상태 모니터링
-            <span className="ml-2 text-amber-400 text-xs">(시뮬레이션 데이터)</span>
+            {/* <span className="ml-2 text-amber-400 text-xs">(시뮬레이션 데이터)</span> */}
           </p>
         </div>
         <button

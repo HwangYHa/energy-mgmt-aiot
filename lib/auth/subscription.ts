@@ -54,10 +54,16 @@ export interface PlanLimits {
   alertRules: number | null;        // 최대 알림 규칙 수
 }
 
+/**
+ * 플랜별 정량 한도 상수 (기본값/폴백).
+ * 수량 한도(maxSites, maxSensors)는 DB plan 테이블이 단일 진실원이므로
+ * getActiveSub()에서 DB 값으로 덮어씀.
+ * 이 상수는 DB 조회 실패 폴백, 기능 플래그, maxGateways 등 DB에 없는 필드에 사용.
+ */
 export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   FREE: {
-    maxSites:            1,
-    maxSensors:          10,
+    maxSites:            1,     // DB trial.max_sites = 1
+    maxSensors:          10,    // DB trial.max_devices = 10
     maxGateways:         1,
     maxApiKeysPerTenant: 2,
     complianceReport:    false,
@@ -68,8 +74,8 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
     alertRules:          3,
   },
   STARTER: {
-    maxSites:            5,
-    maxSensors:          50,
+    maxSites:            3,     // DB basic.max_sites = 3 (기존 5 → 수정)
+    maxSensors:          50,    // DB basic.max_devices = 50
     maxGateways:         5,
     maxApiKeysPerTenant: 5,
     complianceReport:    false,
@@ -80,8 +86,8 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
     alertRules:          20,
   },
   PROFESSIONAL: {
-    maxSites:            20,
-    maxSensors:          200,
+    maxSites:            10,    // DB pro.max_sites = 10 (기존 20 → 수정)
+    maxSensors:          200,   // DB pro.max_devices = 200
     maxGateways:         20,
     maxApiKeysPerTenant: 20,
     complianceReport:    true,
@@ -126,6 +132,9 @@ export const PLAN_FEATURES: Record<PlanTier, string[]> = {
     'alerts',
     'gateways',
     'devices',
+    // Basic tier gets AI load forecasting and cost optimization but not anomaly detection
+    'ai_forecast',
+    'ai_optimize',
   ],
   PROFESSIONAL: [
     'dashboard',
@@ -200,6 +209,9 @@ export async function getActiveSub(tenantId: string): Promise<ActiveSubscription
               tier: true,
               apiRateLimit: true,
               features: true,
+              maxSites: true,          // DB 직접 조회 (단일 진실원)
+              maxDevices: true,        // DB 직접 조회 (센서/디바이스 합산 한도)
+              dataRetentionDays: true, // DB 직접 조회
             },
           },
         },
@@ -212,6 +224,18 @@ export async function getActiveSub(tenantId: string): Promise<ActiveSubscription
       const tierStr = TIER_MAP[rawTier] ?? TIER_MAP[(sub.plan.tier as string).toUpperCase()] ?? 'FREE';
 
       const tier = tierStr as PlanTier;
+
+      // feature flags / maxGateways 등 DB에 없는 필드는 코드 상수 사용
+      const baseLimits = PLAN_LIMITS[tier] ?? PLAN_LIMITS.FREE;
+
+      // DB 수량 한도가 있으면 DB 우선 (DB가 단일 진실원)
+      const limits: PlanLimits = {
+        ...baseLimits,
+        maxSites:          sub.plan.maxSites   ?? baseLimits.maxSites,
+        maxSensors:        sub.plan.maxDevices ?? baseLimits.maxSensors,
+        dataRetentionDays: sub.plan.dataRetentionDays,
+      };
+
       return {
         id: sub.id,
         status: sub.status,
@@ -223,7 +247,7 @@ export async function getActiveSub(tenantId: string): Promise<ActiveSubscription
         features: (sub.plan.features as Record<string, unknown>) ?? {},
         isDemo: tierStr === 'FREE',
         isTrial: sub.status === 'EXPIRE_SOON',
-        limits: PLAN_LIMITS[tier] ?? PLAN_LIMITS.FREE,
+        limits,
       };
     }
   );
@@ -270,6 +294,8 @@ export function featureLockedResponse(reason: 'SUBSCRIPTION_REQUIRED' | 'FEATURE
       '구독이 만료되었습니다. /settings/subscription 에서 갱신해주세요.',
   };
 
+  // 로그: 어떤 이유로 차단되었는지 기록
+  console.warn(`[Subscription] feature locked: ${reason}`);
   return NextResponse.json(
     {
       success: false,
@@ -297,6 +323,27 @@ export async function requireSub(
 ): Promise<[ActiveSubscription, null] | [null, NextResponse]> {
   const sub = await getActiveSub(tenantId);
   if (!sub) {
+    // 개발 환경에서 기능 체크 우회 설정이 켜져 있으면 가짜 서브 리턴
+    if (process.env.NODE_ENV !== 'production' && process.env.DEV_BYPASS_FEATURES) {
+      console.debug('[Subscription] dev bypass no subscription, returning fake active sub');
+      return [
+        {
+          id: 'dev-sub',
+          status: 'ACTIVE',
+          planId: 'dev',
+          planName: 'Developer',
+          planTier: 'PROFESSIONAL',
+          apiRateLimit: 9999,
+          expiresAt: null,
+          features: {},
+          isDemo: true,
+          isTrial: false,
+          limits: PLAN_LIMITS.PROFESSIONAL,
+        },
+        null,
+      ];
+    }
+
     return [null, featureLockedResponse('SUBSCRIPTION_REQUIRED')];
   }
   return [sub, null];
@@ -313,6 +360,13 @@ export async function requireFeature(
   tenantId: string,
   feature: string
 ): Promise<[ActiveSubscription, null] | [null, NextResponse]> {
+  // 개발 환경에서는 기능 제한 건너뛰기 (로컬 테스트 용)
+  if (process.env.NODE_ENV !== 'production' && process.env.DEV_BYPASS_FEATURES) {
+    console.debug('[Subscription] dev bypass feature check', { tenantId, feature });
+    const [sub] = await requireSub(tenantId);
+    return [sub || ({} as ActiveSubscription), null];
+  }
+
   const [sub, err] = await requireSub(tenantId);
   if (err) return [null, err];
 

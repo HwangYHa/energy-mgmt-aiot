@@ -21,8 +21,9 @@ export async function GET(request: NextRequest) {
     if (subErr) return subErr;
 
     const [credits, recentTrades] = await Promise.all([
+      // quantity > 0 인 크레딧만 반환 (전량 소각된 크레딧 제외)
       prisma.carbonCredit.findMany({
-        where: { tenantId: auth.tenantId },
+        where: { tenantId: auth.tenantId, quantity: { gt: 0 } },
         orderBy: [{ vintage: 'desc' }, { type: 'asc' }],
       }),
       prisma.carbonTrade.findMany({

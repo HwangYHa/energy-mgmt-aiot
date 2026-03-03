@@ -4,7 +4,7 @@ import { useState } from 'react';
 import {
   Bell,
   Mail,
-  MessageSquare,
+  MessageCircle,
   Smartphone,
   Globe,
   ChevronDown,
@@ -33,6 +33,7 @@ interface NotificationRule {
 
 interface Props {
   rule: NotificationRule;
+  hasPhone: boolean;
   onUpdate: (rule: NotificationRule) => void;
 }
 
@@ -70,7 +71,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   cost: '비용',
 };
 
-export function NotificationRuleCard({ rule, onUpdate }: Props) {
+export function NotificationRuleCard({ rule, hasPhone, onUpdate }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -241,7 +242,7 @@ export function NotificationRuleCard({ rule, onUpdate }: Props) {
           <Mail
             className={`w-3.5 h-3.5 ${rule.emailEnabled ? 'text-cyan-400' : 'text-slate-600'}`}
           />
-          <MessageSquare
+          <MessageCircle
             className={`w-3.5 h-3.5 ${rule.smsEnabled ? 'text-cyan-400' : 'text-slate-600'}`}
           />
           <Smartphone
@@ -260,7 +261,7 @@ export function NotificationRuleCard({ rule, onUpdate }: Props) {
           {/* 채널 토글 */}
           <div>
             <p className="text-xs text-slate-500 mb-2">알림 채널</p>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <ChannelButton
                 icon={Mail}
                 label="이메일"
@@ -269,8 +270,8 @@ export function NotificationRuleCard({ rule, onUpdate }: Props) {
                 onClick={() => toggleChannel('emailEnabled')}
               />
               <ChannelButton
-                icon={MessageSquare}
-                label="SMS"
+                icon={MessageCircle}
+                label="카카오톡"
                 active={rule.smsEnabled}
                 disabled={updating}
                 onClick={() => toggleChannel('smsEnabled')}
@@ -283,6 +284,11 @@ export function NotificationRuleCard({ rule, onUpdate }: Props) {
                 onClick={() => toggleChannel('pushEnabled')}
               />
             </div>
+            {rule.smsEnabled && !hasPhone && (
+              <p className="text-xs text-amber-400 mt-1.5">
+                ⚠ 전화번호가 미등록되어 카카오 알림톡이 발송되지 않습니다. 상단에서 번호를 등록하세요.
+              </p>
+            )}
           </div>
 
           {/* 심각도 선택 */}

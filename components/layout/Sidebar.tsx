@@ -14,15 +14,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { UserRole } from '@prisma/client';
+
 import {
   Link2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Lock,
-  Shield,
-  User,
-  Crown,
   Loader2,
   AlertCircle,
   RefreshCw,
@@ -30,9 +28,45 @@ import {
   Star,
   X,
 } from 'lucide-react';
+
 import { iconMap } from './icon-map';
 import { cn } from '@/lib/utils';
 import { hasRoleOrHigher } from '@/lib/constants/roles';
+import { apiGet, apiPost, apiDelete } from '@/lib/api/client';
+// SessionProvider가 서버→클라이언트로 동일한 session을 주입하므로
+// useSession()은 서버 SSR과 클라이언트 초기 렌더 모두 같은 값을 반환함.
+// 따라서 일반 import로 사용해도 hydration mismatch 없음.
+import SidebarRoleBadge from './SidebarRoleBadge';
+
+// ── 플랜 잠금 상수 ────────────────────────────────────────────────
+const PLAN_TIER_ORDER = ['trial', 'basic', 'pro', 'enterprise'] as const;
+type SidebarPlanTier = typeof PLAN_TIER_ORDER[number];
+
+/** 경로 → 최소 필요 플랜 (DB 메뉴 코드 대신 경로 기반으로 안정적) */
+const PATH_REQUIRED_PLAN: Record<string, SidebarPlanTier> = {
+  '/analytics/anomaly':        'pro',
+  '/analytics/carbon':         'pro',
+  '/analytics/carbon/trading': 'pro',
+  '/analytics/simulator':      'pro',
+  '/analytics/templates':      'pro',
+  '/analytics/forecast':       'basic',
+  '/monitoring/pipeline':      'basic',
+};
+
+const PLAN_DISPLAY_NAMES: Record<SidebarPlanTier, string> = {
+  trial:      'Starter',
+  basic:      'Basic',
+  pro:        'Professional',
+  enterprise: 'Enterprise',
+};
+
+function isPlanSufficient(userTier: string, requiredTier: SidebarPlanTier): boolean {
+  const uIdx = PLAN_TIER_ORDER.indexOf(userTier as SidebarPlanTier);
+  const rIdx = PLAN_TIER_ORDER.indexOf(requiredTier);
+  // 알 수 없는 tier는 enterprise로 간주 (오인 잠금 방지)
+  if (uIdx === -1) return true;
+  return uIdx >= rIdx;
+}
 
 interface MenuItem {
   id: string;
@@ -87,42 +121,6 @@ const SIDEBAR_SECTIONS: Record<string, string> = {
   admin:      '시스템',
 };
 
-// 역할별 스타일 설정
-const roleStyles: Record<
-  string,
-  { label: string; icon: typeof Lock; bg: string; text: string }
-> = {
-  viewer: {
-    label: '조회자',
-    icon: Lock,
-    bg: 'bg-slate-600/20',
-    text: 'text-slate-400',
-  },
-  operator: {
-    label: '운영자',
-    icon: User,
-    bg: 'bg-blue-500/20',
-    text: 'text-blue-400',
-  },
-  site_manager: {
-    label: '사이트 관리자',
-    icon: Shield,
-    bg: 'bg-emerald-500/20',
-    text: 'text-emerald-400',
-  },
-  tenant_admin: {
-    label: '테넌트 관리자',
-    icon: Crown,
-    bg: 'bg-purple-500/20',
-    text: 'text-purple-400',
-  },
-  super_admin: {
-    label: '슈퍼 관리자',
-    icon: Crown,
-    bg: 'bg-red-500/20',
-    text: 'text-red-400',
-  },
-};
 
 export default function Sidebar({
   collapsed = false,
@@ -147,8 +145,7 @@ export default function Sidebar({
   const effectiveCollapsed = collapsed && !isHovering;
 
   const userRole = (session?.user?.role as UserRole) || ('viewer' as UserRole);
-  const roleStyle = roleStyles[userRole] ?? roleStyles.viewer;
-  const RoleIcon = roleStyle?.icon ?? Lock;
+  const planTier = (session?.user as { planTier?: string } | undefined)?.planTier ?? 'trial';
 
   // RBAC: 역할 기반 메뉴 필터링
   const filteredGroups = menuGroups
@@ -166,22 +163,8 @@ export default function Sidebar({
         setIsLoading(true);
         setError(null);
 
-        const response = await fetch('/api/menus');
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            throw new Error('인증이 필요합니다.');
-          }
-          throw new Error(`메뉴를 불러올 수 없습니다`);
-        }
-
-        const data = await response.json();
-
-        if (!data.success || !data.data) {
-          throw new Error('잘못된 응답 형식입니다.');
-        }
-
-        setMenuGroups(data.data);
+        const res = await apiGet<MenuGroup[]>('/api/menus');
+        setMenuGroups(res.data ?? []);
       } catch (error) {
         setError(
           error instanceof Error ? error.message : '메뉴를 불러올 수 없습니다.'
@@ -212,9 +195,8 @@ export default function Sidebar({
   // 즐겨찾기 조회
   const fetchFavorites = useCallback(async () => {
     try {
-      const res = await fetch('/api/favorites');
-      const json = await res.json();
-      if (json.success) setFavorites(json.data.favorites ?? []);
+      const res = await apiGet<{ favorites: FavoriteItem[] }>('/api/favorites');
+      setFavorites(res.data?.favorites ?? []);
     } catch { /* ignore */ }
   }, []);
 
@@ -225,15 +207,11 @@ export default function Sidebar({
   const toggleFavorite = async (item: MenuItem) => {
     const isFav = favorites.some((f) => f.menuItemId === item.id);
     if (isFav) {
-      // 즐겨찾기 삭제
+      // 즐겨찾기 삭제 (낙관적)
       setFavorites((prev) => prev.filter((f) => f.menuItemId !== item.id));
       try {
-        const csrfToken = document.cookie.match(/csrf-token=([^;]+)/)?.[1] ?? '';
-        await fetch(`/api/favorites?menuItemId=${item.id}`, {
-          method: 'DELETE',
-          headers: { 'x-csrf-token': csrfToken },
-        });
-      } catch { /* ignore */ }
+        await apiDelete(`/api/favorites?menuItemId=${item.id}`);
+      } catch { /* ignore — 네트워크 오류 시 다음 fetchFavorites에서 복구 */ }
     } else {
       // 즐겨찾기 추가 (낙관적 업데이트)
       const newFav: FavoriteItem = {
@@ -243,15 +221,8 @@ export default function Sidebar({
       };
       setFavorites((prev) => [...prev, newFav]);
       try {
-        const csrfToken = document.cookie.match(/csrf-token=([^;]+)/)?.[1] ?? '';
-        const res = await fetch('/api/favorites', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
-          body: JSON.stringify({ menuItemId: item.id }),
-        });
-        const json = await res.json();
-        if (!json.success) {
-          // 롤백
+        const res = await apiPost<{ success: boolean }>('/api/favorites', { menuItemId: item.id });
+        if (!res.success) {
           setFavorites((prev) => prev.filter((f) => f.menuItemId !== item.id));
         }
       } catch {
@@ -332,22 +303,8 @@ export default function Sidebar({
         </Link>
       </div>
 
-      {/* 역할 뱃지 */}
-      {!effectiveCollapsed && roleStyle && (
-        <div className="px-4 py-3 border-b border-slate-700/50">
-          <div
-            className={cn(
-              'flex items-center gap-2 px-3 py-2 rounded-lg',
-              roleStyle.bg
-            )}
-          >
-            <RoleIcon className={cn('w-4 h-4', roleStyle.text)} />
-            <span className={cn('text-sm font-medium', roleStyle.text)}>
-              {roleStyle.label}
-            </span>
-          </div>
-        </div>
-      )}
+      {/* 역할 뱃지 — SessionProvider의 동일 session으로 서버·클라이언트 일치 보장 */}
+      <SidebarRoleBadge effectiveCollapsed={effectiveCollapsed} />
 
       {/* 메뉴 영역 */}
       <nav className="flex-1 overflow-y-auto py-4 px-2">
@@ -522,6 +479,12 @@ export default function Sidebar({
                         const isActive = pathname === item.path;
                         const ItemIcon = getIcon(item.icon || 'Activity');
                         const isFav = favorites.some((f) => f.menuItemId === item.id);
+                        const itemPath = item.path ?? '';
+                        const requiredTier = PATH_REQUIRED_PLAN[itemPath];
+                        // menuGroups는 useEffect로 로드되므로 hydration 시점에
+                        // filteredGroups가 항상 비어 있어 이 코드는 실행되지 않음.
+                        // 따라서 mounted 가드 불필요.
+                        const isLocked = !!requiredTier && !isPlanSufficient(planTier, requiredTier);
 
                         return (
                           <div
@@ -530,37 +493,60 @@ export default function Sidebar({
                             onMouseEnter={() => setHoveredItemId(item.id)}
                             onMouseLeave={() => setHoveredItemId(null)}
                           >
-                            <Link
-                              href={item.path || '#'}
-                              className={cn(
-                                'flex-1 flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all',
-                                isActive
-                                  ? 'bg-cyan-500/20 text-cyan-400 font-medium'
-                                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                              )}
-                            >
-                              <ItemIcon
+                            {isLocked ? (
+                              /* 플랜 잠금 — 클릭 시 업그레이드 모달 표시 */
+                              <button
+                                onClick={() =>
+                                  window.dispatchEvent(
+                                    new CustomEvent('ems:upgrade', {
+                                      detail: {
+                                        message: `이 기능은 ${PLAN_DISPLAY_NAMES[requiredTier!]} 플랜에서 사용 가능합니다.`,
+                                        upgradeUrl: '/settings/subscription',
+                                      },
+                                    })
+                                  )
+                                }
+                                title={`${PLAN_DISPLAY_NAMES[requiredTier!]} 플랜 필요`}
+                                className="flex-1 flex items-center gap-3 px-3 py-2 rounded-lg text-sm
+                                           text-slate-600 hover:bg-slate-800/50 hover:text-slate-500 transition-all"
+                              >
+                                <ItemIcon className="w-4 h-4 flex-shrink-0 text-slate-700" />
+                                <span className="truncate">{item.name}</span>
+                                <Lock className="ml-auto w-3 h-3 text-slate-700 flex-shrink-0" />
+                              </button>
+                            ) : (
+                              <Link
+                                href={itemPath || '#'}
                                 className={cn(
-                                  'w-4 h-4 flex-shrink-0',
-                                  isActive ? 'text-cyan-400' : 'text-slate-500 group-hover:text-slate-400'
+                                  'flex-1 flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all',
+                                  isActive
+                                    ? 'bg-cyan-500/20 text-cyan-400 font-medium'
+                                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                                 )}
-                              />
-                              <span className="truncate">{item.name}</span>
-                              {item.badgeType && item.badgeType !== 'none' && (
-                                <span
+                              >
+                                <ItemIcon
                                   className={cn(
-                                    'ml-auto px-1.5 py-0.5 text-[10px] rounded font-medium',
-                                    item.badgeColor === 'red'
-                                      ? 'bg-red-500/20 text-red-400'
-                                      : item.badgeColor === 'yellow'
-                                      ? 'bg-amber-500/20 text-amber-400'
-                                      : 'bg-emerald-500/20 text-emerald-400'
+                                    'w-4 h-4 flex-shrink-0',
+                                    isActive ? 'text-cyan-400' : 'text-slate-500 group-hover:text-slate-400'
                                   )}
-                                >
-                                  {item.badgeType}
-                                </span>
-                              )}
-                            </Link>
+                                />
+                                <span className="truncate">{item.name}</span>
+                                {item.badgeType && item.badgeType !== 'none' && (
+                                  <span
+                                    className={cn(
+                                      'ml-auto px-1.5 py-0.5 text-[10px] rounded font-medium',
+                                      item.badgeColor === 'red'
+                                        ? 'bg-red-500/20 text-red-400'
+                                        : item.badgeColor === 'yellow'
+                                        ? 'bg-amber-500/20 text-amber-400'
+                                        : 'bg-emerald-500/20 text-emerald-400'
+                                    )}
+                                  >
+                                    {item.badgeType}
+                                  </span>
+                                )}
+                              </Link>
+                            )}
                             {/* 즐겨찾기 버튼 (hover 시 표시) */}
                             {(hoveredItemId === item.id || isFav) && (
                               <button

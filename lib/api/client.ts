@@ -16,8 +16,9 @@ const CSRF_CACHE_DURATION = 30 * 60 * 1000; // 30분
 
 /**
  * CSRF 토큰 가져오기 (캐싱 적용)
+ * 공개 export — FormData 업로드 등 apiRequest를 사용할 수 없는 경우 직접 사용
  */
-async function getCsrfToken(): Promise<string> {
+export async function getCsrfToken(): Promise<string> {
   const now = Date.now();
 
   // 캐시된 토큰이 유효하면 반환
@@ -227,6 +228,18 @@ export async function apiRequest<T = unknown>(
           await new Promise((resolve) => setTimeout(resolve, retryDelay));
           continue;
         }
+      }
+
+      // 402 Payment Required — fetchWithCsrf와 동일하게 ems:upgrade 이벤트 발행
+      if (response.status === 402 && typeof window !== 'undefined') {
+        try {
+          window.dispatchEvent(new CustomEvent('ems:upgrade', {
+            detail: {
+              message: responseData.error || responseData.message || '구독 플랜이 필요합니다.',
+              upgradeUrl: (responseData as unknown as Record<string, unknown>).upgradeUrl ?? '/settings/subscription',
+            },
+          }));
+        } catch { /* noop */ }
       }
 
       // 에러 응답

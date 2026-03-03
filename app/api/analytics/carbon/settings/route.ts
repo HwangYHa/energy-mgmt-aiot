@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         { OR: [{ validTo: null }, { validTo: { gte: now } }] },
       ],
     },
-    select: { id: true, name: true, code: true, category: true, sourceType: true, factor: true, unit: true, source: true, year: true, region: true, isDefault: true },
+    select: { id: true, code: true, category: true, sourceType: true, factor: true, unit: true, source: true, year: true, region: true, isDefault: true },
     orderBy: [{ isDefault: 'desc' }, { year: 'desc' }],
   });
 

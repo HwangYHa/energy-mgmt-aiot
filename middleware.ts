@@ -33,6 +33,8 @@ const PUBLIC_PREFIXES = [
   '/support',
   '/demo',
   '/trial',
+  '/sw.js',           // service worker should be public
+  '/manifest.json',   // manifest must not require auth
 ];
 
 const EXACT_PUBLIC = ['/'];
@@ -114,7 +116,10 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    return securityHeadersMiddleware(NextResponse.next());
+    return securityHeadersMiddleware(NextResponse.next(), {
+      scriptSrcDomains: ['https://js.tosspayments.com'],
+      frameSrcDomains: ['https://payment-gateway-sandbox.tosspayments.com'],
+    });
   }
 
   // ── 2. 인증 검증 ──────────────────────────────────────────
@@ -197,7 +202,10 @@ export async function middleware(request: NextRequest) {
     }
 
     // 남은 요청 수를 헤더로 전달
-    const response = securityHeadersMiddleware(NextResponse.next());
+    const response = securityHeadersMiddleware(NextResponse.next(), {
+      scriptSrcDomains: ['https://js.tosspayments.com'],
+      frameSrcDomains: ['https://payment-gateway-sandbox.tosspayments.com'],
+    });
     withRateLimitHeaders(response, limit, result.remaining, result.resetAt);
     // CSRF 검증 (POST/PUT/DELETE/PATCH)
     if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
@@ -284,7 +292,10 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return securityHeadersMiddleware(NextResponse.next());
+  return securityHeadersMiddleware(NextResponse.next(), {
+    scriptSrcDomains: ['https://js.tosspayments.com'],
+    frameSrcDomains: ['https://payment-gateway-sandbox.tosspayments.com'],
+  });
 }
 
 export const config = {

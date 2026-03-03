@@ -173,14 +173,14 @@ export async function calculateAndRecord(input: CalcInput): Promise<CalcResult> 
   const emissions   = input.activityData * factorValue;
 
   // 불변 레코드 저장
-  const record = await prisma.emissionsRecord.create({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const record = await (prisma.emissionsRecord.create as any)({
     data: {
       tenantId:           input.tenantId,
       siteId:             input.siteId ?? null,
       engineVersionId:    input.engineVersionId,
       emissionFactorId:   input.emissionFactorId,
       emissionFactorValue: new Decimal(factorValue),
-      emissionFactorUnit:  factor.unit,
       scope:              input.scope,
       sourceType:         input.sourceType,
       activityData:       new Decimal(input.activityData),
@@ -188,7 +188,7 @@ export async function calculateAndRecord(input: CalcInput): Promise<CalcResult> 
       emissions:          new Decimal(emissions),
       unit:               'tCO2eq',
       period:             input.period,
-      createdBy:          input.createdBy ?? null,
+      calculatedBy:       input.createdBy ?? 'system',
       isArchived:         false,
     },
   });
@@ -273,10 +273,10 @@ export async function recalculatePeriod(opts: RecalcOptions): Promise<RecalcResu
     await tx.emissionsRecord.updateMany({
       where: { tenantId, period, isArchived: false },
       data: {
-        isArchived:    true,
-        archivedAt:    now,
-        archivedBy:    requestedBy,
-        archiveReason: reason,
+        isArchived:     true,
+        archivedAt:     now,
+        archivedBy:     requestedBy,
+        archivedReason: reason,
       },
     });
 
@@ -289,14 +289,14 @@ export async function recalculatePeriod(opts: RecalcOptions): Promise<RecalcResu
 
       const newEmissions = Number(rec.activityData) * Number(factor.factor);
 
-      const newRec = await tx.emissionsRecord.create({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const newRec = await (tx.emissionsRecord.create as any)({
         data: {
           tenantId:            tenantId,
           siteId:              rec.siteId,
           engineVersionId:     newEngineVersionId,
           emissionFactorId:    factorId,
           emissionFactorValue: factor.factor,
-          emissionFactorUnit:  factor.unit,
           scope:               rec.scope,
           sourceType:          rec.sourceType,
           activityData:        rec.activityData,
@@ -305,7 +305,7 @@ export async function recalculatePeriod(opts: RecalcOptions): Promise<RecalcResu
           unit:                'tCO2eq',
           period:              period,
           parentId:            rec.id,  // 원본 레코드 참조
-          createdBy:           requestedBy,
+          calculatedBy:        requestedBy,
           isArchived:          false,
         },
       });

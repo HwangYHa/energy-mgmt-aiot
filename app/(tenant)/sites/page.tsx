@@ -457,7 +457,6 @@ function SiteCreateModal({
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    code: '',
     siteType: 'factory' as const,
     address: '',
     city: '',
@@ -478,7 +477,6 @@ function SiteCreateModal({
           ...formData,
           areaSqm: formData.areaSqm ? parseFloat(formData.areaSqm) : undefined,
           peakPowerKw: formData.peakPowerKw ? parseFloat(formData.peakPowerKw) : undefined,
-          code: formData.code || undefined,
         }),
       });
 
@@ -521,20 +519,6 @@ function SiteCreateModal({
               onChange={(e) => setFormData((f) => ({ ...f, name: e.target.value }))}
               placeholder="예: 서울 본사 공장"
               required
-              className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-            />
-          </div>
-
-          {/* Code */}
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5">
-              사이트 코드
-            </label>
-            <input
-              type="text"
-              value={formData.code}
-              onChange={(e) => setFormData((f) => ({ ...f, code: e.target.value }))}
-              placeholder="예: SITE-001"
               className="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
             />
           </div>

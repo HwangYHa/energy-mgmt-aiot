@@ -6,7 +6,7 @@ import {
   XCircle,
   Clock,
   Mail,
-  MessageSquare,
+  MessageCircle,
   Smartphone,
   Globe,
   Loader2,
@@ -37,9 +37,10 @@ const STATUS_CONFIG = {
 };
 
 const CHANNEL_ICONS: Record<string, typeof Mail> = {
-  email: Mail,
-  sms: MessageSquare,
-  push: Smartphone,
+  email:   Mail,
+  kakao:   MessageCircle,
+  sms:     MessageCircle, // 구 데이터 호환
+  push:    Smartphone,
   webhook: Globe,
 };
 

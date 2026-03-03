@@ -13,7 +13,8 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { TrendingUp, Zap, Target, AlertCircle, Loader2 } from 'lucide-react';
-import { fetchWithCsrf } from '@/hooks/use-csrf';
+import { apiPost, ApiError } from '@/lib/api/client';
+import { PlanLockedBanner } from '@/components/subscription/PlanLockedBanner';
 
 interface Prediction {
   timestamp: string;
@@ -33,38 +34,39 @@ export default function ForecastPage() {
   const [horizon, setHorizon] = useState('24h');
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [accuracy, setAccuracy] = useState(0);
+  const [modelName, setModelName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [chartData, setChartData] = useState<any[]>([]);
+  const [isPlanLocked, setIsPlanLocked] = useState(false);
+  const [chartData, setChartData] = useState<{ time: string; actual: null; forecast: number; lower: number; upper: number }[]>([]);
 
   const handleForecast = async () => {
     setIsLoading(true);
     setError(null);
+    setIsPlanLocked(false);
 
     try {
-      const response = await fetchWithCsrf('/api/ai/forecast', {
-        method: 'POST',
-        body: JSON.stringify({ horizon }),
-      });
+      // forecast API는 successResponse() 미사용 → 필드가 직접 노출됨
+      const res = await apiPost('/api/ai/forecast', { horizon });
+      const raw = res as unknown as ForecastData & { predictions: Prediction[] };
 
-      if (!response.ok) {
-        throw new Error(`Error: ${response.statusText}`);
-      }
-
-      const data: ForecastData = await response.json();
-      setPredictions(data.predictions);
-      setAccuracy(data.accuracy);
+      setPredictions(raw.predictions ?? []);
+      setAccuracy(raw.accuracy ?? 0);
+      setModelName(raw.model || 'SEASONAL-LOCAL');
 
       // 차트 데이터 변환
-      const chartData = data.predictions.map((p) => ({
+      const built = (raw.predictions ?? []).map((p) => ({
         time: new Date(p.timestamp).getHours() + '시',
         actual: null,
         forecast: Math.round(p.value * 10) / 10,
         lower: Math.round((p.lower ?? p.value * 0.85) * 10) / 10,
         upper: Math.round((p.upper ?? p.value * 1.15) * 10) / 10,
       }));
-      setChartData(chartData);
+      setChartData(built);
     } catch (err) {
+      if (err instanceof ApiError && err.status === 402) {
+        setIsPlanLocked(true);
+      }
       setError(err instanceof Error ? err.message : '알 수 없는 오류');
     } finally {
       setIsLoading(false);
@@ -155,14 +157,30 @@ export default function ForecastPage() {
         </div>
       </div>
 
-      {/* 에러 메시지 */}
-      {error && (
+      {/* 플랜 잠금 — 앰버 테마 */}
+      {isPlanLocked && error && (
+        <PlanLockedBanner
+          message={error}
+          requiredPlan="STARTER"
+          onRetry={() => { setIsPlanLocked(false); handleForecast(); }}
+          className="mb-6"
+        />
+      )}
+
+      {/* 일반 오류 — 빨간 박스 */}
+      {error && !isPlanLocked && (
         <div className="mb-6 bg-red-500/10 border-l-4 border-red-500/30 p-4 rounded flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
-          <div>
+          <div className="flex-1">
             <h3 className="font-bold text-red-300">오류 발생</h3>
             <p className="text-red-200 text-sm">{error}</p>
           </div>
+          <button
+            onClick={handleForecast}
+            className="shrink-0 text-xs text-red-300 border border-red-500/40 px-3 py-1 rounded hover:bg-red-500/10 transition"
+          >
+            재시도
+          </button>
         </div>
       )}
 
@@ -195,6 +213,8 @@ export default function ForecastPage() {
                   border: '1px solid #334155',
                   borderRadius: '8px',
                 }}
+                // softer highlight so hovering doesn't paint a bright box
+                cursor={{ fill: 'rgba(255,255,255,0.1)' }}
                 formatter={(value: number) => [value.toFixed(1), '']}
               />
               <Legend />
@@ -229,7 +249,7 @@ export default function ForecastPage() {
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-              <span>모델: {predictions.length > 0 ? 'LSTM' : '-'}</span>
+              <span>모델: {predictions.length > 0 ? modelName || 'SEASONAL-LOCAL' : '-'}</span>
             </div>
           </div>
         </div>

@@ -129,7 +129,7 @@ function PrivacyContent() {
           <li>개인정보 삭제 요구</li>
           <li>개인정보 처리 정지 요구</li>
         </ul>
-        <p className="mt-3 text-sm">권리 행사는 설정 페이지 또는 support@carboneum.kr로 요청 가능합니다.</p>
+        <p className="mt-3 text-sm">권리 행사는 설정 페이지 또는 carbonieum.official@gmail.com로 요청 가능합니다.</p>
       </section>
 
       <section>

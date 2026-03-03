@@ -34,7 +34,9 @@ export function securityHeadersMiddleware(
   response: NextResponse,
   options?: {
     nonce?: string;
-    allowedDomains?: string[];
+    allowedDomains?: string[]; // for connect-src
+    scriptSrcDomains?: string[]; // allowed external script hosts
+    frameSrcDomains?: string[]; // allowed iframe / child-src hosts
   }
 ): NextResponse {
   const isDev = process.env.NODE_ENV !== 'production';
@@ -68,16 +70,20 @@ export function securityHeadersMiddleware(
   // ==========================================
   // 5. Content Security Policy (CSP) - 핵심 XSS 방어
   // ==========================================
+  // prepare script-src additional hosts
+  const extraScriptHosts = options?.scriptSrcDomains?.join(' ') || '';
+  const extraFrameHosts = options?.frameSrcDomains?.join(' ') || '';
+
   const cspDirectives = [
     // 기본: 동일 출처만 허용
     "default-src 'self'",
 
-    // 스크립트: nonce 기반 + 동일 출처
+    // 스크립트: nonce 기반 + 동일 출처 + 추가 호스트
     // 개발 환경: unsafe-eval 허용 (HMR용)
     // 프로덕션: nonce만 허용하여 인라인 스크립트 제한
     isDev
-      ? `script-src 'self' 'unsafe-inline' 'unsafe-eval'`
-      : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+      ? `script-src 'self' ${extraScriptHosts} 'unsafe-inline' 'unsafe-eval'`
+      : `script-src 'self' ${extraScriptHosts} 'nonce-${nonce}'`,
 
     // 스타일: nonce 기반 + 동일 출처 (Tailwind CSS 인라인 스타일 허용)
     isDev
@@ -115,6 +121,9 @@ export function securityHeadersMiddleware(
 
     // Media 제한
     "media-src 'self' https:",
+
+    // iframe/child-src (결제창 등 외부 프레임)
+    extraFrameHosts ? `frame-src 'self' ${extraFrameHosts}` : "frame-src 'self'",
 
     // 업그레이드 가능한 요청 자동 HTTPS 전환
     isDev ? '' : 'upgrade-insecure-requests',

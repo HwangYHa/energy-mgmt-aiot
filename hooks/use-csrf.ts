@@ -1,71 +1,40 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-
-// CSRF 토큰 전역 상태 (React 외부에서도 사용 가능)
-let globalCsrfToken: string | null = null;
-let globalCsrfExpiry: number = 0;
-const CSRF_CACHE_DURATION = 30 * 60 * 1000; // 30분
+// lib/api/client의 단일 캐시 사용 — 두 캐시 desync 방지
+import { getCsrfToken, clearCsrfTokenCache } from '@/lib/api/client';
 
 /**
- * CSRF 토큰 전역 캐시 초기화
+ * CSRF 토큰 전역 캐시 초기화 — lib/api/client 캐시를 초기화
  */
 export function clearGlobalCsrfToken(): void {
-  globalCsrfToken = null;
-  globalCsrfExpiry = 0;
+  clearCsrfTokenCache();
 }
 
 /**
- * CSRF 토큰을 가져오는 전역 함수
- * React 컴포넌트 외부에서도 사용 가능
+ * CSRF 토큰을 가져오는 전역 함수 (lib/api/client의 단일 캐시 사용)
+ * @deprecated lib/api/client의 getCsrfToken 직접 사용 권장
  */
 export async function fetchCsrfToken(): Promise<string> {
-  const now = Date.now();
-
-  // 캐시된 토큰이 유효하면 반환
-  if (globalCsrfToken && globalCsrfExpiry > now) {
-    return globalCsrfToken;
-  }
-
-  try {
-    const response = await fetch('/api/security/csrf', {
-      method: 'GET',
-      credentials: 'include',
-    });
-
-    if (!response.ok) {
-      throw new Error(`CSRF 토큰 발급 실패: ${response.status}`);
-    }
-
-    const data = await response.json();
-    globalCsrfToken = data.csrfToken;
-    globalCsrfExpiry = now + CSRF_CACHE_DURATION;
-
-    return globalCsrfToken!;
-  } catch (error) {
-    console.error('[CSRF] 토큰 발급 오류:', error);
-    throw new Error('CSRF 토큰을 가져올 수 없습니다. 페이지를 새로고침해주세요.');
-  }
+  return getCsrfToken();
 }
 
 /**
- * CSRF 토큰을 자동으로 가져와서 관리하는 훅
+ * CSRF 토큰을 자동으로 가져와서 관리하는 훅 (lib/api/client 단일 캐시 사용)
  *
  * @example
  * const { csrfToken, loading, error, refresh } = useCsrfToken();
  */
 export function useCsrfToken() {
-  const [csrfToken, setCsrfToken] = useState<string | null>(globalCsrfToken);
-  const [loading, setLoading] = useState(!globalCsrfToken);
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const loadToken = useCallback(async (invalidate = false) => {
     setLoading(true);
     setError(null);
-
     try {
-      // 캐시 초기화 후 새로 가져오기
-      clearGlobalCsrfToken();
+      if (invalidate) clearGlobalCsrfToken();
       const token = await fetchCsrfToken();
       setCsrfToken(token);
     } catch (err) {
@@ -75,26 +44,9 @@ export function useCsrfToken() {
     }
   }, []);
 
-  useEffect(() => {
-    // 이미 유효한 토큰이 있으면 스킵
-    if (globalCsrfToken && globalCsrfExpiry > Date.now()) {
-      setCsrfToken(globalCsrfToken);
-      setLoading(false);
-      return;
-    }
+  const refresh = useCallback(() => loadToken(true), [loadToken]);
 
-    // 토큰 발급
-    (async () => {
-      try {
-        const token = await fetchCsrfToken();
-        setCsrfToken(token);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'CSRF 토큰 발급 실패');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  useEffect(() => { loadToken(); }, [loadToken]);
 
   return { csrfToken, loading, error, refresh };
 }
@@ -126,11 +78,38 @@ export async function fetchWithCsrf(
     headers.set('Content-Type', 'application/json');
   }
 
-  return fetch(url, {
+  const res = await fetch(url, {
     ...options,
     headers,
     credentials: 'include', // 쿠키 포함 (인증)
   });
+
+  // 전역적 플랜/권한 응답 처리: 402(구독 필요), 403(권한 없음)
+  if (typeof window !== 'undefined' && (res.status === 402 || res.status === 403)) {
+    // 읽은 바디가 재사용되지 않도록 clone 후 확인
+    try {
+      const clone = res.clone();
+      const data = await clone.json().catch(() => null);
+      const msg = data?.error || data?.message || (res.status === 402 ? '구독 플랜이 필요합니다. 업그레이드 해주세요.' : '권한이 없습니다.');
+      // 동작: 사용자에게 비침해성 토스트 알림 제공
+      // toast는 전역 이벤트 방식이므로 여기서 import하여 호출
+      const { toast } = await import('@/lib/toast');
+      toast.warn(msg);
+      // 또한 전역 업그레이드 이벤트를 발행하여 모달을 열 수 있게 함
+      try {
+        const detail = { message: msg, upgradeUrl: data?.upgradeUrl };
+        window.dispatchEvent(new CustomEvent('ems:upgrade', { detail }));
+      } catch (e) {
+        // noop
+      }
+    } catch (e) {
+      // 실패해도 원본 응답을 그대로 반환
+      // eslint-disable-next-line no-console
+      console.warn('[fetchWithCsrf] failed to show upgrade toast', e);
+    }
+  }
+
+  return res;
 }
 
 /**
@@ -161,9 +140,30 @@ export async function fetchWithToken(
     headers.set('Content-Type', 'application/json');
   }
 
-  return fetch(url, {
+  const res = await fetch(url, {
     ...options,
     headers,
     credentials: 'include',
   });
+
+  if (typeof window !== 'undefined' && (res.status === 402 || res.status === 403)) {
+    try {
+      const clone = res.clone();
+      const data = await clone.json().catch(() => null);
+      const msg = data?.error || data?.message || (res.status === 402 ? '구독 플랜이 필요합니다. 업그레이드 해주세요.' : '권한이 없습니다.');
+      const { toast } = await import('@/lib/toast');
+      toast.warn(msg);
+      try {
+        const detail = { message: msg, upgradeUrl: data?.upgradeUrl };
+        window.dispatchEvent(new CustomEvent('ems:upgrade', { detail }));
+      } catch (e) {
+        // noop
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[fetchWithToken] failed to show upgrade toast', e);
+    }
+  }
+
+  return res;
 }

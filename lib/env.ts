@@ -35,6 +35,8 @@ const envSchema = z.object({
   LOG_LEVEL: z
     .enum(['debug', 'info', 'warn', 'error'])
     .default('info'),
+  // Development helpers
+  DEV_BYPASS_FEATURES: z.boolean().optional(),
 
   // Optional: Redis
   REDIS_URL: z.string().url().optional(),

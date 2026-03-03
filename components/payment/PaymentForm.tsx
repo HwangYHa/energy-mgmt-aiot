@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Script from 'next/script';
 import { Check, CreditCard } from 'lucide-react';
 import { toast } from '@/lib/toast';
+import { apiPost, ApiError } from '@/lib/api/client';
 
 interface Plan {
   id: string;
@@ -60,6 +61,7 @@ export function PaymentForm({ plans, userId }: PaymentFormProps) {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('stripe');
   const [isLoading, setIsLoading] = useState(false);
   const [iamportLoaded, setIamportLoaded] = useState(false);
+  const [iamportError, setIamportError] = useState(false);
 
   const handleStripePayment = async () => {
     if (!selectedPlan) return;
@@ -67,33 +69,19 @@ export function PaymentForm({ plans, userId }: PaymentFormProps) {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/payment/stripe/checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          planId: selectedPlan.id,
-          priceId: selectedPlan.stripePriceId || 'price_default',
-        }),
+      const res = await apiPost<{ url: string }>('/api/payment/stripe/checkout', {
+        planId: selectedPlan.id,
+        priceId: selectedPlan.stripePriceId || 'price_default',
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Checkout session creation failed');
-      }
-
-      const data = await response.json();
+      const url = res.data?.url;
+      if (!url) throw new Error('Stripe URL을 받지 못했습니다');
 
       // Stripe Checkout으로 리다이렉트
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error('No checkout URL received');
-      }
+      window.location.href = url;
     } catch (error) {
       console.error('Stripe checkout error:', error);
-      toast.error(`결제 오류: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+      toast.error(`결제 오류: ${error instanceof ApiError ? error.message : error instanceof Error ? error.message : '알 수 없는 오류'}`);
       setIsLoading(false);
     }
   };
@@ -122,6 +110,14 @@ export function PaymentForm({ plans, userId }: PaymentFormProps) {
     }
 
     // Iamport 결제
+    if (iamportError) {
+      toast.error('결제 모듈을 로드할 수 없습니다. 페이지를 새로고침하거나 나중에 다시 시도해주세요.');
+      return;
+    }
+    if (iamportError) {
+      toast.error('결제 모듈 로드에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
     if (!iamportLoaded || !window.IMP) {
       toast.warn('결제 모듈을 로딩 중입니다. 잠시 후 다시 시도해주세요');
       return;
@@ -162,28 +158,16 @@ export function PaymentForm({ plans, userId }: PaymentFormProps) {
         if (response.success) {
           // 결제 성공 - 서버에서 검증
           try {
-            const verifyResponse = await fetch('/api/payment/complete', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                imp_uid: response.imp_uid,
-                merchant_uid: response.merchant_uid,
-                paid_amount: response.paid_amount,
-              }),
+            await apiPost('/api/payment/complete', {
+              imp_uid: response.imp_uid,
+              merchant_uid: response.merchant_uid,
+              paid_amount: response.paid_amount,
             });
-
-            if (verifyResponse.ok) {
-              toast.success('결제가 완료되었습니다!');
-              router.push('/settings/subscription');
-            } else {
-              const error = await verifyResponse.json();
-              toast.error(`결제 검증 실패: ${error.error}`);
-            }
+            toast.success('결제가 완료되었습니다!');
+            router.push('/settings/subscription');
           } catch (error) {
             console.error('결제 검증 에러:', error);
-            toast.error('결제 검증 중 오류가 발생했습니다');
+            toast.error(`결제 검증 실패: ${error instanceof ApiError ? error.message : '오류가 발생했습니다'}`);
           }
         } else {
           // 결제 실패
@@ -197,28 +181,16 @@ export function PaymentForm({ plans, userId }: PaymentFormProps) {
     // 무료 플랜은 API를 통해 직접 구독 생성
     setIsLoading(true);
     try {
-      const response = await fetch('/api/subscriptions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          planId: selectedPlan!.id,
-          billingCycle: 'monthly',
-          autoRenew: true,
-        }),
+      await apiPost('/api/subscriptions', {
+        planId: selectedPlan!.id,
+        billingCycle: 'monthly',
+        autoRenew: true,
       });
-
-      if (response.ok) {
-        toast.success('무료 플랜 구독이 완료되었습니다!');
-        router.push('/settings/subscription');
-      } else {
-        const error = await response.json();
-        toast.error(`구독 생성 실패: ${error.error}`);
-      }
+      toast.success('무료 플랜 구독이 완료되었습니다!');
+      router.push('/settings/subscription');
     } catch (error) {
       console.error('구독 생성 에러:', error);
-      toast.error('구독 생성 중 오류가 발생했습니다');
+      toast.error(`구독 생성 실패: ${error instanceof ApiError ? error.message : '오류가 발생했습니다'}`);
     } finally {
       setIsLoading(false);
     }
@@ -267,8 +239,12 @@ export function PaymentForm({ plans, userId }: PaymentFormProps) {
       {/* Iamport SDK 로드 */}
       <Script
         src="https://cdn.iamport.kr/v1/iamport.js"
-        onLoad={() => setIamportLoaded(true)}
         strategy="lazyOnload"
+        onLoad={() => setIamportLoaded(true)}
+        onError={() => {
+          setIamportError(true);
+          toast.error('결제 모듈 로드에 실패했습니다. 네트워크를 확인해주세요.');
+        }}
       />
 
       {/* 결제 방법 선택 */}

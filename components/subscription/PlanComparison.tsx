@@ -9,6 +9,26 @@ import {
   FEATURE_LABELS,
   type PlanFeatureSet,
 } from '@/lib/constants/plans';
+
+// 토스페이먼츠 JS SDK 타입 (CDN 로드)
+declare global {
+  interface Window {
+    TossPayments?: (clientKey: string) => {
+      requestPayment(
+        method: string,
+        params: {
+          amount: number;
+          orderId: string;
+          orderName: string;
+          customerName?: string;
+          customerEmail?: string;
+          successUrl: string;
+          failUrl: string;
+        }
+      ): Promise<never>;
+    };
+  }
+}
 import {
   Check,
   X,
@@ -29,27 +49,23 @@ interface PlanComparisonProps {
 
 const PLAN_ORDER = ['trial', 'basic', 'pro', 'enterprise'] as const;
 
-/**
- * Stripe 결제 시작
- * - 서버에 tier + billingCycle 전달 → Stripe Checkout URL 수신 → 리다이렉트
- */
-async function initiateCheckout(tier: string, billingCycle: 'monthly' | 'yearly'): Promise<void> {
-  const res = await fetch('/api/payment/stripe/checkout', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tier, billingCycle }),
-  });
-
-  if (!res.ok) {
-    const { error } = await res.json().catch(() => ({ error: '결제 세션 생성 실패' }));
-    throw new Error(error || '결제 세션 생성 실패');
+// ── 토스페이먼츠 SDK 동적 로더 (클릭 시 로드, 캐시 싱글톤) ──
+let _tossSDKPromise: Promise<void> | null = null;
+function loadTossSDK(): Promise<void> {
+  if (typeof window !== 'undefined' && window.TossPayments) return Promise.resolve();
+  if (!_tossSDKPromise) {
+    _tossSDKPromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://js.tosspayments.com/v1/payment';
+      s.onload  = () => resolve();
+      s.onerror = () => {
+        _tossSDKPromise = null; // 실패 시 재시도 가능하도록 초기화
+        reject(new Error('토스페이먼츠 SDK 로드 실패. 네트워크 연결을 확인해주세요.'));
+      };
+      document.head.appendChild(s);
+    });
   }
-
-  const { url } = await res.json();
-  if (!url) throw new Error('Stripe URL을 받지 못했습니다');
-
-  // Stripe Hosted Checkout으로 리다이렉트
-  window.location.href = url;
+  return _tossSDKPromise;
 }
 
 // 기능 카테고리별 그룹
@@ -89,19 +105,45 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
   };
 
   async function handleSelectPlan(tier: string) {
-    if (tier === 'enterprise') {
-      router.push('/support');
+    setCheckoutError(null);
+    if (tier === 'enterprise') { router.push('/support'); return; }
+    if (tier === 'trial') return;
+
+    const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY;
+    if (!clientKey) {
+      setCheckoutError('결제 설정이 완료되지 않았습니다. 관리자에게 문의해주세요.');
       return;
     }
-    if (tier === 'trial') return; // 무료 플랜은 별도 처리 불필요
+
+    const display = PLAN_DISPLAY[tier];
+    if (!display) return;
+    const price = billingCycle === 'monthly' ? display.monthlyPrice : display.yearlyPrice;
+    if (!price) return;
 
     setLoadingTier(tier);
-    setCheckoutError(null);
+
     try {
-      await initiateCheckout(tier, billingCycle);
-      // initiateCheckout은 window.location.href 변경 → 이 이후 코드는 실행되지 않음
-    } catch (e) {
-      setCheckoutError(e instanceof Error ? e.message : '결제 오류가 발생했습니다.');
+      // 클릭 시점에 SDK 로드 (이미 로드됐으면 즉시 resolve)
+      await loadTossSDK();
+
+      const orderId   = `TOSS-${tier.toUpperCase()}-${billingCycle === 'monthly' ? 'M' : 'Y'}-${Date.now()}`;
+      const orderName = `탄소이음 ${display.name} (${billingCycle === 'monthly' ? '월간' : '연간'})`;
+      const baseUrl   = window.location.origin;
+
+      const tossPayments = window.TossPayments!(clientKey);
+      await tossPayments.requestPayment('카드', {
+        amount: price,
+        orderId,
+        orderName,
+        successUrl: `${baseUrl}/payment/toss/success?tier=${tier}&billingCycle=${billingCycle}`,
+        failUrl:    `${baseUrl}/payment/toss/fail`,
+      });
+      // requestPayment는 리다이렉트 → 이 이후 코드 실행되지 않음
+    } catch (e: unknown) {
+      const err = e as { code?: string; message?: string };
+      if (err?.code !== 'USER_CANCEL') {
+        setCheckoutError(err?.message || '결제 중 오류가 발생했습니다.');
+      }
       setLoadingTier(null);
     }
   }
@@ -121,7 +163,7 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
           <h2 className="text-lg font-semibold text-white">플랜 비교</h2>
           <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
             <Info className="w-3 h-3" />
-            표시 금액에 부가세(VAT 10%)가 별도 부과됩니다. Stripe 결제 페이지에서 최종 금액 확인.
+            표시 금액에 부가세(VAT 10%)가 별도 부과됩니다. 토스페이먼츠 결제창에서 최종 금액 확인.
           </p>
         </div>
 

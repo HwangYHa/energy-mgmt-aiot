@@ -15,6 +15,7 @@ import { prisma } from '@/lib/db/prisma';
 import { deviceCreateSchema, formatValidationError } from '@/lib/validation/schemas';
 import { z } from 'zod';
 import { successResponse, serverErrorResponse, unauthorizedResponse } from '@/lib/api/response';
+import { logActivity, MENU_CODES, ACTION_TYPES } from '@/lib/services/activity-log.service';
 
 export async function GET(request: NextRequest) {
   try {
@@ -158,6 +159,22 @@ export async function POST(request: NextRequest) {
         result: 'success',
       },
     }).catch((err) => console.error('Audit log error:', err));
+
+    // 활동 이력 기록 (fire-and-forget)
+    logActivity({
+      tenantId: auth.tenantId,
+      menuCode: MENU_CODES.DEVICE_MGMT,
+      actionType: ACTION_TYPES.CREATE,
+      actionLabel: '기기 생성',
+      resourceType: 'device',
+      resourceId: device.id,
+      resourceName: device.name,
+      afterData: { name: device.name, deviceType: device.deviceType, siteId: device.siteId },
+      userId: auth.userId,
+      userEmail: auth.email,
+      userRole: auth.role,
+      request,
+    });
 
     return NextResponse.json(device, { status: 201 });
   } catch (error) {

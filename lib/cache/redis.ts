@@ -18,7 +18,7 @@ import { Redis } from '@upstash/redis';
 let redisClient: Redis | null = null;
 
 // 플레이스홀더/미설정 URL 필터링 (배포 전 실수 방지)
-const _redisUrl   = process.env.UPSTASH_REDIS_URL   ?? '';
+const _redisUrl   = process.env.UPSTASH_REDIS_URL   ?? 'redis://localhost:6379';
 const _redisToken = process.env.UPSTASH_REDIS_TOKEN ?? '';
 const _isRealRedis =
   _redisUrl.startsWith('https://') &&

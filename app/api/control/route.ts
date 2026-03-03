@@ -31,6 +31,7 @@ const controlCommandSchema = z.object({
   executionMode: z.literal('manual'),
   requiresApproval: z.boolean().default(false),
   targetValue: z.number().optional(),
+  reason: z.string().max(1000).optional(),
   parameters: z.record(z.unknown()).optional(),
 });
 
@@ -63,9 +64,10 @@ export async function POST(request: NextRequest) {
       return validationErrorResponse(errors);
     }
 
-    const { deviceId, action, requiresApproval, targetValue, parameters } =
+    const { deviceId, action, requiresApproval, targetValue, reason, parameters } =
       parseResult.data;
 
+    console.log("parseResult.data : ", parseResult.data)
     // 4. 설비 조회 및 테넌트 검증
     const device = await prisma.device.findFirst({
       where: {
@@ -113,13 +115,20 @@ export async function POST(request: NextRequest) {
       null;
 
     // 8. ControlLog 생성
+    // parameters에 reason도 병기 (기존 호환성 유지)
+    const mergedParams = reason
+      ? { ...(parameters ?? {}), reason }
+      : parameters ?? undefined;
+
+      console.log("reason >>> ", reason);
     const controlLog = await prisma.controlLog.create({
       data: {
         tenantId: auth.tenantId,
         deviceId,
         action,
-        parameters: parameters as Prisma.InputJsonValue | undefined,
+        parameters: mergedParams as Prisma.InputJsonValue | undefined,
         targetValue: targetValue ?? undefined,
+        reason: reason ?? undefined,
         executionMode: 'manual',
         requiresApproval,
         executedBy: auth.userId,

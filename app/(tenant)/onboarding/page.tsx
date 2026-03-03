@@ -9,9 +9,9 @@ import { useRouter } from 'next/navigation';
 import {
   Building2, FileText, ChevronRight, ChevronLeft,
   CheckCircle, Upload, Wifi, AlertCircle, ArrowRight,
-  BarChart3, Clock, Plug, Link2,
+  BarChart3, Plug, Link2, PenLine, Zap, Loader2,
 } from 'lucide-react';
-import { apiPost, apiPut } from '@/lib/api/client';
+import { apiPost, apiPut, ApiError, getCsrfToken } from '@/lib/api/client';
 import { toast } from '@/lib/toast';
 
 // ─────────────────────────────────────────────
@@ -24,27 +24,35 @@ const STEPS = [
   { id: 3, title: '탄소 계산 활성화', desc: '배출량 계산을 시작합니다' },
 ] as const;
 
-type DataMethod = 'invoice' | 'file' | 'sensor' | null;
+type DataMethod = 'invoice' | 'manual' | 'sensor' | null;
 
 // ─────────────────────────────────────────────
 // 단계 1: 사이트 등록
 // ─────────────────────────────────────────────
 
 function Step1Site({ onNext }: { onNext: (siteId: string) => void }) {
+  const router = useRouter();
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
-  const [industryType, setIndustryType] = useState('building');
+  const [industryType, setIndustryType] = useState('office');
   const [loading, setLoading] = useState(false);
+  const [limitError, setLimitError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!name.trim()) { toast.error('사이트 이름을 입력해주세요.'); return; }
     setLoading(true);
+    setLimitError(null);
     try {
-      const res = await apiPost<{ id: string }>('/api/sites', { name: name.trim(), address, industryType });
+      const res = await apiPost<{ id: string }>('/api/sites', { name: name.trim(), address, siteType: industryType });
       toast.success(`사이트 "${name}"이 등록되었습니다.`);
       onNext(res.data?.id ?? '');
-    } catch {
-      toast.error('사이트 등록 중 오류가 발생했습니다.');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 402) {
+        // 플랜 한도 초과 — 인라인 메시지로 업그레이드/건너뛰기 안내
+        setLimitError(err.message);
+      } else {
+        toast.error(err instanceof ApiError ? err.message : '사이트 등록 중 오류가 발생했습니다.');
+      }
     } finally {
       setLoading(false);
     }
@@ -59,6 +67,33 @@ function Step1Site({ onNext }: { onNext: (siteId: string) => void }) {
           <p className="text-sm text-slate-400">에너지를 관리할 건물/공장/시설을 추가합니다.</p>
         </div>
       </div>
+
+      {/* 플랜 한도 초과 인라인 안내 */}
+      {limitError && (
+        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-amber-300 mb-3">{limitError}</p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => router.push('/settings/subscription')}
+                  className="text-xs font-medium text-cyan-400 hover:text-cyan-300 hover:underline flex items-center gap-1 transition"
+                >
+                  플랜 업그레이드 <ArrowRight className="w-3 h-3" />
+                </button>
+                <span className="text-slate-700 text-xs">·</span>
+                <button
+                  onClick={() => onNext('')}
+                  className="text-xs text-slate-400 hover:text-slate-300 hover:underline transition"
+                >
+                  기존 사업장으로 계속 진행
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-4">
         <div>
@@ -90,11 +125,11 @@ function Step1Site({ onNext }: { onNext: (siteId: string) => void }) {
             onChange={e => setIndustryType(e.target.value)}
             className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 text-white focus:border-cyan-500 focus:outline-none transition"
           >
-            <option value="building">건물/사무소</option>
-            <option value="manufacturing">제조업</option>
-            <option value="industrial_complex">산업단지</option>
-            <option value="datacenter">데이터센터</option>
-            <option value="other">기타</option>
+            <option value="office">사무소/건물</option>
+            <option value="factory">공장/제조</option>
+            <option value="warehouse">물류/창고</option>
+            <option value="retail">소매/상업</option>
+            <option value="mixed">복합시설</option>
           </select>
         </div>
       </div>
@@ -116,175 +151,315 @@ function Step1Site({ onNext }: { onNext: (siteId: string) => void }) {
 }
 
 // ─────────────────────────────────────────────
-// 단계 2: 데이터 연결 방식 선택
+// 단계 2: 데이터 연결 방식 선택 (탭 기반)
 // ─────────────────────────────────────────────
 
 function Step2DataMethod({ siteId, onNext, onBack }: { siteId: string; onNext: (method: DataMethod) => void; onBack: () => void }) {
-  const [selected, setSelected] = useState<DataMethod>(null);
+  type Tab = 'invoice' | 'manual' | 'sensor';
+  const [activeTab, setActiveTab] = useState<Tab>('invoice');
+
+  // ── 고지서 업로드 탭 ──
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploading]     = useState(false);
 
-  const methods = [
-    {
-      id: 'invoice' as DataMethod,
-      icon: <FileText className="w-8 h-8" />,
-      title: '고지서 업로드',
-      badge: '즉시 시작',
-      badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-      desc: '한국전력 청구서 또는 도시가스 고지서를 업로드하면 즉시 탄소 배출량을 계산합니다.',
-      pros: ['설치 없이 즉시 시작', '과거 데이터 소급 입력 가능', '고지서 기반 정확한 사용량'],
-      cons: ['월 1회 수동 업로드 필요'],
-    },
-    {
-      id: 'file' as DataMethod,
-      icon: <Upload className="w-8 h-8" />,
-      title: 'Excel/CSV 일괄 업로드',
-      badge: '반자동',
-      badgeColor: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-      desc: '에너지 사용량 데이터를 Excel 파일로 일괄 업로드합니다.',
-      pros: ['대량 데이터 일괄 처리', '기존 ERP/시스템 연동 가능'],
-      cons: ['데이터 정제 작업 필요'],
-    },
-    {
-      id: 'sensor' as DataMethod,
-      icon: <Wifi className="w-8 h-8" />,
-      title: 'IoT 센서/PLC 연동',
-      badge: '완전 자동화',
-      badgeColor: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-      desc: '전력계, PLC, BMS 등과 직접 연동하여 실시간 자동 수집합니다.',
-      pros: ['실시간 모니터링', '자동 배출량 계산', 'AI 예측·이상탐지 활성화'],
-      cons: ['초기 설치 필요 (게이트웨이 장치)', '현장 환경 설정 필요'],
-    },
-  ];
+  // ── 수동 입력 탭 ──
+  const [energyType,       setEnergyType]       = useState<'electricity' | 'gas'>('electricity');
+  const [usageAmount,      setUsageAmount]       = useState('');
+  const [period,           setPeriod]            = useState(new Date().toISOString().slice(0, 7));
+  const [manualSubmitting, setManualSubmitting]  = useState(false);
+  const [manualError,      setManualError]       = useState<string | null>(null);
+  const [manualDone,       setManualDone]        = useState(false);
 
+  // ── 핸들러: 고지서 업로드 ──
   const handleInvoiceUpload = async () => {
     if (!invoiceFile) return;
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', invoiceFile);
+      const csrfToken = await getCsrfToken();
+      const formData  = new FormData();
+      formData.append('file',   invoiceFile);
       formData.append('siteId', siteId);
       const res = await fetch('/api/analytics/carbon/invoice', {
-        method: 'POST',
-        body: formData,
+        method:      'POST',
+        headers:     { 'X-CSRF-Token': csrfToken },
+        credentials: 'include',
+        body:        formData,
       });
-      if (!res.ok) throw new Error('업로드 실패');
-      toast.success('고지서가 업로드되었습니다. 배출량 계산이 시작됩니다.');
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({})) as Record<string, unknown>;
+        throw new Error(String(json.error ?? json.message ?? `업로드 실패 (HTTP ${res.status})`));
+      }
+      toast.success('고지서가 업로드되었습니다. AI 배출량 계산이 시작됩니다.');
       onNext('invoice');
-    } catch {
-      toast.error('파일 업로드 중 오류가 발생했습니다.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '파일 업로드 중 오류가 발생했습니다.');
     } finally {
       setUploading(false);
     }
   };
 
+  // ── 핸들러: 수동 입력 ──
+  const handleManualSubmit = async () => {
+    if (!usageAmount) { setManualError('사용량을 입력해주세요.'); return; }
+    setManualError(null);
+    setManualSubmitting(true);
+    try {
+      await apiPost('/api/analytics/carbon/register-fuel', {
+        sourceType: energyType === 'electricity' ? 'ELECTRICITY' : 'GAS',
+        amount:     Number(usageAmount),
+        unit:       energyType === 'electricity' ? 'kWh' : 'm3',
+        period,
+      });
+      setManualDone(true);
+      toast.success('에너지 사용량이 등록되었습니다.');
+      setTimeout(() => onNext('manual'), 1200);
+    } catch (e) {
+      setManualError(e instanceof ApiError ? e.message : '등록 중 오류가 발생했습니다.');
+    } finally {
+      setManualSubmitting(false);
+    }
+  };
+
+  const TABS = [
+    { id: 'invoice' as Tab, Icon: FileText, label: '고지서 업로드', badge: '즉시 시작', badgeClass: 'bg-emerald-500/20 text-emerald-400' },
+    { id: 'manual'  as Tab, Icon: PenLine,  label: '수동 입력',    badge: '직접 입력', badgeClass: 'bg-blue-500/20 text-blue-400' },
+    { id: 'sensor'  as Tab, Icon: Zap,      label: 'IoT 연동',     badge: '완전 자동', badgeClass: 'bg-purple-500/20 text-purple-400' },
+  ] as const;
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
-        <AlertCircle className="w-6 h-6 text-emerald-400 flex-shrink-0" />
+    <div className="space-y-5">
+      {/* 상단 안내 */}
+      <div className="flex items-start gap-3 p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+        <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
         <p className="text-sm text-slate-300">
-          <strong className="text-emerald-400">안내:</strong> 데이터 연동은 구독과 별도로 설정이 필요합니다.
-          고지서 업로드는 설치 없이 즉시 시작할 수 있습니다.
+          아래 세 가지 방법 중 하나를 선택해 에너지 데이터를 연결하세요.
+          나중에 언제든 변경할 수 있습니다.
         </p>
       </div>
 
-      <div className="space-y-3">
-        {methods.map(m => (
-          <div
-            key={m.id}
-            onClick={() => setSelected(m.id)}
-            className={`p-5 border rounded-xl cursor-pointer transition-all ${
-              selected === m.id
-                ? 'border-cyan-500 bg-cyan-500/10'
-                : 'border-slate-700 bg-slate-800/50 hover:border-slate-500'
+      {/* 탭 네비게이션 */}
+      <div className="flex bg-slate-800/70 rounded-xl p-1 gap-1">
+        {TABS.map(({ id, Icon, label, badge, badgeClass }) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id)}
+            className={`flex-1 flex flex-col items-center gap-1 py-2.5 px-2 rounded-lg text-center transition-all ${
+              activeTab === id
+                ? 'bg-slate-700 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/60'
             }`}
           >
-            <div className="flex items-start gap-4">
-              <div className={`p-2 rounded-lg ${selected === m.id ? 'text-cyan-400 bg-cyan-500/20' : 'text-slate-400 bg-slate-700'}`}>
-                {m.icon}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-white font-semibold">{m.title}</h3>
-                  <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${m.badgeColor}`}>
-                    {m.badge}
-                  </span>
-                </div>
-                <p className="text-sm text-slate-400 mb-2">{m.desc}</p>
-                <div className="flex flex-wrap gap-x-4 gap-y-1">
-                  {m.pros.map(p => (
-                    <span key={p} className="text-xs text-emerald-400 flex items-center gap-1">
-                      <CheckCircle className="w-3 h-3" /> {p}
-                    </span>
-                  ))}
-                  {m.cons.map(c => (
-                    <span key={c} className="text-xs text-amber-400 flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> {c}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-1 ${
-                selected === m.id ? 'border-cyan-500 bg-cyan-500' : 'border-slate-600'
-              }`}>
-                {selected === m.id && <div className="w-2 h-2 bg-white rounded-full" />}
-              </div>
+            <div className="flex items-center gap-1.5">
+              <Icon className="w-4 h-4" />
+              <span className="text-xs font-semibold hidden sm:inline">{label}</span>
+              <span className="text-xs font-semibold sm:hidden">
+                {id === 'invoice' ? '고지서' : id === 'manual' ? '수동' : 'IoT'}
+              </span>
             </div>
-          </div>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${badgeClass}`}>
+              {badge}
+            </span>
+          </button>
         ))}
       </div>
 
-      {/* 고지서 업로드 UI */}
-      {selected === 'invoice' && (
-        <div className="p-4 bg-slate-800 border border-slate-600 rounded-xl space-y-3">
-          <p className="text-sm font-medium text-white">고지서 파일 첨부</p>
-          <p className="text-xs text-slate-400">한국전력 전기요금 청구서, 도시가스 고지서 (PDF, JPG, PNG 지원)</p>
-          <label className="block">
-            <div className="border-2 border-dashed border-slate-600 hover:border-cyan-500 rounded-lg p-6 text-center cursor-pointer transition">
-              <Upload className="w-8 h-8 text-slate-500 mx-auto mb-2" />
-              <p className="text-sm text-slate-400">
-                {invoiceFile ? invoiceFile.name : '파일을 클릭하거나 드래그하여 업로드'}
-              </p>
-            </div>
-            <input
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.xlsx,.csv"
-              className="hidden"
-              onChange={e => setInvoiceFile(e.target.files?.[0] ?? null)}
-            />
-          </label>
+      {/* ─── 고지서 업로드 탭 ─── */}
+      {activeTab === 'invoice' && (
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm font-medium text-white mb-1">한국전력 청구서 · 도시가스 고지서 업로드</p>
+            <p className="text-xs text-slate-500 mb-3">
+              PDF, JPG, PNG, Excel, CSV 지원 — 업로드 즉시 AI가 사용량과 탄소 배출량을 계산합니다
+            </p>
+            <label className="block cursor-pointer">
+              <div className={`border-2 border-dashed rounded-xl p-8 text-center transition ${
+                invoiceFile
+                  ? 'border-emerald-500/50 bg-emerald-500/5'
+                  : 'border-slate-600 hover:border-cyan-500/50 hover:bg-slate-800/50'
+              }`}>
+                {invoiceFile ? (
+                  <>
+                    <CheckCircle className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+                    <p className="text-sm text-emerald-400 font-medium">{invoiceFile.name}</p>
+                    <p className="text-xs text-slate-500 mt-1">다른 파일로 변경하려면 클릭</p>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                    <p className="text-sm text-slate-400">파일을 클릭하거나 드래그하여 업로드</p>
+                    <p className="text-xs text-slate-600 mt-1">최대 10MB</p>
+                  </>
+                )}
+              </div>
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.xlsx,.csv"
+                className="hidden"
+                onChange={e => setInvoiceFile(e.target.files?.[0] ?? null)}
+              />
+            </label>
+          </div>
           {invoiceFile && (
             <button
               onClick={handleInvoiceUpload}
               disabled={uploading}
-              className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-700 text-white font-semibold rounded-lg transition"
+              className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-700 text-white font-semibold rounded-xl transition flex items-center justify-center gap-2"
             >
-              {uploading ? '업로드 중...' : '지금 업로드하기'}
+              {uploading
+                ? <><Loader2 className="w-4 h-4 animate-spin" />업로드 중...</>
+                : <><Upload className="w-4 h-4" />지금 업로드하기</>}
             </button>
           )}
+          <p className="text-xs text-center text-slate-600">
+            고지서 없이 진행하려면 아래 "다음 단계" 버튼을 클릭하세요
+          </p>
         </div>
       )}
 
-      <div className="flex gap-3">
+      {/* ─── 수동 입력 탭 ─── */}
+      {activeTab === 'manual' && (
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm font-medium text-white mb-1">월간 에너지 사용량 직접 입력</p>
+            <p className="text-xs text-slate-500 mb-3">
+              고지서 없이 알고 있는 사용량을 입력하면 즉시 탄소 배출량을 계산합니다
+            </p>
+          </div>
+
+          {/* 에너지 종류 선택 */}
+          <div className="flex gap-2">
+            {([
+              { val: 'electricity' as const, label: '전기', unit: 'kWh', icon: '⚡' },
+              { val: 'gas'         as const, label: '도시가스', unit: 'm³', icon: '🔥' },
+            ]).map(({ val, label, unit, icon }) => (
+              <button
+                key={val}
+                onClick={() => { setEnergyType(val); setManualError(null); }}
+                className={`flex-1 py-2.5 px-3 rounded-lg border text-sm font-medium transition flex items-center justify-center gap-2 ${
+                  energyType === val
+                    ? 'border-cyan-500 bg-cyan-500/15 text-cyan-300'
+                    : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600'
+                }`}
+              >
+                <span>{icon}</span>
+                {label} ({unit})
+              </button>
+            ))}
+          </div>
+
+          {/* 사용량 + 기간 */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">
+                사용량 ({energyType === 'electricity' ? 'kWh' : 'm³'})
+              </label>
+              <input
+                type="number" min="0" step="1"
+                value={usageAmount}
+                onChange={e => { setUsageAmount(e.target.value); setManualError(null); }}
+                placeholder="예: 850"
+                className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-600 focus:border-cyan-500 focus:outline-none transition"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">사용 기간 (월)</label>
+              <input
+                type="month"
+                value={period}
+                onChange={e => setPeriod(e.target.value)}
+                className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:border-cyan-500 focus:outline-none transition"
+              />
+            </div>
+          </div>
+
+          {manualError && (
+            <p className="text-xs text-red-400 flex items-center gap-1">
+              <AlertCircle className="w-3.5 h-3.5" />{manualError}
+            </p>
+          )}
+          {manualDone && (
+            <p className="text-xs text-emerald-400 flex items-center gap-1">
+              <CheckCircle className="w-3.5 h-3.5" />등록 완료! 배출량 계산이 시작됩니다.
+            </p>
+          )}
+
+          <button
+            onClick={handleManualSubmit}
+            disabled={manualSubmitting || manualDone || !usageAmount}
+            className="w-full py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold rounded-xl transition flex items-center justify-center gap-2"
+          >
+            {manualSubmitting
+              ? <><Loader2 className="w-4 h-4 animate-spin" />등록 중...</>
+              : manualDone
+              ? <><CheckCircle className="w-4 h-4" />등록 완료</>
+              : <><PenLine className="w-4 h-4" />사용량 등록하기</>}
+          </button>
+          <p className="text-xs text-center text-slate-600">
+            여러 달의 데이터는 탄소 배출 현황 페이지에서 추가 입력 가능합니다
+          </p>
+        </div>
+      )}
+
+      {/* ─── IoT 연동 탭 ─── */}
+      {activeTab === 'sensor' && (
+        <div className="space-y-4">
+          <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+            <p className="text-sm font-semibold text-purple-400 flex items-center gap-2 mb-2">
+              <Zap className="w-4 h-4" /> IoT 센서/PLC 자동 연동
+            </p>
+            <p className="text-xs text-slate-400 mb-3">
+              전력계, PLC, BMS 등 현장 장비와 직접 연동하면 데이터가 자동으로 수집됩니다.
+              AI 이상 탐지와 부하 예측이 활성화됩니다.
+            </p>
+            <ol className="text-xs text-slate-400 space-y-1.5 list-decimal list-inside">
+              <li>게이트웨이 장치 구매 / 현장 설치 (별도 문의)</li>
+              <li>설정 → 게이트웨이 관리에서 장치 등록</li>
+              <li>현장 장비와 Modbus/BACnet/OPC-UA 연결</li>
+              <li>데이터 수집 시작 → 자동 탄소 계산</li>
+            </ol>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 text-center">
+            {[
+              { label: '실시간 모니터링', icon: '📡', desc: '1분 주기' },
+              { label: 'AI 이상 탐지',   icon: '🤖', desc: '자동 알림' },
+              { label: '탄소 자동 계산', icon: '🌱', desc: '무인 운영' },
+            ].map(f => (
+              <div key={f.label} className="p-3 bg-slate-800/50 border border-slate-700/50 rounded-xl">
+                <div className="text-2xl mb-1">{f.icon}</div>
+                <p className="text-xs font-medium text-white">{f.label}</p>
+                <p className="text-[10px] text-slate-500">{f.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <a
+            href="mailto:carbonieum.official@gmail.com"
+            className="block w-full py-3 text-center border border-purple-500/30 text-purple-400 hover:bg-purple-500/10 font-medium text-sm rounded-xl transition"
+          >
+            전문가 설치 지원 문의 →
+          </a>
+        </div>
+      )}
+
+      {/* 네비게이션 */}
+      <div className="flex gap-3 pt-1">
         <button
           onClick={onBack}
-          className="flex-1 py-3 border border-slate-600 hover:border-slate-400 text-slate-300 font-semibold rounded-xl transition flex items-center justify-center gap-2"
+          className="flex items-center gap-2 px-5 py-3 border border-slate-600 hover:border-slate-400 text-slate-300 font-semibold rounded-xl transition"
         >
           <ChevronLeft className="w-5 h-5" /> 이전
         </button>
         <button
-          onClick={() => selected && onNext(selected)}
-          disabled={!selected}
-          className="flex-2 flex-1 py-3 bg-cyan-500 hover:bg-cyan-600 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold rounded-xl transition flex items-center justify-center gap-2"
+          onClick={() => onNext(activeTab)}
+          className="flex-1 py-3 bg-cyan-500 hover:bg-cyan-600 text-white font-semibold rounded-xl transition flex items-center justify-center gap-2"
         >
-          {selected === 'invoice' && invoiceFile ? '업로드 완료' :
-           selected === 'sensor' ? '설정 안내 보기' : '다음 단계'}
-          <ChevronRight className="w-5 h-5" />
+          다음 단계 <ChevronRight className="w-5 h-5" />
         </button>
       </div>
 
-      <p className="text-center text-sm text-slate-500">
-        나중에 설정 → 게이트웨이 관리에서도 변경할 수 있습니다.
+      <p className="text-center text-xs text-slate-600">
+        데이터 연동은 나중에 설정 → 게이트웨이 관리에서도 변경할 수 있습니다
       </p>
     </div>
   );
@@ -294,9 +469,8 @@ function Step2DataMethod({ siteId, onNext, onBack }: { siteId: string; onNext: (
 // 단계 3: 탄소 계산 활성화 / 완료
 // ─────────────────────────────────────────────
 
-function Step3Complete({ dataMethod, onFinish }: { dataMethod: DataMethod; onFinish: () => void }) {
-  const router = useRouter();
-
+// onFinish(href?) — href 없으면 /dashboard 기본값
+function Step3Complete({ dataMethod, onFinish }: { dataMethod: DataMethod; onFinish: (href?: string) => void }) {
   const isSensorMethod = dataMethod === 'sensor';
 
   const quickActions = isSensorMethod
@@ -358,12 +532,12 @@ function Step3Complete({ dataMethod, onFinish }: { dataMethod: DataMethod; onFin
         </div>
       )}
 
-      {/* 빠른 이동 */}
+      {/* 빠른 이동 — onFinish(href)로 먼저 onboarding 완료 처리 후 이동 */}
       <div className="grid grid-cols-3 gap-3">
         {quickActions.map(a => (
           <button
-            key={a.href}
-            onClick={() => router.push(a.href)}
+            key={a.label}
+            onClick={() => onFinish(a.href)}
             className="p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-center transition"
           >
             <div className={`flex justify-center mb-1 ${a.color}`}>{a.icon}</div>
@@ -373,7 +547,7 @@ function Step3Complete({ dataMethod, onFinish }: { dataMethod: DataMethod; onFin
       </div>
 
       <button
-        onClick={onFinish}
+        onClick={() => onFinish('/dashboard')}
         className="w-full py-3 bg-cyan-500 hover:bg-cyan-600 text-white font-semibold rounded-xl transition flex items-center justify-center gap-2"
       >
         대시보드로 이동 <ArrowRight className="w-5 h-5" />
@@ -398,13 +572,13 @@ export default function OnboardingPage() {
     await apiPut('/api/onboarding', { step }).catch(() => null);
   };
 
-  const handleFinish = async () => {
+  const handleFinish = async (href = '/dashboard') => {
     try {
       await apiPut('/api/onboarding', { complete: true, dataMethod });
     } catch {
-      // 완료 기록 실패해도 대시보드로 이동
+      // 완료 기록 실패해도 이동은 허용 (미들웨어 리다이렉트 방지를 위해 항상 complete 처리)
     }
-    router.push('/dashboard');
+    router.push(href);
   };
 
   const handleSkip = async () => {

@@ -13,7 +13,7 @@ import {
   Database,
   AlertCircle,
 } from 'lucide-react';
-import { fetchWithCsrf } from '@/hooks/use-csrf';
+import { apiGet, apiPost, apiDelete } from '@/lib/api/client';
 import { toast } from '@/lib/toast';
 
 interface Sensor {
@@ -86,12 +86,9 @@ export default function SensorsPage() {
       if (filterStatus) params.set('status', filterStatus);
       params.set('take', '50');
 
-      const res = await fetch(`/api/sensors?${params}`);
-      const json = await res.json();
-      if (json.success) {
-        setSensors(json.data);
-        setTotal(json.pagination?.total || json.data.length);
-      }
+      const res = await apiGet<Sensor[]>(`/api/sensors?${params}`);
+      setSensors(res.data ?? []);
+      setTotal((res as { pagination?: { total: number } }).pagination?.total ?? res.data?.length ?? 0);
     } catch {
       // error handled
     } finally {
@@ -101,10 +98,9 @@ export default function SensorsPage() {
 
   const fetchDevices = async () => {
     try {
-      const res = await fetch('/api/devices?take=100');
-      const json = await res.json();
-      const list = json.data || [];
-      setDevices(list.map((d: DeviceOption) => ({ id: d.id, name: d.name, code: d.code })));
+      const res = await apiGet<DeviceOption[]>('/api/devices?take=100');
+      const list = res.data ?? [];
+      setDevices(list.map((d) => ({ id: d.id, name: d.name, code: d.code })));
     } catch {
       // ignore
     }
@@ -118,8 +114,8 @@ export default function SensorsPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('센서를 삭제하시겠습니까?')) return;
     try {
-      const res = await fetchWithCsrf(`/api/sensors/${id}`, { method: 'DELETE' });
-      if (res.ok) fetchSensors();
+      await apiDelete(`/api/sensors/${id}`);
+      fetchSensors();
     } catch {
       toast.error('삭제 실패');
     }
@@ -128,16 +124,16 @@ export default function SensorsPage() {
   const handleGenerateData = async () => {
     setIsGenerating(true);
     try {
-      const res = await fetchWithCsrf('/api/data-collection/generate', {
-        method: 'POST',
-        body: JSON.stringify({ hours: 24, intervalMinutes: 15 }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        toast.success(`데이터 생성 완료: ${json.data.totalMeasurements}건`);
+      const res = await apiPost<{ totalMeasurements: number }>(
+        '/api/data-collection/generate',
+        { hours: 24, intervalMinutes: 15 },
+      );
+      const raw = res as unknown as { success: boolean; data?: { totalMeasurements: number }; error?: { message: string } };
+      if (raw.success && raw.data) {
+        toast.success(`데이터 생성 완료: ${raw.data.totalMeasurements}건`);
         fetchSensors();
       } else {
-        toast.error('데이터 생성 실패: ' + (json.error?.message || '오류'));
+        toast.error('데이터 생성 실패: ' + (raw.error?.message || '오류'));
       }
     } catch {
       toast.error('데이터 생성 중 오류');
@@ -149,9 +145,8 @@ export default function SensorsPage() {
   const viewDetail = async (id: string) => {
     setShowDetailModal(id);
     try {
-      const res = await fetch(`/api/sensors/${id}`);
-      const json = await res.json();
-      if (json.success) setDetailSensor(json.data);
+      const res = await apiGet<Sensor>(`/api/sensors/${id}`);
+      if (res.data) setDetailSensor(res.data);
     } catch {
       // ignore
     }
@@ -357,7 +352,6 @@ function CreateSensorModal({
   const [form, setForm] = useState({
     deviceId: '',
     name: '',
-    code: '',
     sensorType: 'power_meter',
     manufacturer: '',
     model: '',
@@ -379,21 +373,16 @@ function CreateSensorModal({
     setIsSubmitting(true);
     setError('');
     try {
-      const res = await fetchWithCsrf('/api/sensors', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...form,
-          code: form.code || undefined,
-          manufacturer: form.manufacturer || undefined,
-          model: form.model || undefined,
-          installLocation: form.installLocation || undefined,
-        }),
+      const json = await apiPost('/api/sensors', {
+        ...form,
+        manufacturer: form.manufacturer || undefined,
+        model: form.model || undefined,
+        installLocation: form.installLocation || undefined,
       });
-      const json = await res.json();
       if (json.success) {
         onCreated();
       } else {
-        setError(json.error?.message || '등록 실패');
+        setError(json.error || '등록 실패');
       }
     } catch {
       setError('등록 중 오류 발생');
@@ -449,29 +438,17 @@ function CreateSensorModal({
               required
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-300 mb-1">센서 코드</label>
-              <input
-                type="text"
-                value={form.code}
-                onChange={(e) => setForm({ ...form, code: e.target.value })}
-                className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm"
-                placeholder="예: PM-001"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-300 mb-1">센서 유형 *</label>
-              <select
-                value={form.sensorType}
-                onChange={(e) => setForm({ ...form, sensorType: e.target.value })}
-                className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm"
-              >
-                {SENSOR_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">센서 유형 *</label>
+            <select
+              value={form.sensorType}
+              onChange={(e) => setForm({ ...form, sensorType: e.target.value })}
+              className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm"
+            >
+              {SENSOR_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

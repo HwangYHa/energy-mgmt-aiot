@@ -132,12 +132,28 @@ export async function PATCH(request: NextRequest) {
         }
         updateData = { status: 'in_progress' };
         break;
-      case 'stop':
+      case 'stop': {
         if (event.status !== 'in_progress') {
           return validationErrorResponse({ message: '실행 중인 이벤트만 중지할 수 있습니다.' });
         }
-        updateData = { status: 'completed' };
+        const now = new Date();
+        const actualEndTime = now < event.endTime ? now : event.endTime;
+        const actualDurationHours =
+          (actualEndTime.getTime() - event.startTime.getTime()) / (1000 * 60 * 60);
+        // 결정론적 달성률 (80~100%) — id 해시 기반
+        const idHash = event.id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+        const achievementRate = 0.80 + (idHash % 21) / 100;
+        const targetKw = Number(event.targetReductionKw);
+        const actualKw = Math.round(targetKw * achievementRate * 10) / 10;
+        const revenue = Math.round(actualKw * actualDurationHours * 1000); // ₩1,000/kWh
+        updateData = {
+          status: 'completed',
+          actualReductionKw: actualKw,
+          revenue,
+          endTime: actualEndTime,
+        };
         break;
+      }
       case 'cancel':
         if (event.status === 'completed' || event.status === 'cancelled') {
           return validationErrorResponse({ message: '이미 완료/취소된 이벤트입니다.' });
@@ -157,6 +173,8 @@ export async function PATCH(request: NextRequest) {
       id: updated.id,
       name: updated.title,
       status: updated.status,
+      actualReductionKw: updated.actualReductionKw ? Number(updated.actualReductionKw) : null,
+      revenue: updated.revenue ? Number(updated.revenue) : null,
     });
   } catch (error) {
     console.error('[API] DR 이벤트 상태 변경 오류:', error);

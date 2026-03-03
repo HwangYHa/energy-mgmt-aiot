@@ -12,6 +12,10 @@ import { prisma } from '@/lib/db/prisma';
 import { z } from 'zod';
 import { userCreateSchema, formatValidationError } from '@/lib/validation/schemas';
 import bcrypt from 'bcryptjs';
+import {
+  notifyNewUserJoined,
+  initDefaultNotificationRules,
+} from '@/lib/services/notification.service';
 
 // GET: List users
 export async function GET(request: NextRequest) {
@@ -232,6 +236,15 @@ export async function POST(request: NextRequest) {
 
       return newUser;
     });
+
+    // 기본 알림 규칙 생성 + 새 사용자 알림 (비동기 fire-and-forget)
+    initDefaultNotificationRules(auth.tenantId, user.id).catch(() => null);
+    notifyNewUserJoined({
+      tenantId:     auth.tenantId,
+      newUserName:  user.name,
+      newUserEmail: user.email,
+      newUserRole:  user.role,
+    }).catch(() => null);
 
     return NextResponse.json(
       { success: true, data: user },

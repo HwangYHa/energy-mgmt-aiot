@@ -20,11 +20,12 @@ import {
   formatZodErrors,
 } from '@/lib/api/response';
 import { checkPlanLimit } from '@/lib/middleware/plan-limit';
+import { generateSeqNo } from '@/lib/utils/sequence';
 
 const createSensorSchema = z.object({
   deviceId: z.string().uuid(),
   name: z.string().min(1).max(200),
-  code: z.string().max(50).optional(),
+  // code: 서버에서 자동 채번 (SN-YYYYMMDD-NNNN) — 클라이언트 입력 불필요
   serialNumber: z.string().max(100).optional(),
   sensorType: z.string().min(1).max(50),
   manufacturer: z.string().max(100).optional(),
@@ -113,12 +114,15 @@ export async function POST(request: NextRequest) {
       return validationErrorResponse({ deviceId: '유효하지 않은 디바이스입니다.' });
     }
 
+    // 센서 코드 자동 채번 (SN-YYYYMMDD-NNNN)
+    const code = await generateSeqNo('SENSOR_MGMT');
+
     const sensor = await prisma.sensor.create({
       data: {
         tenantId,
         deviceId: data.deviceId,
         name: data.name,
-        code: data.code,
+        code,
         serialNumber: data.serialNumber,
         sensorType: data.sensorType,
         manufacturer: data.manufacturer,

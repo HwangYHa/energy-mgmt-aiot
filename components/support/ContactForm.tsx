@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react';
+import { apiPost, ApiError } from '@/lib/api/client';
 
 const CATEGORIES = [
   { value: 'general', label: '일반 문의' },
@@ -56,36 +57,22 @@ export function ContactForm() {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('/api/support', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+      const data = await apiPost<{ message?: string }>('/api/support', form);
+      setResult({
+        type: 'success',
+        text: data.data?.message || '문의가 접수되었습니다. 24시간 이내에 답변 드리겠습니다.',
       });
-
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        setResult({
-          type: 'success',
-          text: data.data?.message || '문의가 접수되었습니다. 24시간 이내에 답변 드리겠습니다.',
-        });
-        setForm({
-          name: '',
-          email: '',
-          category: 'general',
-          subject: '',
-          message: '',
-        });
-      } else {
-        setResult({
-          type: 'error',
-          text: data.error || '문의 접수 중 오류가 발생했습니다.',
-        });
-      }
-    } catch {
+      setForm({
+        name: '',
+        email: '',
+        category: 'general',
+        subject: '',
+        message: '',
+      });
+    } catch (e) {
       setResult({
         type: 'error',
-        text: '문의 접수 중 오류가 발생했습니다. 이메일로 직접 문의해주세요.',
+        text: e instanceof ApiError ? e.message : '문의 접수 중 오류가 발생했습니다. 이메일로 직접 문의해주세요.',
       });
     } finally {
       setIsSubmitting(false);

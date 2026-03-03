@@ -1,89 +1,92 @@
 'use client';
 
 import React, { useState } from 'react';
-import { TrendingDown, AlertCircle, Zap, DollarSign, Thermometer, Loader2 } from 'lucide-react';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ReferenceLine,
-} from 'recharts';
+import { TrendingDown, AlertCircle, Zap, DollarSign, Activity, Target, Loader2, Info, FlaskConical } from 'lucide-react';
+import { apiPost, ApiError } from '@/lib/api/client';
 
-interface OptimizationResult {
-  essSchedule: Array<{
-    hour: number;
-    operation: string;
-    power: number;
-  }>;
-  hvacSettings: {
-    hourly_setpoints: Array<{
-      hour: number;
-      setpoint: number;
-      adjustment: number;
-    }>;
-    estimated_load_reduction: number;
-    base_temperature: number;
-  };
-  estimatedSaving: number;
-  peakHours: number[];
-  recommendations: Array<{
-    title: string;
-    description: string;
-    savings: string;
-  }>;
+interface Recommendation {
+  id: string;
+  priority: 'high' | 'medium' | 'low';
+  category: string;
+  title: string;
+  description: string;
+  estimatedSavings: number;
+  estimatedCostSaving: number;
+  confidence: number;
+  actions?: string[];
 }
 
+interface OptimizationResult {
+  recommendations: Recommendation[];
+  summary: {
+    totalEstimatedSavings: number;
+    totalCostSaving: number;
+    overallEfficiency: number;
+    peakReductionOpportunity: number;
+  };
+  model: string;
+  timestamp: string;
+  metadata?: {
+    dataPoints: number;
+    realDataPoints?: number;
+    siteId: string;
+    targetReduction: number;
+    dataQuality: 'real' | 'partial' | 'synthetic';
+  };
+}
+
+const PRIORITY_STYLES = {
+  high:   { label: '높음', bg: 'bg-red-500/20',   text: 'text-red-400',   border: 'border-red-500/30'   },
+  medium: { label: '중간', bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/30' },
+  low:    { label: '낮음', bg: 'bg-blue-500/20',  text: 'text-blue-400',  border: 'border-blue-500/30'  },
+} as const;
+
+const DEFAULT_PRIORITY_STYLE = PRIORITY_STYLES.low;
+
 export default function OptimizationPage() {
-  const [targetReduction, setTargetReduction] = useState(50);
+  const [targetReduction, setTargetReduction] = useState(20);
   const [result, setResult] = useState<OptimizationResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'peak' | 'ess' | 'hvac'>('peak');
 
   const handleOptimize = async () => {
     setIsLoading(true);
     setError(null);
+    setResult(null);
 
     try {
-      const { fetchWithCsrf } = await import('@/hooks/use-csrf');
-      const response = await fetchWithCsrf('/api/ai/optimize', {
-        method: 'POST',
-        body: JSON.stringify({ targetReduction }),
-      });
+      // API는 { success: true, recommendations, summary, model, timestamp, metadata } 구조로 응답
+      const response = await apiPost('/api/ai/optimize', { targetReduction });
 
-      if (!response.ok) throw new Error('최적화 계산 실패');
+      const raw = response as unknown as Record<string, unknown>;
 
-      const data = await response.json();
-      setResult(data);
+      if (!response.success) {
+        throw new Error(
+          (raw.message as string) ||
+          (raw.error as string) ||
+          '최적화 계산 실패'
+        );
+      }
+
+      // API가 { success: true, ...result } 형태로 응답 — recommendations 최상위 위치 확인
+      const recommendations = raw.recommendations;
+      const summary = raw.summary;
+
+      if (!Array.isArray(recommendations) || !summary) {
+        throw new Error('최적화 결과 형식이 올바르지 않습니다. 페이지를 새로고침 후 다시 시도해주세요.');
+      }
+
+      setResult(raw as unknown as OptimizationResult);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '알 수 없는 오류');
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError(err instanceof Error ? err.message : '알 수 없는 오류');
+      }
     } finally {
       setIsLoading(false);
     }
   };
-
-  // 차트 데이터 생성
-  const essChartData = result?.essSchedule.map((item) => ({
-    hour: `${item.hour}시`,
-    charge: item.operation === 'charge' ? item.power : 0,
-    discharge: item.operation === 'discharge' ? item.power : 0,
-  })) || [];
-
-  const hvacChartData = result?.hvacSettings.hourly_setpoints.map((item) => ({
-    hour: `${item.hour}시`,
-    setpoint: item.setpoint,
-    adjustment: item.adjustment,
-  })) || [];
-
-  const dailySavingsKwh = (result?.estimatedSaving || 0) * 24;
-  const monthlyEarnings = dailySavingsKwh * 30 * 200; // ₩200/kWh 기준
 
   return (
     <div className="min-h-screen bg-[#051225] text-white p-6">
@@ -93,7 +96,7 @@ export default function OptimizationPage() {
           <TrendingDown className="w-10 h-10 text-green-400" />
           에너지 최적화
         </h1>
-        <p className="text-slate-400">AI 기반 피크 제어, ESS 스케줄링, HVAC 최적화</p>
+        <p className="text-slate-400">AI 기반 패턴 분석으로 절감 기회를 발굴합니다</p>
       </div>
 
       {/* 제어판 */}
@@ -101,20 +104,20 @@ export default function OptimizationPage() {
         <h2 className="text-xl font-bold mb-4">목표 감축량 설정</h2>
         <div className="flex items-end gap-4">
           <div className="flex-1">
-            <label className="block text-sm text-slate-300 mb-2">감축 목표 (kW)</label>
+            <label className="block text-sm text-slate-300 mb-2">감축 목표 (%)</label>
             <input
               type="range"
-              min="10"
-              max="200"
-              step="10"
+              min="5"
+              max="50"
+              step="5"
               value={targetReduction}
               onChange={(e) => setTargetReduction(parseInt(e.target.value))}
               className="w-full h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer"
             />
             <div className="flex justify-between text-xs text-slate-400 mt-2">
-              <span>10 kW</span>
-              <span className="text-blue-400 font-bold">{targetReduction} kW</span>
-              <span>200 kW</span>
+              <span>5%</span>
+              <span className="text-blue-400 font-bold">{targetReduction}%</span>
+              <span>50%</span>
             </div>
           </div>
           <button
@@ -141,215 +144,166 @@ export default function OptimizationPage() {
       {/* 결과 */}
       {result && (
         <>
-          {/* 예상 효과 */}
+          {/* 데이터 품질 경고 배너 */}
+          {result.metadata?.dataQuality === 'synthetic' && (
+            <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-start gap-3">
+              <FlaskConical className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-amber-300 text-sm">산업 기준 데이터 사용 중</h3>
+                <p className="text-amber-200/70 text-xs mt-0.5">
+                  실측 센서 데이터가 없어 제조업 평균 패턴으로 분석했습니다. 센서/설비를 등록하면 실측 기반 정밀 분석이 가능합니다.
+                </p>
+              </div>
+            </div>
+          )}
+          {result.metadata?.dataQuality === 'partial' && (
+            <div className="mb-6 bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 flex items-start gap-3">
+              <Info className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-blue-300 text-sm">부분 실측 데이터 사용 중</h3>
+                <p className="text-blue-200/70 text-xs mt-0.5">
+                  실측 데이터({result.metadata.realDataPoints ?? 0}건)와 산업 기준 패턴을 혼합하여 분석했습니다. 더 많은 데이터가 쌓이면 정확도가 향상됩니다.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* 요약 KPI */}
           <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-gradient-to-br from-green-800 to-green-900 p-6 rounded-lg">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-slate-300">감축량</span>
+                <span className="text-slate-300">총 절감량</span>
                 <TrendingDown className="w-5 h-5 text-green-400" />
               </div>
-              <div className="text-3xl font-bold">{result.estimatedSaving.toFixed(1)} kW</div>
-              <div className="text-sm text-slate-400 mt-2">{dailySavingsKwh.toFixed(0)} kWh/일</div>
+              <div className="text-3xl font-bold">
+                {result.summary.totalEstimatedSavings.toLocaleString()}
+              </div>
+              <div className="text-sm text-slate-400 mt-2">kWh / 월 추정</div>
             </div>
 
             <div className="bg-gradient-to-br from-blue-800 to-blue-900 p-6 rounded-lg">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-slate-300">월간 절감액</span>
+                <span className="text-slate-300">절감 비용</span>
                 <DollarSign className="w-5 h-5 text-yellow-400" />
               </div>
-              <div className="text-3xl font-bold">₩{(monthlyEarnings / 1000).toFixed(0)}K</div>
-              <div className="text-sm text-slate-400 mt-2">약 {(monthlyEarnings / 1000000).toFixed(1)}백만원</div>
+              <div className="text-3xl font-bold">
+                ₩{(result.summary.totalCostSaving / 1000).toFixed(0)}K
+              </div>
+              <div className="text-sm text-slate-400 mt-2">월간 예상 절감액</div>
             </div>
 
             <div className="bg-gradient-to-br from-purple-800 to-purple-900 p-6 rounded-lg">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-slate-300">피크 시간대</span>
-                <Zap className="w-5 h-5 text-orange-400" />
+                <span className="text-slate-300">에너지 효율</span>
+                <Activity className="w-5 h-5 text-purple-400" />
               </div>
-              <div className="text-3xl font-bold">{result.peakHours.length}개</div>
-              <div className="text-sm text-slate-400 mt-2">
-                {Math.min(...result.peakHours)}~{Math.max(...result.peakHours)}시
-              </div>
+              <div className="text-3xl font-bold">{result.summary.overallEfficiency}%</div>
+              <div className="text-sm text-slate-400 mt-2">현재 운영 효율</div>
             </div>
 
             <div className="bg-gradient-to-br from-cyan-800 to-cyan-900 p-6 rounded-lg">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-slate-300">냉난방 절감</span>
-                <Thermometer className="w-5 h-5 text-red-400" />
+                <span className="text-slate-300">피크 감축 기회</span>
+                <Target className="w-5 h-5 text-cyan-400" />
               </div>
-              <div className="text-3xl font-bold">
-                {(result.hvacSettings.estimated_load_reduction * 100).toFixed(0)}%
-              </div>
-              <div className="text-sm text-slate-400 mt-2">추정 부하 감소율</div>
+              <div className="text-3xl font-bold">{result.summary.peakReductionOpportunity}%</div>
+              <div className="text-sm text-slate-400 mt-2">최대 감축 가능</div>
             </div>
           </div>
-
-          {/* 탭 네비게이션 */}
-          <div className="mb-8 flex gap-4 border-b border-slate-700/50">
-            {[
-              { id: 'peak', label: '피크 분석', icon: '' },
-              { id: 'ess', label: 'ESS 스케줄', icon: '' },
-              { id: 'hvac', label: 'HVAC 설정', icon: '' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as 'peak' | 'ess' | 'hvac')}
-                className={`px-4 py-3 font-bold transition border-b-2 ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-400'
-                    : 'border-transparent text-slate-400 hover:text-slate-300'
-                }`}
-              >
-                {tab.icon} {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* 피크 분석 */}
-          {activeTab === 'peak' && (
-            <div className="bg-slate-800/50 rounded-lg p-6 mb-8">
-              <h2 className="text-xl font-bold mb-4">피크 시간대 분석</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <p className="text-slate-300 mb-4">
-                    주요 피크 시간대: <span className="text-orange-400 font-bold">{result.peakHours.join(', ')}시</span>
-                  </p>
-                  <div className="space-y-2">
-                    {result.peakHours.map((hour) => (
-                      <div key={hour} className="bg-slate-700/50 p-3 rounded flex items-center justify-between">
-                        <span>{hour}시 (업무시간 {9 <= hour && hour < 18 ? 'O' : 'X'})</span>
-                        <div className="w-24 h-2 bg-gray-600 rounded-full overflow-hidden">
-                          <div className="h-full bg-orange-500" style={{ width: '85%' }}></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="font-bold mb-3">권장 조치</h3>
-                  <ul className="space-y-2 text-sm text-slate-300">
-                    <li>&bull; ESS 방전으로 피크 부하 {(result.estimatedSaving * 0.4).toFixed(0)} kW 감소</li>
-                    <li>&bull; 온도 설정점 상향으로 냉방 부하 감소</li>
-                    <li>&bull; EV 충전 시간 심야로 이동</li>
-                    <li>&bull; 무관한 시설 전원 차단</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ESS 스케줄 */}
-          {activeTab === 'ess' && (
-            <div className="bg-slate-800/50 rounded-lg p-6 mb-8">
-              <h2 className="text-xl font-bold mb-4">ESS 충방전 스케줄</h2>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={essChartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis dataKey="hour" stroke="#94a3b8" />
-                  <YAxis stroke="#94a3b8" label={{ value: 'kW', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
-                  />
-                  <Legend />
-                  <Bar dataKey="charge" fill="#10B981" name="충전" radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="discharge" fill="#EF4444" name="방전" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-
-              <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div className="bg-slate-700/50 p-3 rounded">
-                  <div className="text-slate-400 mb-1">충전 시간</div>
-                  <div className="font-bold">2~6시 (심야)</div>
-                </div>
-                <div className="bg-slate-700/50 p-3 rounded">
-                  <div className="text-slate-400 mb-1">방전 시간</div>
-                  <div className="font-bold">피크 시간대</div>
-                </div>
-                <div className="bg-slate-700/50 p-3 rounded">
-                  <div className="text-slate-400 mb-1">용량</div>
-                  <div className="font-bold">100 kWh</div>
-                </div>
-                <div className="bg-slate-700/50 p-3 rounded">
-                  <div className="text-slate-400 mb-1">효율</div>
-                  <div className="font-bold">90%</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* HVAC 설정 */}
-          {activeTab === 'hvac' && (
-            <div className="bg-slate-800/50 rounded-lg p-6 mb-8">
-              <h2 className="text-xl font-bold mb-4">HVAC 온도 설정</h2>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={hvacChartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis dataKey="hour" stroke="#94a3b8" />
-                  <YAxis stroke="#94a3b8" domain={[20, 24]} />
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a' }} />
-                  <Legend />
-                  <ReferenceLine
-                    y={result.hvacSettings.base_temperature}
-                    stroke="#94a3b8"
-                    strokeDasharray="5 5"
-                    label="기본 설정"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="setpoint"
-                    stroke="#EF4444"
-                    name="설정 온도 (°C)"
-                    dot={{ fill: '#EF4444', r: 3 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-
-              <div className="mt-6">
-                <h3 className="font-bold mb-3">설정 전략</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div className="bg-slate-700/50 p-3 rounded">
-                    <div className="text-orange-400 font-bold mb-1">피크 시간 (낮시간)</div>
-                    <div className="text-slate-300">온도 상향: {result.hvacSettings.base_temperature + 1}°C</div>
-                    <div className="text-slate-400 text-xs">냉방 부하 15% 감소</div>
-                  </div>
-                  <div className="bg-slate-700/50 p-3 rounded">
-                    <div className="text-blue-400 font-bold mb-1">기본 시간</div>
-                    <div className="text-slate-300">기본값 유지: {result.hvacSettings.base_temperature}°C</div>
-                    <div className="text-slate-400 text-xs">쾌적한 환경 유지</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* 추천사항 */}
-          <div className="bg-slate-800/50 rounded-lg p-6">
-            <h2 className="text-xl font-bold mb-4">AI 추천사항</h2>
-            <div className="space-y-3">
-              {result.recommendations.map((rec, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-start gap-3 p-3 bg-slate-700/50 rounded-lg border-l-4 border-green-500"
-                >
-                  <span className="text-green-400 font-bold flex-shrink-0">&bull;</span>
-                  <div className="flex-1">
-                    <span className="text-slate-300 font-semibold">{rec.title}</span>
-                    <p className="text-sm text-slate-400 mt-1">{rec.description}</p>
-                    <p className="text-sm text-green-400 mt-1">{rec.savings}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="bg-slate-800/50 rounded-lg p-6 mb-6">
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Zap className="w-5 h-5 text-yellow-400" />
+              AI 최적화 추천 ({result.recommendations?.length ?? 0}건)
+            </h2>
+
+            {(result.recommendations?.length ?? 0) === 0 ? (
+              <p className="text-slate-400 text-sm">추천 사항이 없습니다.</p>
+            ) : (
+              <div className="space-y-4">
+                {(result.recommendations ?? []).map((rec) => {
+                  const ps = PRIORITY_STYLES[rec.priority as keyof typeof PRIORITY_STYLES] ?? DEFAULT_PRIORITY_STYLE;
+                  return (
+                    <div
+                      key={rec.id}
+                      className={`rounded-xl border ${ps.border} bg-slate-900/40 p-5`}
+                    >
+                      <div className="flex items-start justify-between gap-4 mb-3">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className={`text-xs px-2.5 py-1 rounded-full ${ps.bg} ${ps.text} font-medium`}>
+                            우선순위: {ps.label}
+                          </span>
+                          <span className="text-xs px-2.5 py-1 rounded-full bg-slate-700/50 text-slate-300">
+                            {rec.category}
+                          </span>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <div className="text-green-400 font-bold text-sm">
+                            -{rec.estimatedSavings.toLocaleString()} kWh/월
+                          </div>
+                          <div className="text-yellow-400 text-xs mt-0.5">
+                            ₩{(rec.estimatedCostSaving / 1000).toFixed(0)}K 절감
+                          </div>
+                        </div>
+                      </div>
+
+                      <h3 className="font-semibold text-white mb-2">{rec.title}</h3>
+                      <p className="text-sm text-slate-400 leading-relaxed">{rec.description}</p>
+
+                      {/* 실행 조치 */}
+                      {rec.actions && rec.actions.length > 0 && (
+                        <ul className="mt-3 space-y-1">
+                          {rec.actions.map((action, i) => (
+                            <li key={i} className="text-xs text-slate-400 flex items-start gap-1.5">
+                              <span className="text-cyan-500 mt-0.5">›</span>
+                              {action}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {/* 신뢰도 바 */}
+                      <div className="mt-3 flex items-center gap-2">
+                        <span className="text-xs text-slate-500 w-10 flex-shrink-0">신뢰도</span>
+                        <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-green-500 rounded-full"
+                            style={{ width: `${rec.confidence * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-slate-400 w-8 text-right">
+                          {(rec.confidence * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 메타 정보 */}
+          <div className="text-xs text-slate-600 flex items-center gap-3 flex-wrap">
+            <span>모델: {result.model}</span>
+            <span>·</span>
+            <span>분석 시각: {new Date(result.timestamp).toLocaleString('ko-KR')}</span>
+            {result.metadata && (
+              <>
+                <span>·</span>
+                <span>데이터 포인트: {result.metadata.dataPoints.toLocaleString()}건</span>
+              </>
+            )}
           </div>
         </>
       )}
 
-      {/* 로딩 상태 */}
+      {/* 로딩 오버레이 */}
       {isLoading && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center rounded">
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
-            <p className="text-slate-300">최적화 계산 중입니다...</p>
+            <p className="text-slate-300">최적화 분석 중입니다...</p>
           </div>
         </div>
       )}

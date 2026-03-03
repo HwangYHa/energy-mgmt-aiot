@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
 
     const factors = await prisma.emissionFactor.findMany({
       where,
-      orderBy: [{ category: 'asc' }, { year: 'desc' }, { name: 'asc' }],
+      orderBy: [{ category: 'asc' }, { year: 'desc' }, { code: 'asc' }],
     });
 
     // 카테고리별 집계
@@ -92,7 +92,6 @@ export async function POST(request: NextRequest) {
     const factor = await prisma.emissionFactor.create({
       data: {
         tenantId: auth.tenantId,
-        name: data.name,
         code: data.code,
         category: data.category,
         sourceType: data.sourceType,
@@ -102,6 +101,7 @@ export async function POST(request: NextRequest) {
         source: data.source,
         year: data.year,
         region: data.region,
+        version: '1.0.0',
         isDefault: data.isDefault,
         validFrom: new Date(data.validFrom),
         validTo: data.validTo ? new Date(data.validTo) : undefined,

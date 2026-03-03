@@ -34,6 +34,7 @@ interface Device {
 interface ControlCommand {
   deviceId: string;
   action: string;
+  reason?: string;
   parameters?: Record<string, unknown>;
   targetValue?: number;
   executionMode: 'manual';
@@ -100,7 +101,7 @@ export default function ManualControlPage() {
       setIsLoading(true);
       setError(null);
 
-      const response = await apiGet<Device[]>('/api/devices?controlCapable=true&status=online');
+      const response = await apiGet<Device[]>('/api/devices?controlCapable=true&take=100');
 
       if (response.success && response.data) {
         setDevices(response.data);
@@ -190,15 +191,16 @@ export default function ManualControlPage() {
         executionMode: 'manual',
         requiresApproval,
         ...(targetValue && { targetValue: parseFloat(targetValue) }),
-        ...(reason && { parameters: { reason } }),
+        ...(reason && { reason }),
       };
 
       const response = await apiPost('/api/control', payload);
 
       if (response.success) {
+        const apiMsg = (response.data as { message?: string } | undefined)?.message;
         setResultMessage({
           type: 'success',
-          text: requiresApproval ? '승인 요청이 전송되었습니다' : '제어 명령이 실행되었습니다',
+          text: apiMsg ?? (requiresApproval ? '승인 요청이 전송되었습니다' : '제어 명령이 실행되었습니다'),
         });
 
         // 폼 초기화
@@ -310,16 +312,23 @@ export default function ManualControlPage() {
               </div>
             ) : (
               <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
-                {devices.map((device) => (
+                {devices.map((device) => {
+                  const isOffline = device.status === 'offline';
+                  return (
                   <button
                     key={device.id}
                     onClick={() => {
+                      if (isOffline) return;
                       setSelectedDevice(device);
                       setAction('');
                       setTargetValue('');
                     }}
+                    disabled={isOffline}
+                    title={isOffline ? '오프라인 상태의 설비는 제어할 수 없습니다' : undefined}
                     className={`w-full p-4 rounded-lg border transition-all text-left ${
-                      selectedDevice?.id === device.id
+                      isOffline
+                        ? 'border-slate-700/30 bg-slate-900/20 opacity-50 cursor-not-allowed'
+                        : selectedDevice?.id === device.id
                         ? 'border-cyan-500 bg-cyan-500/10'
                         : 'border-slate-700/50 bg-slate-900/30 hover:border-slate-600'
                     }`}
@@ -340,7 +349,8 @@ export default function ManualControlPage() {
                       </span>
                     </div>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

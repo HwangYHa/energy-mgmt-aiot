@@ -13,7 +13,15 @@ import {
   MonitorSmartphone,
   CheckCircle2,
   Loader2,
+  MapPin,
 } from 'lucide-react';
+
+interface Site {
+  id: string;
+  name: string;
+  code: string;
+  siteType: string;
+}
 
 interface MonitoringData {
   realtime: {
@@ -55,14 +63,29 @@ const SENSOR_TYPE_LABELS: Record<string, string> = {
 
 export default function MonitoringPage() {
   const [data, setData] = useState<MonitoringData | null>(null);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [selectedSiteId, setSelectedSiteId] = useState<string>('');
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshInterval, setRefreshInterval] = useState(10);
 
-  const fetchData = useCallback(async () => {
+  // 사이트 목록 로드 (최초 1회)
+  useEffect(() => {
+    fetch('/api/sites?take=100')
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setSites(json.data);
+        }
+      })
+      .catch(() => {/* 사이트 목록 로드 실패 시 무시 */});
+  }, []);
+
+  const fetchData = useCallback(async (siteId?: string) => {
     try {
-      const res = await fetch('/api/dashboard/stats');
+      const url = siteId ? `/api/dashboard/stats?siteId=${siteId}` : '/api/dashboard/stats';
+      const res = await fetch(url);
       const json = await res.json();
       if (json.success) {
         setData({
@@ -84,13 +107,13 @@ export default function MonitoringPage() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    fetchData(selectedSiteId || undefined);
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-      fetchData();
+      fetchData(selectedSiteId || undefined);
     }, refreshInterval * 1000);
     return () => clearInterval(timer);
-  }, [fetchData, refreshInterval]);
+  }, [fetchData, refreshInterval, selectedSiteId]);
 
   const getSystemStatus = () => {
     if (!data) return { status: 'normal', label: '로딩 중', color: 'bg-slate-600' };
@@ -115,7 +138,7 @@ export default function MonitoringPage() {
             <>
               <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
               <p className="text-red-300 mb-3">{error}</p>
-              <button onClick={fetchData} className="px-4 py-2 bg-red-500/20 text-red-300 rounded-lg hover:bg-red-500/30 transition">
+              <button onClick={() => fetchData(selectedSiteId || undefined)} className="px-4 py-2 bg-red-500/20 text-red-300 rounded-lg hover:bg-red-500/30 transition">
                 재시도
               </button>
             </>
@@ -130,8 +153,39 @@ export default function MonitoringPage() {
   const systemStatus = getSystemStatus();
   const carbonEmission = data.realtime.dailyUsage * 0.4567;
 
+  const selectedSite = sites.find((s) => s.id === selectedSiteId);
+
   return (
     <div className="min-h-screen bg-[#051225] text-white p-6 space-y-4">
+      {/* 사이트 선택 바 */}
+      <div className="bg-slate-800/60 border border-slate-700 rounded-lg px-4 py-3 flex items-center gap-3">
+        <MapPin className="w-4 h-4 text-cyan-400 shrink-0" />
+        <span className="text-sm text-gray-400 shrink-0">모니터링 범위</span>
+        <select
+          value={selectedSiteId}
+          onChange={(e) => {
+            setSelectedSiteId(e.target.value);
+            setIsLoading(true);
+          }}
+          className="bg-slate-700 border border-slate-600 text-white rounded px-3 py-1.5 text-sm cursor-pointer focus:outline-none focus:border-cyan-500 min-w-[200px]"
+        >
+          <option value="" className="bg-slate-700 text-white">전체 사이트</option>
+          {sites.map((s) => (
+            <option key={s.id} value={s.id} className="bg-slate-700 text-white">
+              {s.name} ({s.code})
+            </option>
+          ))}
+        </select>
+        {selectedSite && (
+          <span className="text-xs text-cyan-300 bg-cyan-900/40 border border-cyan-700/50 px-2 py-1 rounded">
+            {selectedSite.siteType}
+          </span>
+        )}
+        {!selectedSiteId && sites.length > 0 && (
+          <span className="text-xs text-gray-500">— {sites.length}개 사이트 전체</span>
+        )}
+      </div>
+
       {/* 상태 배너 */}
       <div className={`${systemStatus.color} rounded-lg p-4 flex items-center justify-between shadow-lg`}>
         <div className="flex items-center gap-4">
@@ -143,6 +197,7 @@ export default function MonitoringPage() {
           <div>
             <div className="text-2xl font-bold">{systemStatus.label}</div>
             <div className="text-sm opacity-90">
+              {selectedSite ? `[${selectedSite.name}] ` : ''}
               디바이스 {data.devices.online}/{data.devices.total} 가동 중
               {data.devices.error > 0 && ` · 오류 ${data.devices.error}건`}
             </div>
@@ -159,12 +214,12 @@ export default function MonitoringPage() {
           <select
             value={refreshInterval}
             onChange={(e) => setRefreshInterval(Number(e.target.value))}
-            className="bg-white/20 border border-white/30 rounded px-2 py-1 text-sm"
+            className="bg-slate-700 border border-slate-600 text-white rounded px-2 py-1 text-sm cursor-pointer focus:outline-none focus:border-cyan-500"
           >
-            <option value={5}>5초</option>
-            <option value={10}>10초</option>
-            <option value={30}>30초</option>
-            <option value={60}>1분</option>
+            <option value={5} className="bg-slate-700 text-white">5초</option>
+            <option value={10} className="bg-slate-700 text-white">10초</option>
+            <option value={30} className="bg-slate-700 text-white">30초</option>
+            <option value={60} className="bg-slate-700 text-white">1분</option>
           </select>
         </div>
       </div>
@@ -304,11 +359,17 @@ export default function MonitoringPage() {
 
       {/* 빠른 액션 */}
       <div className="grid grid-cols-4 gap-3">
-        <a href="/control/manual" className="bg-blue-600 hover:bg-blue-700 p-4 rounded-lg font-bold text-center transition-colors">
+        <a
+          href={selectedSiteId ? `/control/manual?siteId=${selectedSiteId}` : '/control/manual'}
+          className="bg-blue-600 hover:bg-blue-700 p-4 rounded-lg font-bold text-center transition-colors"
+        >
           수동 제어
         </a>
-        <a href="/sensors" className="bg-cyan-600 hover:bg-cyan-700 p-4 rounded-lg font-bold text-center transition-colors">
-          센서 관리
+        <a
+          href={selectedSiteId ? `/devices?siteId=${selectedSiteId}` : '/devices'}
+          className="bg-cyan-600 hover:bg-cyan-700 p-4 rounded-lg font-bold text-center transition-colors"
+        >
+          설비 관리
         </a>
         <a href="/analytics/energy" className="bg-green-600 hover:bg-green-700 p-4 rounded-lg font-bold text-center transition-colors">
           에너지 분석

@@ -82,8 +82,13 @@ model Tenant {
   twinNodes         TwinNode[]
   carbonCredits         CarbonCredit[]
   carbonTrades          CarbonTrade[]
-  emissionsRecords      EmissionsRecord[]
-  complianceSetting     TenantComplianceSetting?
+  emissionsRecords           EmissionsRecord[]
+  emissionFactors            EmissionFactor[]
+  complianceSetting          TenantComplianceSetting?
+  downloadHistories          DownloadHistory[]
+  milestones                 Milestone[]
+  esgReports                 ESGReport[]
+  activityLogs               ActivityLog[]
 
   @@index([status])
   @@index([industryType])
@@ -934,6 +939,9 @@ model ControlLog {
   executedBy    String        @map("executed_by")
   executionMode ExecutionMode @map("execution_mode")
 
+  // 제어 사유 (명시적 컬럼)
+  reason String? @db.Text @map("reason")
+
   // 컨텍스트
   ipAddress   String?  @map("ip_address") @db.VarChar(45)
   requestedAt DateTime @default(now()) @map("requested_at")
@@ -1405,8 +1413,8 @@ model EmissionFactor {
   tenantId String? @map("tenant_id") // null = 글로벌 기본값
 
   // 식별
-  name       String @db.VarChar(200)
-  code       String @unique @db.VarChar(50)
+  name       String? @db.VarChar(200) // 표시명 (예: "한국 전력망 배출계수 2024")
+  code       String @db.VarChar(50)
   category   String @db.VarChar(50) // electricity, fuel, transport, process
   sourceType String @map("source_type") @db.VarChar(100) // 전력(한전), LNG, 경유 등
 
@@ -1419,23 +1427,75 @@ model EmissionFactor {
   source    String  @db.VarChar(200) // 국가 온실가스 인벤토리 등
   year      Int
   region    String  @default("KR") @db.VarChar(10)
-  isDefault Boolean @default(false) @map("is_default")
 
-  // 버전 관리
-  version    Int      @default(1)
+  // ⭐ 버전 관리 (Semantic Versioning)
+  version    String  @db.VarChar(20)   // 1.0.0, 1.1.0, 2.0.0
+  parentId   String? @map("parent_id") // 이전 버전 참조 (체인)
+
+  // ⭐ 상태 제어
+  isCustom   Boolean @default(false) @map("is_custom")  // Tenant 커스텀 여부
+  isDefault  Boolean @default(false) @map("is_default")  // 시스템 기본값
+  isActive   Boolean @default(true)  @map("is_active")   // 활성화 (검증 후 활성)
+
+  // 유효기간
   validFrom  DateTime @map("valid_from") @db.Date
   validTo    DateTime? @map("valid_to") @db.Date
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  // ⭐ 승인 워크플로우
+  createdBy  String? @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+  approvedBy String? @map("approved_by")
+  approvedAt DateTime? @map("approved_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   // Relations
-  emissionsRecords EmissionsRecord[]
+  tenant             Tenant?  @relation(fields: [tenantId], references: [id])
+  parent             EmissionFactor? @relation("EmissionFactorVersions", fields: [parentId], references: [id])
+  children           EmissionFactor[] @relation("EmissionFactorVersions")
+  emissionsRecords   EmissionsRecord[]
+  auditLog           EmissionFactorAuditLog[]
 
+  @@unique([code, version])
   @@index([category])
   @@index([tenantId])
   @@index([year, region])
+  @@index([validFrom, validTo])
   @@map("emission_factor")
+}
+
+// ========================================
+// COMPLIANCE: 배출계수 감사 로그 (Append-only, Hash-chain)
+// ========================================
+
+model EmissionFactorAuditLog {
+  id                  String @id @default(uuid())
+  emissionFactorId    String @map("emission_factor_id")
+
+  // 배출계수 스냅샷
+  oldValue            Decimal? @db.Decimal(15, 8)  // 변경 전
+  newValue            Decimal? @db.Decimal(15, 8)  // 변경 후
+
+  // 변경 사유
+  changeType          String @db.VarChar(50)  // CREATED, UPDATED, APPROVED, DEPRECATED
+  changeReason        String? @db.Text         // 변경 사유 (규제 변경, 데이터 수정 등)
+
+  // Tamper resistance (Hash chain)
+  previousHash        String? @map("previous_hash") @db.VarChar(64)  // SHA-256
+  currentHash         String  @map("current_hash") @db.VarChar(64)
+
+  // 요청자
+  requestedBy         String  @map("requested_by")
+  requestedAt         DateTime @default(now()) @map("requested_at")
+  approvedBy          String? @map("approved_by")
+  approvedAt          DateTime? @map("approved_at")
+
+  // Relations
+  emissionFactor      EmissionFactor @relation(fields: [emissionFactorId], references: [id], onDelete: Cascade)
+
+  @@index([emissionFactorId])
+  @@index([changeType])
+  @@index([requestedAt(sort: Desc)])
+  @@map("emission_factor_audit_log")
 }
 
 // ========================================
@@ -1751,38 +1811,48 @@ model EmissionsRecord {
   tenantId String @map("tenant_id")
   siteId   String? @map("site_id")
 
-  // 계산 기준 (감사 추적 핵심)
-  engineVersionId     String  @map("engine_version_id")
-  emissionFactorId    String  @map("emission_factor_id")
-  emissionFactorValue Decimal @map("emission_factor_value") @db.Decimal(15, 8)
-  emissionFactorUnit  String  @map("emission_factor_unit") @db.VarChar(50)
+  // ⭐ 배출 기본
+  scope                   String @db.VarChar(10)    // scope1, scope2_location, scope2_market, scope3
+  sourceType              String @map("source_type") @db.VarChar(100)
 
-  // 배출원 분류
-  scope      String @db.VarChar(10)    // scope1 / scope2 / scope3
-  sourceType String @map("source_type") @db.VarChar(100)
+  // ⭐ 활동 데이터
+  activityData            Decimal @map("activity_data") @db.Decimal(15, 4)
+  activityUnit            String  @map("activity_unit") @db.VarChar(50)
+  activityDataSnapshot    Json?   @map("activity_data_snapshot")  // 원본 기록 스냅샷
 
-  // 활동 데이터
-  activityData Decimal @map("activity_data") @db.Decimal(15, 4)
-  activityUnit String  @map("activity_unit") @db.VarChar(50)
-
-  // 계산 결과
+  // ⭐ 계산 결과
   emissions Decimal @db.Decimal(15, 6)
   unit      String  @default("tCO2eq") @db.VarChar(20)
 
-  // 기간
-  period String @db.VarChar(7) // YYYY-MM
+  // ⭐ 계산 기준 (감사 추적 핵심)
+  engineVersionId         String  @map("engine_version_id")
+  emissionFactorId        String  @map("emission_factor_id")
+  emissionFactorVersion   String  @map("emission_factor_version") @db.VarChar(20)
+  emissionFactorValue     Decimal @map("emission_factor_value") @db.Decimal(15, 8)
+  calculationMethod       String  @map("calculation_method") @db.VarChar(50)  // location-based, market-based
 
-  // 불변성 보장
-  isArchived    Boolean   @default(false) @map("is_archived")
-  archivedAt    DateTime? @map("archived_at")
-  archivedBy    String?   @map("archived_by")
-  archiveReason String?   @map("archive_reason") @db.Text
+  // ⭐ 데이터 품질
+  dataSource              String  @map("data_source") @db.VarChar(50)  // sensor, manual, invoice
+  dataQuality             String  @map("data_quality") @db.VarChar(20)  // good, uncertain
+
+  // 기간
+  period      String   @db.VarChar(7) // YYYY-MM
+  recordedAt  DateTime @default(now()) @map("recorded_at")
+
+  // ⭐ Append-only (재계산 시 기존 아카이브)
+  isArchived       Boolean   @default(false) @map("is_archived")
+  archivedAt       DateTime? @map("archived_at")
+  archivedBy       String?   @map("archived_by")
+  archivedReason   String?   @map("archived_reason") @db.Text
 
   // 재계산 연결 (부모 → 자식 체인)
-  parentId String? @map("parent_id") // 재계산 원본 레코드 ID
+  parentId String? @map("parent_id")
+
+  // ⭐ 계산 참여자 추적
+  calculatedBy     String  @map("calculated_by")   // 누구(자동/Manual/AI)가 계산했는가
+  dataSubmittedBy  String? @map("data_submitted_by") // 데이터 입력자
 
   createdAt DateTime @default(now()) @map("created_at")
-  createdBy String?  @map("created_by")
 
   // Relations
   tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -1794,4 +1864,229 @@ model EmissionsRecord {
   @@index([isArchived])
   @@index([engineVersionId])
   @@map("emissions_record")
+}
+
+// ========================================
+// ESG: Big4 감사 대응 ESG 보고서 (Immutable + Hash-chain)
+// ========================================
+
+model ESGReport {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+
+  // ⭐ 보고서 식별 (채번: ESG-YYYYMMDD-NNNN)
+  reportNo   String        @unique @map("report_no") @db.VarChar(30)
+  reportType ESGReportType @map("report_type") // compliance, sustainability, annual
+  standard   String        @db.VarChar(50)     // GHG_PROTOCOL, K_MRV, CDP, ISSB
+
+  // 다국가 지원
+  countryCode String @default("KR") @map("country_code") @db.VarChar(5)
+
+  // 보고 기간
+  period     String @db.VarChar(10) // YYYY or YYYY-MM
+  periodType String @map("period_type") @db.VarChar(10) // annual, monthly, quarterly
+  reportYear Int    @map("report_year")
+
+  // ⭐ 배출량 요약 (tCO2eq)
+  totalEmissions Decimal  @map("total_emissions") @db.Decimal(15, 6)
+  scope1         Decimal  @db.Decimal(15, 6)
+  scope2Location Decimal  @map("scope2_location") @db.Decimal(15, 6)
+  scope2Market   Decimal? @map("scope2_market") @db.Decimal(15, 6) // Market-based (선택)
+  scope3         Decimal  @db.Decimal(15, 6)
+  emissionsUnit  String   @default("tCO2eq") @map("emissions_unit") @db.VarChar(20)
+
+  // ⭐ 스냅샷 (감사 추적 핵심: 보고서 생성 시점 불변 기록)
+  emissionFactorsSnapshot   Json  @map("emission_factors_snapshot")    // 사용된 배출계수 목록 + 버전
+  engineVersionSnapshot     Json  @map("engine_version_snapshot")      // 계산엔진 정보
+  calculationMethodSnapshot Json  @map("calculation_method_snapshot")  // 계산방식 (location/market)
+  boundarySnapshot          Json  @map("boundary_snapshot")            // 조직경계, 운영경계 설정
+  activityDataSnapshot      Json? @map("activity_data_snapshot")       // 원본 활동 데이터 집계
+
+  // 규제 준수
+  applicableStandards String   @map("applicable_standards") @db.VarChar(500) // GHG Protocol, ISO 14064, K-ETS
+  methodologyNotes    String?  @map("methodology_notes") @db.Text
+  completenessScore   Decimal? @map("completeness_score") @db.Decimal(5, 2) // 데이터 완전성 0-100%
+
+  // ⭐ 무결성 (Tamper resistance)
+  dataHash    String  @map("data_hash") @db.VarChar(64) // SHA-256 of immutable content
+  isImmutable Boolean @default(false) @map("is_immutable") // 승인 후 true → 수정 불가
+
+  // XBRL 확장 (ISSB/IFRS S2 대응)
+  xbrlTaxonomy  String? @map("xbrl_taxonomy") @db.VarChar(100) // ifrs-full, ghg-protocol
+  xbrlExportUrl String? @map("xbrl_export_url") @db.VarChar(500)
+
+  // 생성 파일 (PDF, Excel)
+  pdfUrl   String? @map("pdf_url") @db.VarChar(500)
+  excelUrl String? @map("excel_url") @db.VarChar(500)
+
+  // ⭐ 상태 및 승인 워크플로우
+  status ESGReportStatus @default(draft)
+
+  generatedBy String    @map("generated_by")
+  reviewedBy  String?   @map("reviewed_by")
+  reviewedAt  DateTime? @map("reviewed_at")
+  approvedBy  String?   @map("approved_by")
+  approvedAt  DateTime? @map("approved_at")
+
+  // 버전 재발행 추적
+  previousReportId String? @map("previous_report_id") // 재발행 시 이전 보고서 참조
+  revisionNumber   Int     @default(1) @map("revision_number")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  previousReport ESGReport? @relation("ESGReportRevisions", fields: [previousReportId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  revisions      ESGReport[] @relation("ESGReportRevisions")
+
+  @@index([tenantId, reportYear])
+  @@index([standard, countryCode])
+  @@index([status])
+  @@index([isImmutable])
+  @@map("esg_report")
+}
+
+enum ESGReportType {
+  compliance    // 규제 의무 제출 (K-ETS, 환경부 K-MRV)
+  sustainability // 자발적 공시 (CDP, ISSB/IFRS S2)
+  annual        // 연간 통합 보고서
+  interim       // 중간 (반기/분기) 보고서
+}
+
+enum ESGReportStatus {
+  draft       // 초안 (수정 가능)
+  in_review   // 검토 중
+  approved    // 승인 완료 (isImmutable=true)
+  published   // 공개 발표
+  withdrawn   // 철회
+}
+
+// ========================================
+// DOWNLOAD: 다운로드 이력 관리
+// ========================================
+
+model DownloadHistory {
+  id       String  @id @default(uuid())
+  tenantId String  @map("tenant_id")
+  userId   String? @map("user_id")
+
+  // 다운로드 정보
+  category  String @db.VarChar(50)  // energy, sensor, device, alert, cost, carbon
+  format    String @db.VarChar(10)  // csv, json
+  filename  String @db.VarChar(255)
+
+  // 기간
+  startDate String @map("start_date") @db.VarChar(10) // YYYY-MM-DD
+  endDate   String @map("end_date") @db.VarChar(10)   // YYYY-MM-DD
+
+  // 결과
+  rowCount  Int    @default(0) @map("row_count")
+  sizeBytes Int    @default(0) @map("size_bytes")
+  status    String @default("completed") @db.VarChar(20) // completed, failed
+
+  // 파일 경로 (세션에서 생성한 파일은 저장되지 않음 — null)
+  filepath  String? @db.VarChar(500) // 저장된 파일의 절대 경로, null이면 이전 세션 또는 메모리 파일
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([category])
+  @@map("download_history")
+}
+
+// ========================================
+// CARBON: 탄소중립 로드맵 마일스톤
+// ========================================
+
+model Milestone {
+  id           String @id @default(uuid())
+  tenantId     String @map("tenant_id")
+
+  year         Int
+  title        String @db.VarChar(500)
+  // achieved | in_progress | pending
+  status       String @default("pending") @db.VarChar(20)
+  displayOrder Int    @default(0) @map("display_order")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, year])
+  @@index([tenantId, displayOrder])
+  @@map("milestone")
+}
+
+// ========================================
+// ACTIVITY LOG: 메뉴별 사용자 활동 이력
+// ========================================
+
+model ActivityLog {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+
+  // 채번: 메뉴코드 단축 2자 + YYYYMMDD + 일별 4자리 순번 (예: ST-20260301-0001)
+  logNo String @unique @map("log_no") @db.VarChar(30)
+
+  // 메뉴/화면 코드 (예: SITE_MGMT, DEVICE_MGMT, CARBON_FUEL, DR_EVENT, REPORT_GEN)
+  menuCode  String @map("menu_code") @db.VarChar(50)
+  // 액션 유형 (예: CREATE, UPDATE, DELETE, DOWNLOAD, UPLOAD, GENERATE)
+  actionType  String @map("action_type") @db.VarChar(50)
+  // 화면 표시용 한글 레이블 (예: "연료 등록", "사이트 생성", "보고서 생성")
+  actionLabel String @map("action_label") @db.VarChar(100)
+
+  // 대상 리소스
+  resourceType String? @map("resource_type") @db.VarChar(50) // site, device, sensor, fuel, transport, dr_event, report
+  resourceId   String? @map("resource_id") @db.VarChar(255)
+  resourceName String? @map("resource_name") @db.VarChar(500)
+
+  // 변경 데이터 (JSON)
+  beforeData Json? @map("before_data") // 변경 전 (UPDATE/DELETE)
+  afterData  Json? @map("after_data")  // 변경 후 (CREATE/UPDATE)
+  metadata   Json? // 추가 메타 (파일명, 행수, 기간 등)
+
+  // 처리 결과
+  status       String  @default("success") @db.VarChar(20) // success, failed
+  errorMessage String? @map("error_message") @db.Text
+
+  // 요청자 정보
+  userId    String? @map("user_id") @db.VarChar(255)
+  userName  String? @map("user_name") @db.VarChar(200)
+  userEmail String? @map("user_email") @db.VarChar(200)
+  userRole  String? @map("user_role") @db.VarChar(50)
+  ipAddress String? @map("ip_address") @db.VarChar(45)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, menuCode, createdAt(sort: Desc)])
+  @@index([tenantId, actionType])
+  @@index([tenantId, userId])
+  @@map("activity_log")
+}
+
+// ========================================
+// ACTIVITY LOG SEQ: 채번 카운터 테이블
+// 메뉴코드 단축 PREFIX + 날짜별 일련번호 관리
+// ========================================
+
+model ActivityLogSeq {
+  // 메뉴코드 단축 코드 (예: ST, DV, CF, DR)
+  prefix  String @db.VarChar(10)
+  // 날짜 (YYYYMMDD 형식)
+  seqDate String @map("seq_date") @db.Char(8)
+  // 해당 날짜/prefix의 현재 최대 순번 (1부터 시작, 매일 리셋)
+  seq     Int    @default(1)
+
+  @@id([prefix, seqDate])
+  @@map("activity_log_seq")
 }

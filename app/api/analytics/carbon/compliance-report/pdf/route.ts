@@ -101,7 +101,10 @@ interface ReportData {
 function generateCompliancePdf(fontPath: string | null, data: ReportData): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const PDFDocument = require('pdfkit') as typeof import('pdfkit');
+    const pdfkitMod = require('pdfkit');
+    // Next.js ESM 환경에서 pdfkit은 { default: Constructor } 형태로 export됨
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const PDFDocument = (pdfkitMod.default ?? pdfkitMod) as typeof import('pdfkit');
     const doc = new PDFDocument({
       size: 'A4',
       margins: { top: MARGIN, bottom: MARGIN + 20, left: MARGIN, right: MARGIN },

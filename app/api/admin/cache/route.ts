@@ -1,13 +1,16 @@
 /**
- * /api/admin/cache - Redis 캐시 상태 진단 및 강제 무효화
+ * /api/admin/cache - 내부 캐시 상태 진단 및 강제 무효화
  *
- * GET  → 캐시/서킷브레이커 상태 + Redis 연결 테스트
- * DELETE ?key=  → 특정 키 무효화  (super_admin)
- * DELETE ?prefix= → prefix 무효화 (super_admin)
+ * GET  → in-memory 캐시 / 서킷브레이커 상태 반환
+ * DELETE ?key=    → 특정 키 무효화  (super_admin)
+ * DELETE ?prefix= → prefix 무효화   (super_admin)
+ *
+ * ⚠ Redis는 선택적 인프라 — 연결 테스트는 이 API에서 수행하지 않음.
+ *   캐시 레이어(lib/cache/redis.ts)가 알아서 폴백·서킷브레이크 처리.
+ *   연결 테스트를 여기서 하면 Redis 장애 시 관리자 페이지까지 영향받음.
  */
 
 import { NextRequest } from 'next/server';
-import { Redis } from '@upstash/redis';
 import { getCacheStatus, invalidateCache, invalidateCacheByPrefix } from '@/lib/cache/redis';
 import { verifyAuth, requireRoleOrHigher } from '@/lib/auth/verify';
 import {
@@ -21,7 +24,7 @@ import { UserRole } from '@/lib/constants/roles';
 export const dynamic = 'force-dynamic';
 
 // ──────────────────────────────────────────────────────────────
-// GET — 캐시 상태 + Redis 연결 테스트
+// GET — 캐시 상태 조회 (Redis 직접 연결 테스트 없음)
 // ──────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
@@ -33,58 +36,34 @@ export async function GET(request: NextRequest) {
     }
 
     const status = getCacheStatus();
-
-    // Upstash Redis 직접 연결 테스트
-    let redisTestResult: {
-      ok: boolean;
-      latencyMs?: number;
-      error?: string;
-      configured: boolean;
-    } = { ok: false, configured: false };
-
-    const url = process.env.UPSTASH_REDIS_URL;
-    const token = process.env.UPSTASH_REDIS_TOKEN;
-
-    if (url && token) {
-      redisTestResult.configured = true;
-      const startMs = Date.now();
-      try {
-        const testClient = new Redis({ url, token });
-        await testClient.set('__health_check__', '1', { ex: 10 });
-        const val = await testClient.get('__health_check__');
-        redisTestResult = {
-          configured: true,
-          ok: val === '1',
-          latencyMs: Date.now() - startMs,
-        };
-      } catch (err) {
-        redisTestResult = {
-          configured: true,
-          ok: false,
-          latencyMs: Date.now() - startMs,
-          error: err instanceof Error ? err.message : String(err),
-        };
-      }
-    }
+    const redisUrl   = process.env.UPSTASH_REDIS_URL   ?? '';
+    const redisToken = process.env.UPSTASH_REDIS_TOKEN ?? '';
+    const redisConfigured =
+      redisUrl.startsWith('https://') &&
+      !redisUrl.includes('your-') &&
+      !redisUrl.includes('example') &&
+      redisToken.length > 10;
 
     return successResponse({
-      cache: {
-        ...status,
-        redisUrl: url
-          ? url.replace(/\/\/[^@]+@/, '//**@').substring(0, 40) + '...'
-          : null,
+      cache: status,
+      redis: {
+        enabled:  redisConfigured,
+        provider: redisConfigured ? 'upstash' : 'none',
+        mode:     'optional',
+        note:     '장애 시 in-memory 캐시로 자동 폴백됩니다.',
       },
-      redisTest: redisTestResult,
-      tips: !redisTestResult.configured
-        ? ['UPSTASH_REDIS_URL, UPSTASH_REDIS_TOKEN 환경변수를 .env에 추가하세요.']
-        : !redisTestResult.ok
-        ? [
-            '1) Upstash 대시보드에서 Redis DB가 활성 상태인지 확인',
-            '2) UPSTASH_REDIS_URL / TOKEN이 올바른지 확인',
-            '3) 로컬 Docker: docker run -d -p 6379:6379 redis:alpine',
-            '4) 개발 중에는 in-memory 폴백이 자동 사용됨 (기능 정상)',
-          ]
-        : ['Redis 연결 정상'],
+      tips: redisConfigured
+        ? status.circuitOpen
+          ? [
+              'Redis 서킷 오픈 상태 — in-memory 폴백 중 (서비스 정상)',
+              `재시도 예정: ${status.circuitOpenUntil ?? '알 수 없음'}`,
+              'Upstash 대시보드에서 ACL 권한(GET/SET)을 확인하세요.',
+            ]
+          : ['Redis 캐시 정상 운영 중']
+        : [
+            'UPSTASH_REDIS_URL / UPSTASH_REDIS_TOKEN 미설정 → in-memory 캐시로 동작 중',
+            '재시작 시 캐시가 초기화됩니다. 운영 환경에서는 Upstash 설정을 권장합니다.',
+          ],
     });
   } catch (error) {
     console.error('[API] 캐시 상태 조회 오류:', error);
@@ -105,7 +84,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const key = searchParams.get('key');
+    const key    = searchParams.get('key');
     const prefix = searchParams.get('prefix');
 
     if (key) {
@@ -117,7 +96,7 @@ export async function DELETE(request: NextRequest) {
       return successResponse({ invalidatedPrefix: prefix });
     }
 
-    // 전체 in-memory 초기화 (Redis는 유지)
+    // 전체 in-memory 초기화 (Redis 키는 TTL 만료 대기)
     invalidateCacheByPrefix('');
     return successResponse({ invalidated: 'all-in-memory' });
   } catch (error) {

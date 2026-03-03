@@ -80,8 +80,9 @@ export default async function PaymentSuccessPage({ searchParams }: PageProps) {
           <div className="mt-6 pt-4 border-t border-slate-800">
             <p className="text-xs text-slate-500">
               문의사항:{' '}
-              <a href="mailto:support@carboneum.kr" className="text-cyan-400 hover:underline">
-                support@carboneum.kr
+              <a href="mailto:carbonieum.official@gmail.com" className="text-cyan-400 hover:underline">
+                {/* <a href="mailto:support@carboneum.kr" className="text-cyan-400 hover:underline"></a> */}
+                carbonieum.official@gmail.com
               </a>
             </p>
           </div>

@@ -17,7 +17,8 @@ import {
   CheckCircle2,
   XCircle,
 } from 'lucide-react';
-import { fetchWithCsrf } from '@/hooks/use-csrf';
+import { apiPost, apiGet, ApiError } from '@/lib/api/client';
+import { PlanLockedBanner } from '@/components/subscription/PlanLockedBanner';
 
 interface AnalysisTemplate {
   id: string;
@@ -34,6 +35,7 @@ interface TemplateResult {
   success: boolean;
   summary: string;
   detail?: string;
+  status?: number; // HTTP 상태 코드 (402 = 플랜 잠금)
 }
 
 const CATEGORY_CONFIG = {
@@ -145,85 +147,91 @@ async function runTemplateApi(
 ): Promise<TemplateResult> {
   switch (category) {
     case 'anomaly': {
-      const res = await fetchWithCsrf('/api/ai/anomaly', {
-        method: 'POST',
-        body: JSON.stringify({ sensitivity: 0.5 }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, summary: data.message || '이상 탐지 실패' };
+      try {
+        const data = await apiPost('/api/ai/anomaly', { sensitivity: 0.5 }) as unknown as Record<string, unknown>;
+        const count = Array.isArray(data.anomalies) ? data.anomalies.length : 0;
+        const rate = (data.anomaly_rate as number) ?? 0;
+        return {
+          success: true,
+          summary: `이상치 ${count}건 탐지 (전체의 ${(rate * 100).toFixed(1)}%)`,
+          detail: `모델: ${(data.model as string) ?? 'N/A'}`,
+        };
+      } catch (err) {
+        return {
+          success: false,
+          summary: err instanceof Error ? err.message : '이상 탐지 실패',
+          status: err instanceof ApiError ? err.status : undefined,
+        };
       }
-      const count: number = Array.isArray(data.anomalies) ? data.anomalies.length : 0;
-      const rate: number = data.anomaly_rate ?? 0;
-      return {
-        success: true,
-        summary: `이상치 ${count}건 탐지 (전체의 ${(rate * 100).toFixed(1)}%)`,
-        detail: `모델: ${data.model ?? 'N/A'}`,
-      };
     }
 
     case 'forecast': {
-      const res = await fetchWithCsrf('/api/ai/forecast', {
-        method: 'POST',
-        body: JSON.stringify({ horizon: '24h' }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, summary: data.message || '예측 실패' };
+      try {
+        const data = await apiPost('/api/ai/forecast', { horizon: '24h' }) as unknown as Record<string, unknown>;
+        const preds = Array.isArray(data.predictions) ? (data.predictions as { value: number }[]) : [];
+        const avg = preds.length > 0 ? preds.reduce((s, p) => s + p.value, 0) / preds.length : 0;
+        const conf = (data.confidence as number) ?? 0;
+        return {
+          success: true,
+          summary: `24시간 예측 완료 — 평균 ${avg.toFixed(1)} kW (신뢰도 ${(conf * 100).toFixed(0)}%)`,
+          detail: `모델: ${(data.model as string) ?? 'N/A'}`,
+        };
+      } catch (err) {
+        return {
+          success: false,
+          summary: err instanceof Error ? err.message : '예측 실패',
+          status: err instanceof ApiError ? err.status : undefined,
+        };
       }
-      const preds: { value: number }[] = data.predictions ?? [];
-      const avg =
-        preds.length > 0
-          ? preds.reduce((s, p) => s + p.value, 0) / preds.length
-          : 0;
-      const conf: number = data.confidence ?? 0;
-      return {
-        success: true,
-        summary: `24시간 예측 완료 — 평균 ${avg.toFixed(1)} kW (신뢰도 ${(conf * 100).toFixed(0)}%)`,
-        detail: `모델: ${data.model ?? 'N/A'}`,
-      };
     }
 
     case 'cost': {
-      const res = await fetchWithCsrf('/api/ai/optimize', {
-        method: 'POST',
-        body: JSON.stringify({ targetReduction: 10 }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, summary: data.message || '최적화 분석 실패' };
+      try {
+        const data = await apiPost('/api/ai/optimize', { targetReduction: 10 }) as unknown as Record<string, unknown>;
+        const recs = Array.isArray(data.recommendations) ? data.recommendations : [];
+        const summary = data.summary as Record<string, unknown> | undefined;
+        const costSaving = (summary?.totalCostSaving as number) ?? 0;
+        return {
+          success: true,
+          summary: `추천 ${recs.length}건 — 월 절감 가능 ${costSaving.toLocaleString()}원`,
+          detail: `모델: ${(data.model as string) ?? 'N/A'}`,
+        };
+      } catch (err) {
+        return {
+          success: false,
+          summary: err instanceof Error ? err.message : '최적화 분석 실패',
+          status: err instanceof ApiError ? err.status : undefined,
+        };
       }
-      const recs: unknown[] = data.recommendations ?? [];
-      const costSaving: number = data.summary?.totalCostSaving ?? 0;
-      return {
-        success: true,
-        summary: `추천 ${recs.length}건 — 월 절감 가능 ${costSaving.toLocaleString()}원`,
-        detail: `모델: ${data.model ?? 'N/A'}`,
-      };
     }
 
     case 'energy':
     case 'carbon': {
-      // 대시보드 overview에서 실 집계값 조회
-      const res = await fetch('/api/dashboard/overview');
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, summary: '대시보드 데이터 조회 실패' };
-      }
-      if (category === 'energy') {
-        const usage: number = data.energy?.currentUsage ?? 0;
-        const rate: number = data.energy?.usageRate ?? 0;
+      try {
+        const data = await apiGet('/api/dashboard/overview') as unknown as Record<string, unknown>;
+        if (category === 'energy') {
+          const energy = data.energy as Record<string, unknown> | undefined;
+          const usage = (energy?.currentUsage as number) ?? 0;
+          const rate = (energy?.usageRate as number) ?? 0;
+          return {
+            success: true,
+            summary: `현재 전력 ${usage.toFixed(1)} kW, 목표 대비 사용률 ${rate.toFixed(1)}%`,
+            detail: '실 DB 데이터 기반',
+          };
+        } else {
+          const carbon = data.carbon as Record<string, unknown> | undefined;
+          const saved = (carbon?.savingsEmissions as number) ?? 0;
+          return {
+            success: true,
+            summary: `탄소 절감량 ${saved.toFixed(1)} kg CO₂`,
+            detail: '실 DB 데이터 기반',
+          };
+        }
+      } catch (err) {
         return {
-          success: true,
-          summary: `현재 전력 ${usage.toFixed(1)} kW, 목표 대비 사용률 ${rate.toFixed(1)}%`,
-          detail: '실 DB 데이터 기반',
-        };
-      } else {
-        const saved: number = data.carbon?.savingsEmissions ?? 0;
-        return {
-          success: true,
-          summary: `탄소 절감량 ${saved.toFixed(1)} kg CO₂`,
-          detail: '실 DB 데이터 기반',
+          success: false,
+          summary: err instanceof Error ? err.message : '대시보드 데이터 조회 실패',
+          status: err instanceof ApiError ? err.status : undefined,
         };
       }
     }
@@ -239,6 +247,8 @@ export default function AnalysisTemplatesPage() {
   const [runningTemplate, setRunningTemplate] = useState<string | null>(null);
   const [completedTemplates, setCompletedTemplates] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<Record<string, TemplateResult>>({});
+  const [isPlanLocked, setIsPlanLocked] = useState(false);
+  const [planLockedMessage, setPlanLockedMessage] = useState('');
 
   const filteredTemplates = TEMPLATES.filter((t) => {
     const matchCategory = selectedCategory === 'all' || t.category === selectedCategory;
@@ -251,6 +261,7 @@ export default function AnalysisTemplatesPage() {
 
   const handleRun = async (template: AnalysisTemplate) => {
     setRunningTemplate(template.id);
+    setIsPlanLocked(false);
     // 이전 결과 초기화
     setResults((prev) => {
       const next = { ...prev };
@@ -260,6 +271,11 @@ export default function AnalysisTemplatesPage() {
 
     try {
       const result = await runTemplateApi(template.category);
+      // 402 플랜 잠금 감지
+      if (result.status === 402) {
+        setIsPlanLocked(true);
+        setPlanLockedMessage(result.summary);
+      }
       setResults((prev) => ({ ...prev, [template.id]: result }));
       if (result.success) {
         setCompletedTemplates((prev) => new Set(prev).add(template.id));
@@ -279,6 +295,15 @@ export default function AnalysisTemplatesPage() {
 
   return (
     <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6 space-y-6">
+      {/* 플랜 잠금 배너 */}
+      {isPlanLocked && (
+        <PlanLockedBanner
+          message={planLockedMessage || '이 기능은 상위 플랜에서 제공됩니다.'}
+          requiredPlan="PROFESSIONAL"
+          onRetry={() => setIsPlanLocked(false)}
+        />
+      )}
+
       {/* 헤더 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>

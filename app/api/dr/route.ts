@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/prisma';
 import { notifyDrEventCreated } from '@/lib/services/notification.service';
+import { logActivity, MENU_CODES, ACTION_TYPES } from '@/lib/services/activity-log.service';
 
 // GET: DR 이벤트 목록
 export async function GET(request: NextRequest) {
@@ -62,9 +63,26 @@ export async function POST(request: NextRequest) {
       title: event.title,
       startTime: event.startTime,
       endTime: event.endTime,
-      targetReductionKw: event.targetReductionKw ?? 0,
+      targetReductionKw: Number(event.targetReductionKw ?? 0),
       createdByName: session.user.name ?? undefined,
     }).catch(() => null);
+
+    // 활동 이력 기록 (fire-and-forget)
+    logActivity({
+      tenantId: session.user.tenantId,
+      menuCode: MENU_CODES.DR_EVENT,
+      actionType: ACTION_TYPES.CREATE,
+      actionLabel: 'DR 이벤트 생성',
+      resourceType: 'dr_event',
+      resourceId: event.id,
+      resourceName: event.title,
+      afterData: { title, startTime, endTime, targetReductionKw },
+      userId: session.user.id,
+      userName: session.user.name ?? undefined,
+      userEmail: session.user.email ?? undefined,
+      userRole: (session.user as { role?: string }).role ?? undefined,
+      request,
+    });
 
     return NextResponse.json(event, { status: 201 });
 

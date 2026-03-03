@@ -3,7 +3,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { verifyAuth } from '@/lib/auth/verify';
 import ExcelJS from 'exceljs';
+import { logActivity, MENU_CODES, ACTION_TYPES } from '@/lib/services/activity-log.service';
 import { generateDownloadFilename } from '@/lib/utils/filename';
+import path from 'path';
+import fs from 'fs';
+import os from 'os';
+
+// ── 한글 폰트 탐색 ──────────────────────────────────────────────
+const FONT_CANDIDATES = [
+  path.join(process.cwd(), 'public/fonts/NanumGothic.ttf'),
+  'C:\\Windows\\Fonts\\malgun.ttf',
+  'C:\\Windows\\Fonts\\NanumGothic.ttf',
+  '/usr/share/fonts/truetype/nanum/NanumGothic.ttf',
+  '/usr/share/fonts/nanum/NanumGothic.ttf',
+  '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+  '/System/Library/Fonts/AppleSDGothicNeo.ttc',
+];
+
+function findKoreanFont(): string | null {
+  for (const p of FONT_CANDIDATES) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
 
 /**
  * 리포트 생성 API
@@ -89,6 +111,23 @@ export async function POST(request: NextRequest) {
     await prisma.report.update({
       where: { id: report.id },
       data: { fileUrl },
+    });
+
+    // 활동 이력 기록 (fire-and-forget)
+    logActivity({
+      tenantId: auth.tenantId,
+      menuCode: MENU_CODES.REPORT_GEN,
+      actionType: ACTION_TYPES.GENERATE,
+      actionLabel: '보고서 생성',
+      resourceType: 'report',
+      resourceId: report.id,
+      resourceName: `${type} ${period} 보고서 (${format.toUpperCase()})`,
+      afterData: { type, period, format, startDate, endDate, siteId },
+      metadata: { fileUrl },
+      userId: auth.userId,
+      userEmail: auth.email,
+      userRole: auth.role,
+      request,
     });
 
     return NextResponse.json({
@@ -184,154 +223,177 @@ async function generateReportData(params: {
 }
 
 /**
- * PDF 생성 (Puppeteer — 한국어 완전 지원)
+ * PDF 생성 (PDFKit — 순수 JS, Chrome 불필요, 한국어 지원)
  */
 async function generatePDF(reportId: string, data: any): Promise<string> {
-  const fs = require('fs') as typeof import('fs');
-  const path = require('path') as typeof import('path');
-  const os = require('os') as typeof import('os');
-
   const fileName = generateDownloadFilename('에너지보고서', reportId, 'pdf');
   const filePath = path.join(os.tmpdir(), fileName);
 
-  // 일별 데이터 행 HTML 생성
-  const rowsHtml = (data.dailyData && data.dailyData.length > 0)
-    ? data.dailyData.map((row: any, i: number) => `
-        <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#fff'}">
-          <td style="padding:7px 12px;border-bottom:1px solid #e2e8f0;font-size:10pt;color:#334155">
-            ${new Date(row.date).toLocaleDateString('ko-KR')}
-          </td>
-          <td style="padding:7px 12px;border-bottom:1px solid #e2e8f0;font-size:10pt;color:#334155;text-align:right">
-            ${parseFloat(row.total_energy || '0').toLocaleString('ko-KR')} kWh
-          </td>
-        </tr>`).join('')
-    : `<tr><td colspan="2" style="padding:12px;text-align:center;color:#94a3b8;font-size:10pt">데이터 없음</td></tr>`;
+  const pdfBuffer = await generateReportPdfBuffer(data);
+  fs.writeFileSync(filePath, pdfBuffer);
 
-  const html = `<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8">
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
-    font-size: 11pt;
-    color: #1e293b;
-    background: #fff;
-    padding: 20mm 15mm;
-  }
-  .header-bar {
-    background: linear-gradient(135deg, #1e40af, #0369a1);
-    color: #fff;
-    padding: 20px 24px;
-    border-radius: 8px;
-    margin-bottom: 24px;
-  }
-  .header-bar h1 { font-size: 20pt; font-weight: bold; margin-bottom: 4px; }
-  .header-bar p { font-size: 10pt; opacity: 0.85; }
-  .kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-    margin-bottom: 28px;
-  }
-  .kpi-card {
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 14px 16px;
-    background: #f8fafc;
-  }
-  .kpi-label { font-size: 9pt; color: #64748b; margin-bottom: 4px; }
-  .kpi-value { font-size: 16pt; font-weight: bold; color: #1e40af; }
-  .kpi-unit { font-size: 10pt; color: #64748b; font-weight: normal; margin-left: 4px; }
-  h2 {
-    font-size: 14pt;
-    color: #0f172a;
-    border-left: 4px solid #1e40af;
-    padding-left: 10px;
-    margin: 24px 0 12px 0;
-  }
-  table { width: 100%; border-collapse: collapse; }
-  thead tr { background: #1e40af; color: #fff; }
-  thead th { padding: 9px 12px; font-size: 10pt; text-align: left; }
-  thead th:last-child { text-align: right; }
-  .footer {
-    margin-top: 32px;
-    padding-top: 10px;
-    border-top: 1px solid #e2e8f0;
-    font-size: 8pt;
-    color: #94a3b8;
-    display: flex;
-    justify-content: space-between;
-  }
-  @page { margin: 15mm; }
-</style>
-</head>
-<body>
-  <div class="header-bar">
-    <h1>에너지 사용 리포트</h1>
-    <p>분석 기간: ${data.period}</p>
-    <p>생성일시: ${new Date().toLocaleString('ko-KR')}</p>
-  </div>
+  return `/api/reports/download/${encodeURIComponent(fileName)}`;
+}
 
-  <h2>요약 (Summary)</h2>
-  <div class="kpi-grid">
-    <div class="kpi-card">
-      <div class="kpi-label">총 에너지 사용량</div>
-      <div class="kpi-value">${Number(data.summary.totalEnergy).toLocaleString('ko-KR')}<span class="kpi-unit">kWh</span></div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">피크 전력</div>
-      <div class="kpi-value">${Number(data.summary.peakPower).toLocaleString('ko-KR')}<span class="kpi-unit">kW</span></div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">평균 전력</div>
-      <div class="kpi-value">${Number(data.summary.avgPower).toLocaleString('ko-KR')}<span class="kpi-unit">kW</span></div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">예상 전기요금</div>
-      <div class="kpi-value">${Number(data.summary.estimatedCost).toLocaleString('ko-KR')}<span class="kpi-unit">원</span></div>
-    </div>
-  </div>
+/**
+ * PDFKit으로 에너지 리포트 버퍼 생성
+ */
+function generateReportPdfBuffer(data: any): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdfkitMod = require('pdfkit');
+    const PDFDocument: typeof import('pdfkit') = pdfkitMod.default ?? pdfkitMod;
 
-  <h2>일별 사용량 (Daily Usage)</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>날짜</th>
-        <th style="text-align:right">사용량 (kWh)</th>
-      </tr>
-    </thead>
-    <tbody>${rowsHtml}</tbody>
-  </table>
+    const fontPath = findKoreanFont();
+    const MARGIN = 50;
+    const PAGE_W = 595.28;
+    const CONTENT_W = PAGE_W - MARGIN * 2;
+    const PRIMARY = '#1e40af';
+    const MUTED = '#64748b';
+    const TEXT = '#1e293b';
+    const BORDER = '#e2e8f0';
+    const BG_ALT = '#f8fafc';
 
-  <div class="footer">
-    <span>탄소이음 | 에너지 데이터로 세상을 잇다</span>
-    <span>© 2026 탄소이음. All rights reserved.</span>
-  </div>
-</body>
-</html>`;
-
-  const puppeteer = await import('puppeteer');
-  const browser = await puppeteer.default.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-  });
-
-  try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '0', bottom: '0', left: '0', right: '0' },
+    const doc = new PDFDocument({
+      size: 'A4',
+      margins: { top: MARGIN, bottom: MARGIN + 20, left: MARGIN, right: MARGIN },
+      info: {
+        Title: '에너지 사용 리포트',
+        Author: '탄소이음',
+        Subject: '에너지 관리 분석 보고서',
+      },
     });
-    fs.writeFileSync(filePath, pdfBuffer);
-  } finally {
-    await browser.close();
-  }
 
-  return `/api/reports/download/${fileName}`;
+    const FONT = 'Body';
+    const BOLD = 'Bold';
+    if (fontPath) {
+      doc.registerFont(FONT, fontPath);
+      doc.registerFont(BOLD, fontPath);
+    } else {
+      doc.registerFont(FONT, 'Helvetica');
+      doc.registerFont(BOLD, 'Helvetica-Bold');
+    }
+
+    const chunks: Buffer[] = [];
+    doc.on('data', (c: Buffer) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    // ── 헤더 바 ────────────────────────────────────────────────
+    doc.rect(MARGIN, MARGIN, CONTENT_W, 70).fill(PRIMARY);
+    doc.font(BOLD).fontSize(18).fillColor('#ffffff')
+      .text('에너지 사용 리포트', MARGIN + 16, MARGIN + 12, { width: CONTENT_W - 32 });
+    doc.font(FONT).fontSize(9).fillColor('rgba(255,255,255,0.85)')
+      .text(`분석 기간: ${data.period}`, MARGIN + 16, MARGIN + 38, { width: CONTENT_W - 32 });
+    doc.font(FONT).fontSize(8).fillColor('rgba(255,255,255,0.7)')
+      .text(`생성일시: ${new Date().toLocaleString('ko-KR')}`, MARGIN + 16, MARGIN + 54, { width: CONTENT_W - 32 });
+
+    doc.y = MARGIN + 82;
+
+    // ── 요약 섹션 제목 ───────────────────────────────────────
+    doc.rect(MARGIN, doc.y, 4, 18).fill(PRIMARY);
+    doc.font(BOLD).fontSize(13).fillColor(TEXT)
+      .text('요약 (Summary)', MARGIN + 10, doc.y, { width: CONTENT_W });
+    doc.moveDown(0.8);
+
+    // ── KPI 카드 (2×2 그리드) ────────────────────────────────
+    const kpiItems = [
+      { label: '총 에너지 사용량', value: `${Number(data.summary.totalEnergy).toLocaleString('ko-KR')} kWh` },
+      { label: '피크 전력', value: `${Number(data.summary.peakPower).toLocaleString('ko-KR')} kW` },
+      { label: '평균 전력', value: `${Number(data.summary.avgPower).toLocaleString('ko-KR')} kW` },
+      { label: '예상 전기요금', value: `₩${Number(data.summary.estimatedCost).toLocaleString('ko-KR')}` },
+    ];
+
+    const cardW = (CONTENT_W - 12) / 2;
+    const cardH = 56;
+    const startY = doc.y;
+
+    kpiItems.forEach((item, i) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const x = MARGIN + col * (cardW + 12);
+      const y = startY + row * (cardH + 8);
+
+      doc.rect(x, y, cardW, cardH).fill(BG_ALT);
+      doc.rect(x, y, cardW, cardH).strokeColor(BORDER).lineWidth(1).stroke();
+      doc.font(FONT).fontSize(8).fillColor(MUTED)
+        .text(item.label, x + 10, y + 10, { width: cardW - 20 });
+      doc.font(BOLD).fontSize(14).fillColor(PRIMARY)
+        .text(item.value, x + 10, y + 26, { width: cardW - 20 });
+    });
+
+    doc.y = startY + 2 * (cardH + 8) + 16;
+
+    // ── 구분선 ────────────────────────────────────────────────
+    doc.moveTo(MARGIN, doc.y).lineTo(PAGE_W - MARGIN, doc.y)
+      .strokeColor(BORDER).lineWidth(1).stroke();
+    doc.moveDown(0.8);
+
+    // ── 일별 사용량 섹션 ─────────────────────────────────────
+    doc.rect(MARGIN, doc.y, 4, 18).fill(PRIMARY);
+    doc.font(BOLD).fontSize(13).fillColor(TEXT)
+      .text('일별 사용량 (Daily Usage)', MARGIN + 10, doc.y, { width: CONTENT_W });
+    doc.moveDown(0.6);
+
+    // 테이블 헤더
+    const tableStartY = doc.y;
+    const col1W = CONTENT_W * 0.55;
+    const col2W = CONTENT_W * 0.45;
+
+    doc.rect(MARGIN, tableStartY, CONTENT_W, 22).fill(PRIMARY);
+    doc.font(BOLD).fontSize(9).fillColor('#ffffff')
+      .text('날짜', MARGIN + 8, tableStartY + 6, { width: col1W });
+    doc.font(BOLD).fontSize(9).fillColor('#ffffff')
+      .text('사용량 (kWh)', MARGIN + col1W, tableStartY + 6, { width: col2W, align: 'right' });
+
+    let rowY = tableStartY + 22;
+
+    const rows: any[] = data.dailyData && data.dailyData.length > 0
+      ? data.dailyData.slice(0, 25)
+      : [];
+
+    if (rows.length === 0) {
+      doc.rect(MARGIN, rowY, CONTENT_W, 22).fill(BG_ALT);
+      doc.font(FONT).fontSize(9).fillColor(MUTED)
+        .text('데이터 없음', MARGIN, rowY + 6, { width: CONTENT_W, align: 'center' });
+      rowY += 22;
+    } else {
+      rows.forEach((row: any, i: number) => {
+        if (rowY > 740) {
+          doc.addPage();
+          rowY = MARGIN;
+        }
+        if (i % 2 === 0) {
+          doc.rect(MARGIN, rowY, CONTENT_W, 20).fill(BG_ALT);
+        }
+        doc.rect(MARGIN, rowY, CONTENT_W, 20).strokeColor(BORDER).lineWidth(0.5).stroke();
+        doc.font(FONT).fontSize(9).fillColor(TEXT)
+          .text(new Date(row.date).toLocaleDateString('ko-KR'), MARGIN + 8, rowY + 5, { width: col1W });
+        doc.font(FONT).fontSize(9).fillColor(TEXT)
+          .text(parseFloat(row.total_energy || '0').toLocaleString('ko-KR'), MARGIN + col1W, rowY + 5, { width: col2W - 8, align: 'right' });
+        rowY += 20;
+      });
+    }
+
+    doc.y = rowY + 16;
+
+    // ── 푸터 ─────────────────────────────────────────────────
+    doc.moveTo(MARGIN, doc.y).lineTo(PAGE_W - MARGIN, doc.y)
+      .strokeColor(BORDER).lineWidth(1).stroke();
+    doc.moveDown(0.4);
+    doc.font(FONT).fontSize(8).fillColor(MUTED)
+      .text('탄소이음 | 에너지 데이터로 세상을 잇다', MARGIN, doc.y, {
+        width: CONTENT_W / 2,
+        align: 'left',
+        continued: true,
+      })
+      .text('© 2026 탄소이음. All rights reserved.', {
+        width: CONTENT_W / 2,
+        align: 'right',
+      });
+
+    doc.end();
+  });
 }
 
 /**
@@ -391,9 +453,9 @@ async function generateExcel(reportId: string, data: any): Promise<string> {
 
   // 파일 저장
   const fileName = generateDownloadFilename('에너지보고서', reportId, 'xlsx');
-  const filePath = `/tmp/${fileName}`;
-  
+  const filePath = path.join(os.tmpdir(), fileName);
+
   await workbook.xlsx.writeFile(filePath);
 
-  return `/api/reports/download/${fileName}`;
+  return `/api/reports/download/${encodeURIComponent(fileName)}`;
 }

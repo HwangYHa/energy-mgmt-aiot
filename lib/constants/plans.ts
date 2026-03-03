@@ -46,8 +46,8 @@ export const PLAN_FEATURES: Record<string, PlanFeatureSet> = {
   // Starter (무료/체험)
   trial: {
     maxSites: 1,
-    maxDevices: 5,
-    maxUsers: 3,
+    maxDevices: 10,
+    maxUsers: 2,
     dataRetentionDays: 30,
     apiRateLimit: 100,
     features: {
@@ -82,7 +82,7 @@ export const PLAN_FEATURES: Record<string, PlanFeatureSet> = {
   // Basic (Starter 유료)
   basic: {
     maxSites: 3,
-    maxDevices: 20,
+    maxDevices: 50,
     maxUsers: 10,
     dataRetentionDays: 90,
     apiRateLimit: 500,
@@ -118,8 +118,8 @@ export const PLAN_FEATURES: Record<string, PlanFeatureSet> = {
   // Professional
   pro: {
     maxSites: 10,
-    maxDevices: 100,
-    maxUsers: 50,
+    maxDevices: 200,
+    maxUsers: 30,
     dataRetentionDays: 365,
     apiRateLimit: 2000,
     features: {

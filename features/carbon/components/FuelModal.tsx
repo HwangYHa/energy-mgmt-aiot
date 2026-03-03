@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Flame, X, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from '@/lib/toast';
+import { apiPost, ApiError } from '@/lib/api/client';
 
 const FUEL_TYPES = [
   { value: 'diesel',   label: '경유' },
@@ -39,26 +40,20 @@ export function FuelModal({ onClose, onSuccess }: Props) {
     if (!form.quantity) { setError('사용량을 입력해주세요'); return; }
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/analytics/carbon/register-fuel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fuelType: form.fuelType,
-          quantity: Number(form.quantity),
-          unit: form.unit,
-          period: form.period,
-          facility: form.facility || undefined,
-        }),
+      // normalize bunker type since backend expects hyphen
+      const src = form.fuelType.replace('bunker_c', 'bunker-c');
+      await apiPost('/api/analytics/carbon/register-fuel', {
+        fuelType: src,
+        quantity: Number(form.quantity),
+        unit: form.unit,
+        period: form.period,
+        facility: form.facility || undefined,
       });
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        throw new Error((e as { message?: string }).message ?? '등록 실패');
-      }
       setDone(true);
       toast.success('연료 사용량이 등록되었습니다.');
       setTimeout(() => { onSuccess(); onClose(); }, 1200);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '오류가 발생했습니다');
+      setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : '오류가 발생했습니다');
     } finally {
       setIsSubmitting(false);
     }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { apiGet, ApiError } from '@/lib/api/client';
 import {
   AlertTriangle,
   AlertCircle,
@@ -32,17 +33,22 @@ interface AlertItem {
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
 
   const fetchAlerts = useCallback(async () => {
+    setError(null);
     try {
-      const res = await fetch('/api/notifications/logs');
-      const json = await res.json();
-      if (json.success) {
-        setAlerts(json.data || []);
-      }
-    } catch {
-      // 알림 로그 조회 실패 - 빈 목록으로 표시
+      const res = await apiGet<AlertItem[]>('/api/alerts?days=30&take=100');
+      setAlerts(res.data ?? []);
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+          ? err.message
+          : '네트워크 오류가 발생했습니다.'
+      );
     } finally {
       setIsLoading(false);
     }
@@ -130,6 +136,19 @@ export default function AlertsPage() {
 
   return (
     <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6">
+      {/* 에러 배너 */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 flex items-center justify-between">
+          <p className="text-sm text-red-300">알림 로드 실패: {error}</p>
+          <button
+            onClick={fetchAlerts}
+            className="px-3 py-1.5 bg-red-500/20 text-red-300 rounded-lg text-sm hover:bg-red-500/30 transition"
+          >
+            재시도
+          </button>
+        </div>
+      )}
+
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-8">
         <div>

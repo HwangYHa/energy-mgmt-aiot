@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -14,7 +14,10 @@ import {
   ExternalLink,
   CheckCircle2,
   Clock,
+  Trash2,
 } from 'lucide-react';
+import { apiPost, apiDelete, ApiError } from '@/lib/api/client';
+import { PlanLockedBanner } from '@/components/subscription/PlanLockedBanner';
 
 interface CarbonCredit {
   id: string;
@@ -69,10 +72,16 @@ function formatKRW(amount: number) {
   return `₩${Math.round(amount).toLocaleString('ko-KR')}`;
 }
 
+/** 거래 시각으로부터 1시간 이내인지 */
+function isWithinCancelWindow(tradedAt: string) {
+  return Date.now() - new Date(tradedAt).getTime() < 60 * 60 * 1000;
+}
+
 export default function CarbonTradingPage() {
   const [data, setData] = useState<TradingData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isPlanLocked, setIsPlanLocked] = useState(false);
   const [activeTab, setActiveTab] = useState<'buy' | 'retire'>('buy');
 
   // 매수 폼
@@ -97,14 +106,28 @@ export default function CarbonTradingPage() {
   const [retireError, setRetireError] = useState<string | null>(null);
   const [retireSuccess, setRetireSuccess] = useState(false);
 
+  // 거래 취소
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
+
+  // ── 데이터 로드 ──
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setIsPlanLocked(false);
     try {
-      const res = await fetch('/api/carbon/trading');
+      const res = await fetch('/api/carbon/trading', { credentials: 'include' });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error ?? '조회 실패');
+        const msg = (err as { error?: string; message?: string }).error
+          ?? (err as { error?: string; message?: string }).message
+          ?? '조회 실패';
+        if (res.status === 402) {
+          setIsPlanLocked(true);
+          window.dispatchEvent(new CustomEvent('ems:upgrade', {
+            detail: { message: msg, upgradeUrl: '/settings/subscription' },
+          }));
+        }
+        throw new Error(msg);
       }
       const json = await res.json() as TradingData;
       setData(json);
@@ -115,42 +138,48 @@ export default function CarbonTradingPage() {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { void fetchData(); }, [fetchData]);
 
+  // 선택된 credit의 보유 수량
+  const selectedCredit = useMemo(
+    () => data?.credits.find((c) => c.id === retireForm.creditId),
+    [data?.credits, retireForm.creditId]
+  );
+
+  // ── 매수 ──
   const handleBuy = async () => {
     setBuyError(null);
     setBuySuccess(false);
+    const qty = Number(buyForm.quantity);
+    const prc = Number(buyForm.price);
     if (!buyForm.quantity || !buyForm.price) {
       setBuyError('수량과 단가를 입력해주세요');
       return;
     }
+    if (qty <= 0 || prc <= 0) {
+      setBuyError('수량과 단가는 0보다 커야 합니다');
+      return;
+    }
     setIsBuying(true);
     try {
-      const res = await fetch('/api/carbon/trading', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vintage: buyForm.vintage,
-          type: buyForm.type,
-          quantity: Number(buyForm.quantity),
-          price: Number(buyForm.price),
-          memo: buyForm.memo || undefined,
-        }),
+      await apiPost('/api/carbon/trading', {
+        vintage: buyForm.vintage,
+        type: buyForm.type,
+        quantity: qty,
+        price: prc,
+        memo: buyForm.memo || undefined,
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error ?? '매수 실패');
-      }
       setBuySuccess(true);
       setBuyForm({ vintage: new Date().getFullYear(), type: 'KAU', quantity: '', price: '', memo: '' });
       await fetchData();
     } catch (e) {
-      setBuyError(e instanceof Error ? e.message : '매수 처리 중 오류가 발생했습니다');
+      setBuyError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : '매수 처리 중 오류가 발생했습니다');
     } finally {
       setIsBuying(false);
     }
   };
 
+  // ── 소각 ──
   const handleRetire = async () => {
     setRetireError(null);
     setRetireSuccess(false);
@@ -158,28 +187,43 @@ export default function CarbonTradingPage() {
       setRetireError('크레딧과 수량을 선택해주세요');
       return;
     }
+    const qty = Number(retireForm.quantity);
+    if (qty <= 0) {
+      setRetireError('소각 수량은 0보다 커야 합니다');
+      return;
+    }
+    if (selectedCredit && qty > selectedCredit.quantity) {
+      setRetireError(`보유 수량(${selectedCredit.quantity.toFixed(1)} tCO₂)을 초과할 수 없습니다`);
+      return;
+    }
     setIsRetiring(true);
     try {
-      const res = await fetch('/api/carbon/retire', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          creditId: retireForm.creditId,
-          quantity: Number(retireForm.quantity),
-          memo: retireForm.memo || undefined,
-        }),
+      await apiPost('/api/carbon/retire', {
+        creditId: retireForm.creditId,
+        quantity: qty,
+        memo: retireForm.memo || undefined,
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error ?? '소각 실패');
-      }
       setRetireSuccess(true);
       setRetireForm({ creditId: '', quantity: '', memo: '' });
       await fetchData();
     } catch (e) {
-      setRetireError(e instanceof Error ? e.message : '소각 처리 중 오류가 발생했습니다');
+      setRetireError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : '소각 처리 중 오류가 발생했습니다');
     } finally {
       setIsRetiring(false);
+    }
+  };
+
+  // ── 거래 취소 (매수 후 1시간 이내) ──
+  const handleCancelTrade = async (tradeId: string) => {
+    if (!confirm('이 매수 거래를 취소하시겠습니까?')) return;
+    setCancelingId(tradeId);
+    try {
+      await apiDelete(`/api/carbon/trading/${tradeId}`);
+      await fetchData();
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : e instanceof Error ? e.message : '거래 취소 중 오류가 발생했습니다');
+    } finally {
+      setCancelingId(null);
     }
   };
 
@@ -187,6 +231,15 @@ export default function CarbonTradingPage() {
 
   return (
     <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6 space-y-6">
+      {/* 플랜 잠금 배너 */}
+      {isPlanLocked && error && (
+        <PlanLockedBanner
+          message={error}
+          requiredPlan="PROFESSIONAL"
+          onRetry={() => { setIsPlanLocked(false); void fetchData(); }}
+        />
+      )}
+
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
@@ -246,7 +299,8 @@ export default function CarbonTradingPage() {
         </div>
       </div>
 
-      {error && (
+      {/* 일반 에러 */}
+      {error && !isPlanLocked && (
         <div className="flex items-start gap-3 bg-red-500/10 border border-red-500/30 rounded-xl p-4">
           <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-red-300">{error}</p>
@@ -319,7 +373,7 @@ export default function CarbonTradingPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 매수/소각 패널 */}
+        {/* ── 매수/소각 패널 ── */}
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
           {/* 탭 헤더 */}
           <div className="flex border-b border-slate-700/50">
@@ -348,6 +402,7 @@ export default function CarbonTradingPage() {
           </div>
 
           <div className="p-5 space-y-4">
+            {/* ── 매수 탭 ── */}
             {activeTab === 'buy' ? (
               <>
                 <div className="grid grid-cols-2 gap-3">
@@ -391,7 +446,18 @@ export default function CarbonTradingPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-slate-500 mb-1 block">단가 (KRW/tCO₂)</label>
+                    <label className="text-xs text-slate-500 mb-1 block">
+                      단가 (KRW/tCO₂)
+                      {data && (
+                        <button
+                          type="button"
+                          onClick={() => setBuyForm((f) => ({ ...f, price: String(data.marketPrice) }))}
+                          className="ml-2 text-emerald-500/70 hover:text-emerald-400 underline"
+                        >
+                          시장가 적용
+                        </button>
+                      )}
+                    </label>
                     <input
                       type="number"
                       min="1"
@@ -403,7 +469,7 @@ export default function CarbonTradingPage() {
                   </div>
                 </div>
 
-                {buyForm.quantity && buyForm.price && (
+                {buyForm.quantity && buyForm.price && Number(buyForm.quantity) > 0 && Number(buyForm.price) > 0 && (
                   <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg px-3 py-2 text-sm text-emerald-400">
                     총액: {formatKRW(Number(buyForm.quantity) * Number(buyForm.price))}
                   </div>
@@ -422,7 +488,7 @@ export default function CarbonTradingPage() {
 
                 {buyError && (
                   <div className="flex items-center gap-2 text-red-400 text-xs">
-                    <AlertCircle className="w-3.5 h-3.5" />
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                     {buyError}
                   </div>
                 )}
@@ -443,12 +509,13 @@ export default function CarbonTradingPage() {
                 </button>
               </>
             ) : (
+              /* ── 소각 탭 ── */
               <>
                 <div>
                   <label className="text-xs text-slate-500 mb-1 block">소각할 크레딧</label>
                   <select
                     value={retireForm.creditId}
-                    onChange={(e) => setRetireForm((f) => ({ ...f, creditId: e.target.value }))}
+                    onChange={(e) => setRetireForm((f) => ({ ...f, creditId: e.target.value, quantity: '' }))}
                     className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
                   >
                     <option value="">크레딧 선택</option>
@@ -461,11 +528,26 @@ export default function CarbonTradingPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs text-slate-500 mb-1 block">소각 수량 (tCO₂)</label>
+                  <label className="text-xs text-slate-500 mb-1 flex items-center gap-2">
+                    소각 수량 (tCO₂)
+                    {selectedCredit && (
+                      <span className="text-slate-600">
+                        최대
+                        <button
+                          type="button"
+                          onClick={() => setRetireForm((f) => ({ ...f, quantity: String(selectedCredit.quantity) }))}
+                          className="ml-1 text-orange-500/70 hover:text-orange-400 underline"
+                        >
+                          {selectedCredit.quantity.toFixed(1)} t
+                        </button>
+                      </span>
+                    )}
+                  </label>
                   <input
                     type="number"
                     min="0.1"
                     step="0.1"
+                    max={selectedCredit?.quantity}
                     value={retireForm.quantity}
                     onChange={(e) => setRetireForm((f) => ({ ...f, quantity: e.target.value }))}
                     placeholder="0"
@@ -473,9 +555,10 @@ export default function CarbonTradingPage() {
                   />
                 </div>
 
-                {retireForm.creditId && retireForm.quantity && (
+                {retireForm.creditId && retireForm.quantity && Number(retireForm.quantity) > 0 && (
                   <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg px-3 py-2 text-xs text-orange-400">
-                    ⚠ 소각된 크레딧은 취소할 수 없습니다. {retireForm.quantity} tCO₂의 배출량을 상계합니다.
+                    ⚠ 소각된 크레딧은 취소할 수 없습니다.{' '}
+                    <strong>{retireForm.quantity} tCO₂</strong>의 배출량을 상계합니다.
                   </div>
                 )}
 
@@ -492,7 +575,7 @@ export default function CarbonTradingPage() {
 
                 {retireError && (
                   <div className="flex items-center gap-2 text-red-400 text-xs">
-                    <AlertCircle className="w-3.5 h-3.5" />
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                     {retireError}
                   </div>
                 )}
@@ -505,7 +588,7 @@ export default function CarbonTradingPage() {
 
                 <button
                   onClick={handleRetire}
-                  disabled={isRetiring}
+                  disabled={isRetiring || !retireForm.creditId || !retireForm.quantity}
                   className="w-full flex items-center justify-center gap-2 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition disabled:opacity-50"
                 >
                   {isRetiring ? <Loader2 className="w-4 h-4 animate-spin" /> : <Flame className="w-4 h-4" />}
@@ -516,7 +599,7 @@ export default function CarbonTradingPage() {
           </div>
         </div>
 
-        {/* 보유 크레딧 목록 */}
+        {/* ── 보유 크레딧 목록 ── */}
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-700/50">
             <h2 className="text-base font-semibold">보유 크레딧 현황</h2>
@@ -536,39 +619,47 @@ export default function CarbonTradingPage() {
                 <p className="text-xs mt-1">매수 탭에서 크레딧을 매수하세요</p>
               </div>
             ) : (
-              (data?.credits ?? []).map((credit) => (
-                <div key={credit.id} className="p-4 flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-semibold bg-slate-700/50 px-2 py-0.5 rounded text-slate-300">
-                        {credit.type}
-                      </span>
-                      <span className="text-xs text-slate-500">{credit.vintage}년</span>
+              (data?.credits ?? []).map((credit) => {
+                const evalValue = credit.quantity * (data?.marketPrice ?? 0);
+                const cost = credit.quantity * credit.avgCost;
+                const pnl = evalValue - cost;
+                return (
+                  <div key={credit.id} className="p-4 flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-semibold bg-slate-700/50 px-2 py-0.5 rounded text-slate-300">
+                          {credit.type}
+                        </span>
+                        <span className="text-xs text-slate-500">{credit.vintage}년</span>
+                      </div>
+                      <p className="text-white font-semibold">
+                        {credit.quantity.toFixed(1)} tCO₂
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        평균 매입가 {formatKRW(credit.avgCost)}/t
+                      </p>
                     </div>
-                    <p className="text-white font-semibold">
-                      {credit.quantity.toFixed(1)} tCO₂
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      평균 매입가 {formatKRW(credit.avgCost)}/t
-                    </p>
+                    <div className="text-right">
+                      <p className="text-sm text-cyan-400 font-medium">
+                        {formatKRW(evalValue)}
+                      </p>
+                      <p className={`text-xs ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {pnl >= 0 ? '+' : ''}{formatKRW(pnl)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-cyan-400 font-medium">
-                      {formatKRW(credit.quantity * (data?.marketPrice ?? 0))}
-                    </p>
-                    <p className="text-xs text-slate-500">현재 평가액</p>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
       </div>
 
-      {/* 거래 내역 테이블 */}
+      {/* ── 거래 내역 테이블 ── */}
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-700/50">
+        <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between">
           <h2 className="text-base font-semibold">거래 내역</h2>
+          <span className="text-xs text-slate-500">매수는 1시간 이내 취소 가능</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -580,48 +671,73 @@ export default function CarbonTradingPage() {
                 <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase text-right">수량</th>
                 <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase text-right">단가</th>
                 <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase text-right">총액</th>
+                <th className="px-4 py-3 text-xs font-medium text-slate-500 uppercase text-center">취소</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b border-slate-700/30">
-                    <td colSpan={6} className="px-4 py-3">
+                    <td colSpan={7} className="px-4 py-3">
                       <div className="h-4 bg-slate-700/30 rounded animate-pulse" />
                     </td>
                   </tr>
                 ))
               ) : (data?.recentTrades ?? []).length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-8 text-slate-500 text-sm">
+                  <td colSpan={7} className="text-center py-8 text-slate-500 text-sm">
                     거래 내역이 없습니다
                   </td>
                 </tr>
               ) : (
-                (data?.recentTrades ?? []).map((trade) => (
-                  <tr key={trade.id} className="border-b border-slate-700/30 hover:bg-slate-700/20 transition">
-                    <td className="px-4 py-3 text-slate-300 whitespace-nowrap">
-                      {new Date(trade.tradedAt).toLocaleDateString('ko-KR')}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded ${TRADE_TYPE_COLORS[trade.tradeType] ?? ''}`}>
-                        {TRADE_TYPE_LABELS[trade.tradeType] ?? trade.tradeType}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-300">
-                      {trade.credit ? `${trade.credit.type} ${trade.credit.vintage}` : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-white">
-                      {trade.quantity.toFixed(1)} t
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-400">
-                      {trade.tradeType === 'retire' ? '—' : formatKRW(trade.price)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-white">
-                      {trade.tradeType === 'retire' ? '—' : formatKRW(trade.totalAmount)}
-                    </td>
-                  </tr>
-                ))
+                (data?.recentTrades ?? []).map((trade) => {
+                  const canCancel = trade.tradeType === 'buy' && isWithinCancelWindow(trade.tradedAt);
+                  const isCanceling = cancelingId === trade.id;
+                  return (
+                    <tr key={trade.id} className="border-b border-slate-700/30 hover:bg-slate-700/20 transition">
+                      <td className="px-4 py-3 text-slate-300 whitespace-nowrap">
+                        {new Date(trade.tradedAt).toLocaleDateString('ko-KR')}{' '}
+                        <span className="text-xs text-slate-600">
+                          {new Date(trade.tradedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded ${TRADE_TYPE_COLORS[trade.tradeType] ?? ''}`}>
+                          {TRADE_TYPE_LABELS[trade.tradeType] ?? trade.tradeType}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-300">
+                        {trade.credit ? `${trade.credit.type} ${trade.credit.vintage}` : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-white">
+                        {trade.quantity.toFixed(1)} t
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-400">
+                        {trade.tradeType === 'retire' ? '—' : formatKRW(trade.price)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-white">
+                        {trade.tradeType === 'retire' ? '—' : formatKRW(trade.totalAmount)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {canCancel ? (
+                          <button
+                            onClick={() => handleCancelTrade(trade.id)}
+                            disabled={isCanceling}
+                            className="p-1 text-slate-500 hover:text-red-400 transition disabled:opacity-50"
+                            title="매수 취소"
+                          >
+                            {isCanceling
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Trash2 className="w-3.5 h-3.5" />
+                            }
+                          </button>
+                        ) : (
+                          <span className="text-slate-700">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

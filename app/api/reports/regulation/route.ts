@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { getServerSession } from 'next-auth';
+import { verifyAuth } from '@/lib/auth/verify';
 
 /**
  * 📋 규제 보고서 API
@@ -19,6 +20,43 @@ const EMISSION_FACTORS = {
   wind: 0,
   renewable: 0,
 };
+
+/**
+ * 최근 생성된 리포트 목록 조회
+ * GET /api/reports/regulation?take=10
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const auth = await verifyAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const take = Math.min(parseInt(searchParams.get('take') || '10'), 50);
+
+    const reports = await prisma.report.findMany({
+      where: { tenantId: auth.tenantId },
+      orderBy: { createdAt: 'desc' },
+      take,
+      select: {
+        id: true,
+        type: true,
+        period: true,
+        fileUrl: true,
+        createdAt: true,
+      },
+    });
+
+    return NextResponse.json({ success: true, data: reports });
+  } catch (error) {
+    console.error('Report list error:', error);
+    return NextResponse.json(
+      { error: '리포트 목록을 불러오는 중 오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {

@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
   const factors = await prisma.emissionFactor.findMany({
     where: { AND: andConditions },
     select: {
-      id: true, name: true, code: true, category: true, sourceType: true,
+      id: true, code: true, category: true, sourceType: true,
       factor: true, unit: true, inputUnit: true, source: true, year: true,
       region: true, isDefault: true, version: true, validFrom: true, validTo: true, tenantId: true,
     },
@@ -62,11 +62,11 @@ export async function POST(request: NextRequest) {
 
   const factor = await prisma.emissionFactor.create({
     data: {
-      tenantId, name: body.name, code: body.code, category: body.category,
+      tenantId, code: body.code, category: body.category,
       sourceType: body.sourceType ?? body.category, factor: body.factor,
       unit: body.unit, inputUnit: body.inputUnit ?? 'kWh', source: body.source,
       year: body.year, region: body.region ?? 'KR', isDefault: body.isDefault ?? false,
-      version: 1, validFrom: body.validFrom ? new Date(body.validFrom) : new Date(`${body.year}-01-01`),
+      version: '1.0.0', validFrom: body.validFrom ? new Date(body.validFrom) : new Date(`${body.year}-01-01`),
       validTo: body.validTo ? new Date(body.validTo) : null,
     },
   });

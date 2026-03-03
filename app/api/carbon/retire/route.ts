@@ -2,10 +2,12 @@
  * POST /api/carbon/retire — 크레딧 소각 (배출량 상계)
  *
  * 소각된 크레딧은 취소 불가 (규제 감사 추적용)
+ * 수량이 0이 되어도 credit 레코드는 삭제하지 않음 — CarbonTrade FK 보존
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { verifyAuth } from '@/lib/auth/verify';
+import { requireFeature } from '@/lib/auth/subscription';
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,6 +15,10 @@ export async function POST(request: NextRequest) {
     if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // 플랜 권한 확인 (GET과 동일한 기준)
+    const [, subErr] = await requireFeature(auth.tenantId, 'analytics_carbon_trading');
+    if (subErr) return subErr;
 
     const body = await request.json();
     const { creditId, quantity, memo } = body as {
@@ -35,23 +41,25 @@ export async function POST(request: NextRequest) {
     if (!credit) {
       return NextResponse.json({ error: '크레딧을 찾을 수 없습니다' }, { status: 404 });
     }
-
+    if (credit.quantity <= 0) {
+      return NextResponse.json({ error: '이미 전량 소각된 크레딧입니다' }, { status: 400 });
+    }
     if (credit.quantity < quantity) {
       return NextResponse.json(
-        { error: `보유 수량(${credit.quantity} tCO₂)이 부족합니다` },
+        { error: `보유 수량(${credit.quantity.toFixed(1)} tCO₂)이 부족합니다` },
         { status: 400 }
       );
     }
 
-    const newQty = credit.quantity - quantity;
+    const newQty = Math.max(0, credit.quantity - quantity);
 
+    // ── 트랜잭션: credit 먼저 UPDATE 후 trade CREATE ──
+    // credit을 절대 DELETE 하지 않음 → CarbonTrade FK 보존 (감사 추적)
     const [, trade] = await prisma.$transaction([
-      newQty <= 0
-        ? prisma.carbonCredit.delete({ where: { id: creditId } })
-        : prisma.carbonCredit.update({
-            where: { id: creditId },
-            data: { quantity: newQty },
-          }),
+      prisma.carbonCredit.update({
+        where: { id: creditId },
+        data: { quantity: newQty },
+      }),
       prisma.carbonTrade.create({
         data: {
           tenantId: auth.tenantId,

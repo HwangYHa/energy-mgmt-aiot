@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -8,19 +9,25 @@ import {
 import {
   Leaf, TrendingDown, TrendingUp, Target, Lightbulb,
   Calendar, Plus, Download, RefreshCw, AlertCircle,
-  CheckCircle, Settings,
+  CheckCircle, Settings, FileText, CheckCircle2, Clock, Loader2, ArrowRight,
 } from 'lucide-react';
+import { InvoiceUploadModal } from './InvoiceUploadModal';
 import { toast } from '@/lib/toast';
-import { useCarbonData, useCarbonExport } from '../hooks/use-carbon-data';
+import { useCarbonData, useCarbonExport, useAvailableYears, useRecentEmissions } from '../hooks/use-carbon-data';
+import { useMilestones } from '../hooks/use-milestones';
 import { FuelModal } from './FuelModal';
 import { TransportModal } from './TransportModal';
 
 export function CarbonDashboard() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [openModal, setOpenModal] = useState<'fuel' | 'transport' | null>(null);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
 
   const { monthlyData, footprint, isLoading, error, refresh } = useCarbonData(year);
   const { exportCSV, exportJSON, exportPDF } = useCarbonExport(year);
+  const { years: availableYears } = useAvailableYears();
+  const { records: recentEntries, refresh: refreshRecent } = useRecentEmissions();
+  const { milestones, achieved, inProgress, nextPending, isLoading: msLoading } = useMilestones();
 
   const handleExportCSV = async () => {
     try { await exportCSV(); }
@@ -95,8 +102,8 @@ export function CarbonDashboard() {
         </div>
 
         <div className="flex flex-wrap gap-2 items-center">
-          {/* 연도 선택 */}
-          {[2024, 2025, 2026].map((y) => (
+          {/* 연도 선택 (데이터 기반 동적) */}
+          {availableYears.map((y) => (
             <button
               key={y}
               onClick={() => setYear(y)}
@@ -110,6 +117,12 @@ export function CarbonDashboard() {
             </button>
           ))}
 
+          <button
+            onClick={() => setShowInvoiceModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg font-medium transition-colors text-sm"
+          >
+            <FileText className="w-4 h-4" /> 고지서 업로드
+          </button>
           <button
             onClick={handleExportCSV}
             className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors text-sm"
@@ -146,6 +159,15 @@ export function CarbonDashboard() {
         </div>
       </div>
 
+      {showInvoiceModal && (
+        <InvoiceUploadModal
+          onClose={() => setShowInvoiceModal(false)}
+          onUploaded={() => {
+            // refresh data after upload
+            refresh();
+          }}
+        />
+      )}
       {/* KPI Cards */}
       {footprint && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -246,6 +268,43 @@ export function CarbonDashboard() {
         <TransportModal onClose={() => setOpenModal(null)} onSuccess={refresh} />
       )}
 
+      {/* 최근 등록 항목 (디버그용) */}
+      {recentEntries.length > 0 && (
+        <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 mt-6">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-bold">최근 등록 데이터</h3>
+            <button
+              onClick={() => refreshRecent()}
+              className="text-xs text-cyan-300 hover:text-cyan-200"
+            >
+              새로고침
+            </button>
+          </div>
+          <div className="overflow-x-auto text-xs">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-700/50">
+                  <th className="py-2 px-3 text-left">기간</th>
+                  <th className="py-2 px-3 text-left">유형</th>
+                  <th className="py-2 px-3 text-right">사용량</th>
+                  <th className="py-2 px-3 text-right">배출</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentEntries.map((r, i) => (
+                  <tr key={i} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                    <td className="py-2 px-3">{r.period}</td>
+                    <td className="py-2 px-3">{r.sourceType}</td>
+                    <td className="py-2 px-3 text-right">{r.amount}{r.unit || ''}</td>
+                    <td className="py-2 px-3 text-right">{r.calculatedEmission?.toFixed?.(2) || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* 월별 배출량 추이 */}
       <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
         <h2 className="text-xl font-bold mb-4">월별 배출량 추이</h2>
@@ -257,6 +316,8 @@ export function CarbonDashboard() {
             <Tooltip
               contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff' }}
               formatter={(value: number) => `${value.toFixed(2)} tCO₂eq`}
+              // use a subtler cursor so the bar highlight isn't stark white
+              cursor={{ fill: 'rgba(255,255,255,0.1)' }}
             />
             <Legend />
             <Bar dataKey="scope1" name="Scope 1 (직접 배출)" stackId="a" fill="#EF4444" />
@@ -337,38 +398,6 @@ export function CarbonDashboard() {
         </div>
       </div>
 
-      {/* 배출원별 상세 카테고리 */}
-      <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
-        <h2 className="text-xl font-bold mb-4">배출원별 상세</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="p-4 bg-red-900/20 border border-red-700 rounded">
-            <h3 className="font-bold mb-2 text-red-400">Scope 1 (직접 배출)</h3>
-            <ul className="text-sm space-y-1 text-slate-300">
-              <li>• 디젤 발전기</li>
-              <li>• LNG 보일러</li>
-              <li>• 차량 연료 (디젤, 가솔린)</li>
-              <li>• 냉매 누출 (R-22, R-134a)</li>
-            </ul>
-          </div>
-          <div className="p-4 bg-yellow-900/20 border border-yellow-700 rounded">
-            <h3 className="font-bold mb-2 text-yellow-400">Scope 2 (간접 배출)</h3>
-            <ul className="text-sm space-y-1 text-slate-300">
-              <li>• 한국전력 (그리드 전력)</li>
-              <li>• 배출계수: 0.4593 tCO₂/MWh</li>
-              <li>• 재생에너지 (0 tCO₂/MWh)</li>
-            </ul>
-          </div>
-          <div className="p-4 bg-green-900/20 border border-green-700 rounded">
-            <h3 className="font-bold mb-2 text-green-400">Scope 3 (기타)</h3>
-            <ul className="text-sm space-y-1 text-slate-300">
-              <li>• 운송 (화물차, 선박)</li>
-              <li>• 출장 (항공, 철도)</li>
-              <li>• 폐기물 처리</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
       {/* 배출원별 상세 테이블 */}
       {footprint && footprint.breakdown.length > 0 && (
         <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700/50">
@@ -403,6 +432,107 @@ export function CarbonDashboard() {
           </div>
         </div>
       )}
+
+      {/* 탄소 로드맵 마일스톤 현황 */}
+      <div className="bg-slate-800/50 rounded-lg border border-slate-700/50 overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700/50">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <Target className="w-5 h-5 text-emerald-400" />
+            탄소 로드맵 마일스톤 현황
+          </h2>
+          <Link
+            href="/analytics/carbon/roadmap"
+            className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+          >
+            로드맵 관리
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        {msLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-slate-500" />
+          </div>
+        ) : milestones.length === 0 ? (
+          <div className="py-8 text-center text-slate-500 text-sm">
+            마일스톤 데이터가 없습니다.
+          </div>
+        ) : (
+          <div className="p-6 space-y-4">
+            {/* 달성 현황 요약 바 */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all"
+                  style={{ width: `${Math.round((achieved.length / milestones.length) * 100)}%` }}
+                />
+              </div>
+              <span className="text-sm text-slate-400 whitespace-nowrap">
+                {achieved.length} / {milestones.length} 달성
+              </span>
+            </div>
+
+            {/* 마일스톤 목록 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {milestones.map((m) => {
+                const isAchieved = m.status === 'achieved';
+                const isInProgress = m.status === 'in_progress';
+
+                return (
+                  <div
+                    key={m.id}
+                    className={`flex items-start gap-3 p-3 rounded-lg border ${
+                      isAchieved
+                        ? 'bg-emerald-500/5 border-emerald-500/20'
+                        : isInProgress
+                        ? 'bg-cyan-500/5 border-cyan-500/20'
+                        : 'bg-slate-700/30 border-slate-700/50'
+                    }`}
+                  >
+                    <div className={`mt-0.5 flex-shrink-0 ${
+                      isAchieved ? 'text-emerald-400' : isInProgress ? 'text-cyan-400' : 'text-slate-500'
+                    }`}>
+                      {isAchieved ? (
+                        <CheckCircle2 className="w-4 h-4" />
+                      ) : isInProgress ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Clock className="w-4 h-4" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-slate-500 font-mono">{m.year}</p>
+                      <p className={`text-sm font-medium truncate ${
+                        isAchieved ? 'text-emerald-300' : isInProgress ? 'text-cyan-300' : 'text-slate-400'
+                      }`}>
+                        {m.title}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 현재 진행 + 다음 목표 */}
+            {(inProgress ?? nextPending) && (
+              <div className="flex flex-wrap gap-3 pt-1">
+                {inProgress && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/20 rounded-full text-xs text-cyan-400">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    진행중: {inProgress.year} {inProgress.title}
+                  </div>
+                )}
+                {nextPending && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-700/50 border border-slate-600/30 rounded-full text-xs text-slate-400">
+                    <Clock className="w-3 h-3" />
+                    다음 목표: {nextPending.year} {nextPending.title}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

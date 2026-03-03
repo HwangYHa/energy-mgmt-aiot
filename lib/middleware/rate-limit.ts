@@ -16,7 +16,7 @@ import { Redis } from '@upstash/redis';
 let redis: Redis | null = null;
 
 try {
-  const _url   = process.env.UPSTASH_REDIS_URL   ?? '';
+  const _url   = process.env.UPSTASH_REDIS_URL   ?? 'redis://localhost:6379';
   const _token = process.env.UPSTASH_REDIS_TOKEN ?? '';
   // 플레이스홀더 URL 필터링 (에러 스팸 방지)
   const _valid =
@@ -32,9 +32,10 @@ try {
   console.warn('[RateLimit] Redis 초기화 실패, 로컬 메모리 사용:', error instanceof Error ? error.message : 'unknown');
 }
 
-// EVAL(Lua) 권한 없는 Redis 인스턴스 대응 (Upstash 무료 플랜 등)
-// 최초 NOPERM 감지 시 false로 전환 → 이후 INCR+EXPIRE 폴백 사용
+// EVAL(Lua) 권한 없는 Redis 인스턴스 대응 (Upstash ACL 제한 등)
+// EVAL NOPERM → INCR 폴백 시도, INCR도 NOPERM → Redis 비활성화 (in-memory 전환)
 let evalSupported = true;
+let redisDisabled = false; // INCR도 NOPERM이면 Redis 완전 비활성화
 
 // ========================================
 // 로컬 메모리 폴백 (개발 환경용)
@@ -85,7 +86,7 @@ export async function checkRateLimit(config: RateLimitConfig): Promise<{
   const now = Date.now();
 
   try {
-    if (redis) {
+    if (redis && !redisDisabled) {
       const ttlSeconds = Math.ceil(windowMs / 1000);
       let count: number;
 
@@ -102,13 +103,29 @@ export async function checkRateLimit(config: RateLimitConfig): Promise<{
         } catch (evalErr) {
           const msg = evalErr instanceof Error ? evalErr.message : String(evalErr);
           if (msg.includes('NOPERM') || msg.includes('no permissions') || msg.includes('eval')) {
-            // 최초 1회만 경고 출력 후 플래그 전환
             evalSupported = false;
-            console.warn('[RateLimit] Redis EVAL 권한 없음 — INCR 폴백으로 전환 (비원자적, 기능 정상)');
-            count = await redis.incr(key) as number;
-            if (count === 1) await redis.expire(key, ttlSeconds);
+            console.warn('[RateLimit] Redis EVAL 권한 없음 — INCR 폴백 시도');
+            try {
+              count = await redis.incr(key) as number;
+              if (count === 1) await redis.expire(key, ttlSeconds);
+            } catch (incrErr) {
+              const incrMsg = incrErr instanceof Error ? incrErr.message : String(incrErr);
+              if (incrMsg.includes('NOPERM') || incrMsg.includes('no permissions')) {
+                // INCR도 NOPERM → Redis ACL이 너무 제한적, in-memory로 완전 전환
+                redisDisabled = true;
+                console.warn('[RateLimit] Redis INCR 권한도 없음 → in-memory 레이트리밋으로 전환 (재시작 전까지)');
+              } else {
+                throw incrErr;
+              }
+              // in-memory 폴백 (아래 else 블록으로 이동)
+              const entry = memoryStore.get(key) || { count: 0, resetAt: now + windowMs };
+              if (entry.resetAt < now) { entry.count = 0; entry.resetAt = now + windowMs; }
+              entry.count += 1;
+              memoryStore.set(key, entry);
+              return { allowed: entry.count <= limit, remaining: Math.max(0, limit - entry.count), resetAt: new Date(entry.resetAt) };
+            }
           } else {
-            throw evalErr; // 다른 오류는 상위 catch로 전달
+            throw evalErr;
           }
         }
       } else {

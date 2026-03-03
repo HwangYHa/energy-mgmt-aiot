@@ -18,6 +18,7 @@ import {
 import { randomBytes, createHash } from 'crypto';
 import logger from '@/lib/logger';
 import { checkPlanLimit } from '@/lib/middleware/plan-limit';
+import { logActivity, MENU_CODES, ACTION_TYPES } from '@/lib/services/activity-log.service';
 
 // API 키 생성: ea_live_ + 32자 랜덤
 function generateApiKey(): string {
@@ -128,6 +129,22 @@ export async function POST(request: NextRequest) {
       keyId: apiKey.id,
       tenantId: auth.tenantId,
       userId: auth.userId,
+    });
+
+    // 활동 이력 기록 (fire-and-forget)
+    logActivity({
+      tenantId: auth.tenantId,
+      menuCode: MENU_CODES.API_KEY_MGMT,
+      actionType: ACTION_TYPES.CREATE,
+      actionLabel: 'API 키 생성',
+      resourceType: 'api_key',
+      resourceId: apiKey.id,
+      resourceName: apiKey.name,
+      afterData: { name: apiKey.name, keyPrefix: apiKey.keyPrefix, scopes: apiKey.scopes, expiresAt: apiKey.expiresAt },
+      userId: auth.userId,
+      userEmail: auth.email,
+      userRole: auth.role,
+      request,
     });
 
     // 원본 키는 생성 시에만 반환 (이후 조회 불가)

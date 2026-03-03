@@ -149,12 +149,26 @@ export async function POST(request: NextRequest) {
       take: 720,
     });
 
-    if (historicalData.length < 48) {
+    if (historicalData.length === 0) {
+      return NextResponse.json({
+        success: true,
+        anomalies: [],
+        anomaly_rate: 0,
+        model: 'NO_DATA',
+        timestamp: new Date().toISOString(),
+        metadata: {
+          dataPoints: 0,
+          message: '분석할 측정 데이터가 없습니다. 센서가 올바르게 연결되어 데이터가 수집 중인지 확인하세요.',
+        },
+      });
+    }
+
+    if (historicalData.length < 10) {
       return NextResponse.json(
         {
-          error: 'Insufficient data',
-          message: '최소 48시간의 데이터가 필요합니다',
-          required: 48,
+          error: 'INSUFFICIENT_DATA',
+          message: `이상 탐지를 위한 데이터가 부족합니다. 현재 ${historicalData.length}개의 데이터가 수집되어 있으며, 정확한 분석을 위해 최소 10개 이상이 필요합니다.`,
+          required: 10,
           current: historicalData.length,
         },
         { status: 400 }
@@ -243,7 +257,10 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(
-      { error: 'Failed to detect anomalies' },
+      {
+        error: 'DETECTION_ERROR',
+        message: '이상 탐지 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+      },
       { status: 500 }
     );
   }

@@ -19,9 +19,11 @@ import {
   ImageGauge,
   StatDisplay,
 } from '@/components/dashboard';
-import { Loader2, AlertCircle, RefreshCw, Wifi, WifiOff, FileText, Settings, Radio } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, WifiOff, FileText, Settings, Radio } from 'lucide-react';
 import Link from 'next/link';
 import { useRealtime, useRealtimeAggregates } from '@/hooks/use-realtime';
+import { InvoiceUploadModal } from '@/features/carbon/components/InvoiceUploadModal';
+import { apiGet } from '@/lib/api/client';
 
 // ─────────────────────────────────────────────────────
 // 타입 정의
@@ -62,11 +64,12 @@ interface DashboardStats {
 const formatNumber = (num: number) => num.toLocaleString('ko-KR');
 const formatCurrency = (num: number) => `₩${num.toLocaleString('ko-KR')}`;
 
-// SWR fetcher
-const fetcher = (url: string) => fetch(url).then(r => r.json()).then(j => {
-  if (!j.success) throw new Error(j.error || '데이터 조회 실패');
-  return j.data as DashboardStats;
-});
+// SWR fetcher — apiGet 사용 (CSRF 자동, credentials 포함)
+const fetcher = (url: string) =>
+  apiGet<DashboardStats>(url).then((res) => {
+    if (!res.data) throw new Error('데이터 조회 실패');
+    return res.data;
+  });
 
 // ─────────────────────────────────────────────────────
 // 메인 컴포넌트
@@ -78,6 +81,7 @@ interface DashboardClientProps {
 
 export default function DashboardClient({ initialData }: DashboardClientProps) {
   const [currentTime, setCurrentTime] = useState('');
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   // ── SWR: 30초 자동 갱신 ──
   const { data: stats, error, isLoading, mutate } = useSWR<DashboardStats>(
@@ -184,77 +188,71 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
         subtitle={currentTime}
       />
 
-      {/* ─── SSE 연결 상태 뱃지 ─── */}
-      <div className="flex items-center gap-2 mb-2">
-        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border ${
-          sseConnected
-            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-            : sseStatus === 'connecting'
-            ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
-            : 'bg-slate-700/50 border-slate-600/30 text-slate-400'
-        }`}>
-          <Radio className={`w-3 h-3 ${sseConnected ? 'animate-pulse' : ''}`} />
-          <span>
-            {sseConnected ? `SSE 실시간 연결됨 · 총 전력 ${realtimeAggregates.totalPower.toFixed(1)} kW`
-              : sseStatus === 'connecting' ? 'SSE 연결 중...'
-              : 'SSE 대기'}
-          </span>
-        </div>
-      </div>
-
-      {/* ─── 데이터 연결 상태 배너 ─── */}
-      {dataConnectionStatus !== 'connected' && (
-        <div className={`mb-3 p-3 border rounded-lg flex items-center justify-between gap-3 ${
-          dataConnectionStatus === 'invoice_only'
-            ? 'bg-blue-500/10 border-blue-500/30'
-            : 'bg-amber-500/10 border-amber-500/30'
-        }`}>
-          <div className="flex items-center gap-2.5">
-            {dataConnectionStatus === 'disconnected' ? (
-              <WifiOff className="w-4 h-4 text-amber-400 flex-shrink-0" />
-            ) : (
-              <FileText className="w-4 h-4 text-blue-400 flex-shrink-0" />
-            )}
-            <div>
-              <p className={`text-sm font-semibold ${dataConnectionStatus === 'invoice_only' ? 'text-blue-400' : 'text-amber-400'}`}>
-                {dataConnectionStatus === 'invoice_only' ? '고지서 데이터 수집 중' : '데이터 연결 대기 중'}
-              </p>
-              <p className="text-xs text-slate-400">
-                {dataConnectionStatus === 'invoice_only'
-                  ? '고지서 기반 데이터입니다. IoT 센서 연동 시 실시간 모니터링이 활성화됩니다.'
-                  : '아직 에너지 데이터가 연동되지 않았습니다. 고지서 업로드 또는 IoT 연동으로 시작하세요.'}
-              </p>
-            </div>
+      {/* ─── 상단 툴바: SSE 상태 + 항상 표시되는 액션 버튼 ─── */}
+      {showUploadModal && (
+        <InvoiceUploadModal
+          onClose={() => setShowUploadModal(false)}
+          onUploaded={() => { mutate(); }}
+        />
+      )}
+      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+        {/* 왼쪽: SSE / 데이터 연결 상태 */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border ${
+            sseConnected
+              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+              : sseStatus === 'connecting'
+              ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+              : 'bg-slate-700/50 border-slate-600/30 text-slate-400'
+          }`}>
+            <Radio className={`w-3 h-3 ${sseConnected ? 'animate-pulse' : ''}`} />
+            <span>
+              {sseConnected
+                ? `실시간 연결 · ${realtimeAggregates.totalPower.toFixed(1)} kW · 센서 ${realtimeAggregates.activeSensors}개`
+                : sseStatus === 'connecting' ? 'SSE 연결 중...'
+                : 'SSE 대기'}
+            </span>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {dataConnectionStatus === 'disconnected' && (
-              <Link href="/onboarding">
-                <button className="text-xs px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 rounded-lg flex items-center gap-1.5 transition">
-                  <Settings className="w-3 h-3" /> 시작 설정
-                </button>
-              </Link>
-            )}
-            <Link href="/analytics/carbon">
-              <button className={`text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition border ${
-                dataConnectionStatus === 'invoice_only'
-                  ? 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border-blue-500/30'
-                  : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border-amber-500/30'
-              }`}>
-                <FileText className="w-3 h-3" /> 고지서 업로드
+          {/* 데이터 연결 상태 표시 */}
+          {dataConnectionStatus === 'invoice_only' && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border bg-blue-500/10 border-blue-500/20 text-blue-400">
+              <FileText className="w-3 h-3" />
+              <span>고지서 데이터 운영 중</span>
+            </div>
+          )}
+          {dataConnectionStatus === 'disconnected' && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border bg-amber-500/10 border-amber-500/20 text-amber-400">
+              <WifiOff className="w-3 h-3" />
+              <span>데이터 미연결 — 고지서 업로드 또는 IoT 연동으로 시작하세요</span>
+            </div>
+          )}
+        </div>
+
+        {/* 오른쪽: 항상 표시되는 액션 버튼 */}
+        <div className="flex items-center gap-2">
+          {dataConnectionStatus === 'disconnected' && (
+            <Link href="/onboarding">
+              <button className="text-xs px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 rounded-lg flex items-center gap-1.5 transition">
+                <Settings className="w-3 h-3" /> 초기 설정
               </button>
             </Link>
-          </div>
+          )}
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="text-xs px-3 py-1.5 bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-400 border border-cyan-500/30 rounded-lg flex items-center gap-1.5 transition font-medium"
+          >
+            <FileText className="w-3 h-3" />
+            고지서 업로드
+          </button>
+          <button
+            onClick={() => mutate()}
+            className="text-xs px-2.5 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-400 border border-slate-600/30 rounded-lg flex items-center gap-1 transition"
+            title="데이터 새로고침"
+          >
+            <RefreshCw className="w-3 h-3" />
+          </button>
         </div>
-      )}
-
-      {/* ─── 연결 완료 + SSE 활성 상태 표시 ─── */}
-      {dataConnectionStatus === 'connected' && sseConnected && (
-        <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg w-fit">
-          <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="text-xs text-emerald-400 font-medium">실시간 데이터 수집 중</span>
-          <span className="text-xs text-slate-500">· 활성 센서 {realtimeAggregates.activeSensors}개</span>
-        </div>
-      )}
+      </div>
 
       {/* 오류 알림 (데이터 있지만 재갱신 실패) */}
       {error && stats && (

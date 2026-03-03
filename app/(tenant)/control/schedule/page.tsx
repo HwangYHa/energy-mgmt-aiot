@@ -15,7 +15,7 @@ import {
   CheckCircle2,
   MonitorSmartphone,
 } from 'lucide-react';
-import { fetchWithCsrf } from '@/hooks/use-csrf';
+import { apiGet, apiPost, apiPatch, ApiError } from '@/lib/api/client';
 import { toast } from '@/lib/toast';
 
 interface Schedule {
@@ -83,9 +83,8 @@ export default function ScheduleControlPage() {
     try {
       const params = new URLSearchParams({ take: '100' });
       if (filterStatus) params.set('status', filterStatus);
-      const res = await fetch(`/api/control/schedules?${params}`);
-      const json = await res.json();
-      if (json.success) setSchedules(json.data);
+      const json = await apiGet<Schedule[]>(`/api/control/schedules?${params}`);
+      if (json.success) setSchedules(json.data ?? []);
       else setError('스케줄 목록을 불러오지 못했습니다.');
     } catch {
       setError('서버에 연결할 수 없습니다.');
@@ -96,9 +95,8 @@ export default function ScheduleControlPage() {
 
   const fetchDevices = useCallback(async () => {
     try {
-      const res = await fetch('/api/devices?take=200');
-      const json = await res.json();
-      setDevices(json.data || []);
+      const json = await apiGet<DeviceOption[]>('/api/devices?take=200');
+      setDevices(json.data ?? []);
     } catch {
       // 디바이스 목록 로드 실패 시 기본값 유지
     }
@@ -114,15 +112,21 @@ export default function ScheduleControlPage() {
     if (!confirm(`스케줄을 ${labels[action] || action}하시겠습니까?`)) return;
 
     try {
-      const res = await fetchWithCsrf('/api/control/schedules', {
-        method: 'PATCH',
-        body: JSON.stringify({ id, action }),
-      });
-      if (res.ok) fetchSchedules();
-    } catch { toast.error('작업 실패'); }
+      const res = await apiPatch('/api/control/schedules', { id, action });
+      if (res.success) {
+        toast.success(`스케줄을 ${labels[action] || action}했습니다.`);
+        void fetchSchedules();
+      } else {
+        toast.error(res.message || '작업에 실패했습니다.');
+      }
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : '작업 실패');
+    }
   };
 
-  const filteredSchedules = schedules;
+  const filteredSchedules = filterStatus
+    ? schedules.filter((s) => s.status === filterStatus)
+    : schedules;
 
   return (
     <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6">
@@ -322,19 +326,15 @@ function CreateScheduleModal({ devices, onClose, onCreated }: { devices: DeviceO
         description: form.description || undefined,
       };
 
-      const res = await fetchWithCsrf('/api/control/schedules', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json();
-
-      if (json.success) {
-        onCreated();
+      await apiPost('/api/control/schedules', payload);
+      toast.success('스케줄이 생성되었습니다.');
+      onCreated();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
       } else {
-        setError(json.error || '생성 실패');
+        setError('스케줄 생성에 실패했습니다.');
       }
-    } catch {
-      setError('스케줄 생성에 실패했습니다.');
     } finally {
       setIsSubmitting(false);
     }

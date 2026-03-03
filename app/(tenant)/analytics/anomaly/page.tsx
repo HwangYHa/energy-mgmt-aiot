@@ -11,7 +11,8 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { AlertTriangle, Zap, TrendingDown, Loader2 } from 'lucide-react';
-import { fetchWithCsrf } from '@/hooks/use-csrf';
+import { apiPost, ApiError } from '@/lib/api/client';
+import { PlanLockedBanner } from '@/components/subscription/PlanLockedBanner';
 
 interface Anomaly {
   index: number;
@@ -22,11 +23,12 @@ interface Anomaly {
   reason: string;
 }
 
-interface AnomalyData {
+interface AnomalyApiData {
   anomalies: Anomaly[];
   anomaly_rate: number;
   model: string;
   timestamp: string;
+  metadata?: { dataPoints: number; message?: string };
 }
 
 export default function AnomalyDetectionPage() {
@@ -34,35 +36,35 @@ export default function AnomalyDetectionPage() {
   const [anomalyRate, setAnomalyRate] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isPlanLocked, setIsPlanLocked] = useState(false);
   const [chartData, setChartData] = useState<any[]>([]);
 
   const detectAnomalies = async () => {
     setIsLoading(true);
     setError(null);
+    setIsPlanLocked(false);
     try {
-      const response = await fetchWithCsrf('/api/ai/anomaly', {
-        method: 'POST',
-        body: JSON.stringify({ sensitivity: 0.1 }),
-      });
+      // apiPost는 항상 ApiError(extends Error)를 throw하므로 fallback 문자열이 표시되지 않음
+      const result = await apiPost('/api/ai/anomaly', { sensitivity: 0.1 });
+      const data = result as unknown as AnomalyApiData;
 
-      if (!response.ok) throw new Error('Failed to detect anomalies');
-
-      const data: AnomalyData = await response.json();
-      setAnomalies(data.anomalies);
-      setAnomalyRate(data.anomaly_rate);
+      setAnomalies(data.anomalies ?? []);
+      setAnomalyRate(data.anomaly_rate ?? 0);
 
       // 차트 데이터 구성
-      const chart = data.anomalies
-        .slice(0, 24)
-        .map((anom) => ({
-          timestamp: new Date(anom.timestamp).getHours() + '시',
-          value: anom.value,
-          score: Math.abs(anom.score),
-          severity: anom.severity,
-        }));
+      const chart = (data.anomalies ?? []).map((anom) => ({
+        timestamp: new Date(anom.timestamp).getHours() + '시',
+        value: anom.value,
+        score: Math.abs(anom.score),
+        severity: anom.severity,
+      }));
       setChartData(chart);
-    } catch {
-      setError('이상 탐지 분석에 실패했습니다. 다시 시도해주세요.');
+    } catch (err) {
+      // 402 → 플랜 잠금
+      if (err instanceof ApiError && err.status === 402) {
+        setIsPlanLocked(true);
+      }
+      setError(err instanceof Error ? err.message : '이상 탐지 분석에 실패했습니다. 다시 시도해주세요.');
     } finally {
       setIsLoading(false);
     }
@@ -136,14 +138,30 @@ export default function AnomalyDetectionPage() {
         </div>
       </div>
 
-      {/* 에러 표시 */}
-      {error && (
+      {/* 플랜 잠금 — 앰버 테마 */}
+      {isPlanLocked && error && (
+        <PlanLockedBanner
+          message={error}
+          requiredPlan="PROFESSIONAL"
+          onRetry={() => { setIsPlanLocked(false); detectAnomalies(); }}
+          className="mb-8"
+        />
+      )}
+
+      {/* 일반 오류 — 빨간 박스 */}
+      {error && !isPlanLocked && (
         <div className="mb-8 bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
-          <div>
+          <div className="flex-1">
             <p className="text-red-400 font-medium">분석 오류</p>
             <p className="text-red-300/80 text-sm">{error}</p>
           </div>
+          <button
+            onClick={detectAnomalies}
+            className="shrink-0 text-xs text-red-300 border border-red-500/40 px-3 py-1 rounded hover:bg-red-500/10 transition"
+          >
+            재시도
+          </button>
         </div>
       )}
 
@@ -160,10 +178,8 @@ export default function AnomalyDetectionPage() {
               <XAxis dataKey="timestamp" stroke="#94a3b8" />
               <YAxis stroke="#94a3b8" />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: '#0f172a',
-                  border: '1px solid #334155',
-                }}
+                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff' }}
+                cursor={{ fill: 'rgba(255,255,255,0.1)' }}
               />
               <Bar dataKey="score" fill="#EF4444" name="이상 점수" radius={[8, 8, 0, 0]} />
             </BarChart>

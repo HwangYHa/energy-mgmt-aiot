@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     where: { tenantId: auth.tenantId, period },
     include: {
       engineVersion: { select: { version: true, name: true, methodology: true } },
-      emissionFactor: { select: { name: true, source: true, year: true, factor: true, unit: true } },
+      emissionFactor: { select: { code: true, source: true, year: true, factor: true, unit: true } },
     },
     orderBy: [{ isArchived: 'asc' }, { createdAt: 'desc' }],
   });

@@ -89,12 +89,48 @@ export function useCarbonData(year: number) {
 }
 
 // ──────────────────────────────────────────────────────────────
+// 이용 가능한 연도 목록 훅 (데이터 기반)
+// ──────────────────────────────────────────────────────────────
+
+export function useAvailableYears() {
+  const { data, isLoading } = useSWR<number[]>(
+    '/api/analytics/carbon/years',
+    apiFetcher,
+    { revalidateOnFocus: false }
+  );
+  const currentYear = new Date().getFullYear();
+  // 데이터가 없으면 현재 연도 ±1 기본값
+  const years = data && data.length > 0
+    ? data
+    : [currentYear - 1, currentYear];
+  return { years, isLoading };
+}
+
+// ──────────────────────────────────────────────────────────────
+// 최근 배출 데이터 (디버그/검증용)
+// ──────────────────────────────────────────────────────────────
+export function useRecentEmissions(limit: number = 5) {
+  const { data, error, isLoading, mutate } = useSWR<any[]>(
+    `/api/analytics/carbon/recent?limit=${limit}`,
+    apiFetcher,
+    { refreshInterval: 60_000 }
+  );
+
+  return {
+    records: data ?? [],
+    isLoading,
+    error,
+    refresh: mutate,
+  };
+}
+
+// ──────────────────────────────────────────────────────────────
 // 탄소 내보내기 훅
 // ──────────────────────────────────────────────────────────────
 
 export function useCarbonExport(year: number) {
   const exportCSV = async () => {
-    const response = await fetch(`/api/analytics/carbon/export?format=csv&year=${year}`);
+    const response = await fetch(`/api/analytics/carbon/export?format=csv&year=${year}`, { credentials: 'include' });
     if (!response.ok) throw new Error('CSV 생성 실패');
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
@@ -106,7 +142,7 @@ export function useCarbonExport(year: number) {
   };
 
   const exportJSON = async () => {
-    const response = await fetch(`/api/analytics/carbon/export?format=json&year=${year}`);
+    const response = await fetch(`/api/analytics/carbon/export?format=json&year=${year}`, { credentials: 'include' });
     if (!response.ok) throw new Error('JSON 생성 실패');
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
@@ -118,7 +154,7 @@ export function useCarbonExport(year: number) {
   };
 
   const exportPDF = async () => {
-    const response = await fetch(`/api/analytics/carbon/compliance-report/pdf?year=${year}`);
+    const response = await fetch(`/api/analytics/carbon/compliance-report/pdf?year=${year}`, { credentials: 'include' });
     if (!response.ok) throw new Error('PDF 생성 실패');
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);

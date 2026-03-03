@@ -23,6 +23,7 @@ import {
   serverErrorResponse,
 } from '@/lib/api/response';
 import { checkPlanLimit } from '@/lib/middleware/plan-limit';
+import { logActivity, MENU_CODES, ACTION_TYPES } from '@/lib/services/activity-log.service';
 
 export async function GET(request: NextRequest) {
   let auth: Awaited<ReturnType<typeof verifyAuth>> | undefined;
@@ -117,11 +118,19 @@ export async function POST(request: NextRequest) {
 
     // ✅ 트랜잭션으로 원자성 보장
     const result = await prisma.$transaction(async (tx) => {
-      // 1. 사이트 생성
+      // 1. 사이트 코드 자동 채번: ST-YYYYMMDD-NNNN
+      const siteSeq = await tx.site.count({
+        where: { tenantId: auth!.tenantId },
+      });
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const autoCode = validated.code || `ST-${today}-${String(siteSeq + 1).padStart(4, '0')}`;
+
+      // 2. 사이트 생성
       const site = await tx.site.create({
         data: {
           ...validated,
-          tenantId: auth!.tenantId, // ✅ 검증된 tenantId만 사용
+          code: autoCode,
+          tenantId: auth!.tenantId,
         },
         select: {
           id: true,
@@ -135,7 +144,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // 2. 감사 로그 기록
+      // 3. 감사 로그 기록
       await tx.auditLog.create({
         data: {
           tenantId: auth!.tenantId,
@@ -154,6 +163,22 @@ export async function POST(request: NextRequest) {
       siteId: result.id,
       tenantId: auth!.tenantId,
       userId: auth!.userId,
+    });
+
+    // 활동 이력 기록 (fire-and-forget)
+    logActivity({
+      tenantId: auth!.tenantId,
+      menuCode: MENU_CODES.SITE_MGMT,
+      actionType: ACTION_TYPES.CREATE,
+      actionLabel: '사이트 생성',
+      resourceType: 'site',
+      resourceId: result.id,
+      resourceName: result.name,
+      afterData: { name: result.name, code: result.code, siteType: result.siteType },
+      userId: auth!.userId,
+      userEmail: auth!.email,
+      userRole: auth!.role,
+      request,
     });
 
     return successResponse(result, { status: 201 });

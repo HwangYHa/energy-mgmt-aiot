@@ -228,7 +228,7 @@ export const authOptions: NextAuthOptions = {
             const [sub, tenant] = await Promise.all([
               prisma.subscription.findFirst({
                 where: { tenantId: tid, status: { in: ['ACTIVE', 'EXPIRE_SOON'] } },
-                select: { plan: { select: { apiRateLimit: true } } },
+                select: { plan: { select: { apiRateLimit: true, tier: true } } },
                 orderBy: { startDate: 'desc' },
               }),
               prisma.tenant.findUnique({
@@ -238,9 +238,11 @@ export const authOptions: NextAuthOptions = {
             ]);
             token.apiRateLimit = sub?.plan.apiRateLimit ?? 1000;
             token.onboardingCompleted = !!tenant?.onboardingCompletedAt;
+            token.planTier = (sub?.plan.tier ?? 'trial').toLowerCase();
           } catch {
             token.apiRateLimit = 1000;
             token.onboardingCompleted = false;
+            token.planTier = 'trial';
           }
         }
       }
@@ -260,6 +262,7 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role as string;
         session.user.email = token.email as string;
         session.user.name = token.name as string;
+        session.user.planTier = (token.planTier as string) ?? 'trial';
       }
       return session;
     },
@@ -345,6 +348,7 @@ declare module 'next-auth' {
       id: string;
       tenantId: string;
       role: string;
+      planTier: string;
     };
   }
 }
@@ -359,5 +363,6 @@ declare module 'next-auth/jwt' {
     accessToken?: string;
     provider?: string;
     apiRateLimit?: number;
+    planTier?: string;
   }
 }

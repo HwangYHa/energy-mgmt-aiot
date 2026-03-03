@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Truck, X, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from '@/lib/toast';
+import { apiPost, ApiError } from '@/lib/api/client';
 
 const VEHICLE_TYPES = [
   { value: 'car',   label: '승용차' },
@@ -42,25 +43,18 @@ export function TransportModal({ onClose, onSuccess }: Props) {
     if (!form.distance) { setError('거리를 입력해주세요'); return; }
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/analytics/carbon/register-transport', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vehicleType: form.vehicleType,
-          distance: Number(form.distance),
-          fuelType: form.fuelType,
-          period: form.period,
-        }),
+      // send combined sourceType to avoid backend guesswork
+      const src = `${form.vehicleType}-${form.fuelType}`;
+      await apiPost('/api/analytics/carbon/register-transport', {
+        sourceType: src,
+        distance: Number(form.distance),
+        period: form.period,
       });
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({}));
-        throw new Error((e as { message?: string }).message ?? '등록 실패');
-      }
       setDone(true);
       toast.success('운송 데이터가 등록되었습니다.');
       setTimeout(() => { onSuccess(); onClose(); }, 1200);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '오류가 발생했습니다');
+      setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : '오류가 발생했습니다');
     } finally {
       setIsSubmitting(false);
     }

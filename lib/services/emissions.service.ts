@@ -49,15 +49,16 @@ export class EmissionsService {
     siteId?: string
   ): Promise<number> {
     // 전력 사용량 조회 (MWh)
+    // ※ Prisma @map() 으로 DB 컬럼명은 snake_case임 (tenant_id, metric_id, device_id, site_id)
     const query = `
-      SELECT 
-        SUM(CAST(value AS DECIMAL(15,4))) / 1000 as total_energy_mwh
+      SELECT
+        SUM(CAST(m.value AS DECIMAL(15,4))) / 1000 as total_energy_mwh
       FROM measurement m
-      JOIN metric mt ON m.metricId = mt.id
-      WHERE m.tenantId = ?
+      JOIN metric mt ON m.metric_id = mt.id
+      WHERE m.tenant_id = ?
         AND mt.key = 'energy'
         AND m.time BETWEEN ? AND ?
-        ${siteId ? 'AND mt.deviceId IN (SELECT id FROM device WHERE siteId = ?)' : ''}
+        ${siteId ? 'AND mt.device_id IN (SELECT id FROM device WHERE site_id = ?)' : ''}
     `;
 
     const params: any[] = [tenantId, startDate, endDate];
@@ -84,9 +85,10 @@ export class EmissionsService {
     tenantId: string,
     startDate: Date,
     endDate: Date,
-    siteId?: string
+    _siteId?: string
   ): Promise<number> {
     // EmissionsData 테이블에서 연료 사용량 조회
+    // ※ EmissionsData는 device 관계 없음 (deviceId 컬럼만 존재) → siteId 필터 미지원
     const fuelData = await prisma.emissionsData.findMany({
       where: {
         tenantId,
@@ -95,11 +97,6 @@ export class EmissionsService {
           gte: this.formatPeriod(startDate),
           lte: this.formatPeriod(endDate),
         },
-        ...(siteId && {
-          device: {
-            siteId,
-          },
-        }),
       },
     });
 
@@ -202,6 +199,20 @@ export class EmissionsService {
     }
 
     return results;
+  }
+
+  /**
+   * 최근 등록된 배출 데이터 (로그 확인 용)
+   */
+  static async getRecentEmissions(
+    tenantId: string,
+    limit: number = 5
+  ) {
+    return prisma.emissionsData.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
   }
 
   /**

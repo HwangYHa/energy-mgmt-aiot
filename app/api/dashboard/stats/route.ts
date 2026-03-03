@@ -97,6 +97,8 @@ export async function GET(request: NextRequest) {
     if (!auth) return unauthorizedResponse();
 
     const { tenantId } = auth;
+    const { searchParams } = new URL(request.url);
+    const siteId = searchParams.get('siteId') || undefined;
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const tomorrow = new Date(todayStart);
@@ -132,19 +134,19 @@ export async function GET(request: NextRequest) {
       emissionFactorRow,
     ] = await Promise.all([
       prisma.site.count({ where: { tenantId, deletedAt: null, isActive: true } }),
-      prisma.device.count({ where: { tenantId, deletedAt: null } }),
-      prisma.device.count({ where: { tenantId, deletedAt: null, status: 'online' } }),
-      prisma.device.count({ where: { tenantId, deletedAt: null, status: 'offline' } }),
-      prisma.device.count({ where: { tenantId, deletedAt: null, status: 'error' } }),
-      prisma.sensor.count({ where: { tenantId, deletedAt: null } }),
-      prisma.sensor.count({ where: { tenantId, deletedAt: null, status: 'online' } }),
+      prisma.device.count({ where: { tenantId, deletedAt: null, ...(siteId && { siteId }) } }),
+      prisma.device.count({ where: { tenantId, deletedAt: null, status: 'online', ...(siteId && { siteId }) } }),
+      prisma.device.count({ where: { tenantId, deletedAt: null, status: 'offline', ...(siteId && { siteId }) } }),
+      prisma.device.count({ where: { tenantId, deletedAt: null, status: 'error', ...(siteId && { siteId }) } }),
+      prisma.sensor.count({ where: { tenantId, deletedAt: null, ...(siteId && { device: { siteId } }) } }),
+      prisma.sensor.count({ where: { tenantId, deletedAt: null, status: 'online', ...(siteId && { device: { siteId } }) } }),
       prisma.sensor.groupBy({
         by: ['sensorType'],
-        where: { tenantId, deletedAt: null },
+        where: { tenantId, deletedAt: null, ...(siteId && { device: { siteId } }) },
         _count: { id: true },
       }),
       prisma.measurement.count({
-        where: { tenantId, time: { gte: todayStart } },
+        where: { tenantId, time: { gte: todayStart }, ...(siteId && { metric: { device: { siteId } } }) },
       }),
       getEnergySettings(tenantId),
       // DR 이벤트 실집계: 올해 완료된 이벤트 수
@@ -193,64 +195,123 @@ export async function GET(request: NextRequest) {
       ] = await Promise.all([
         // 오늘 합계/평균/최대
         prisma.measurement.aggregate({
-          where: { tenantId, time: { gte: todayStart } },
+          where: { tenantId, time: { gte: todayStart }, ...(siteId && { metric: { device: { siteId } } }) },
           _sum: { value: true },
           _avg: { value: true },
           _max: { value: true },
         }),
         // 가장 최근 측정값
         prisma.measurement.findFirst({
-          where: { tenantId },
+          where: { tenantId, ...(siteId && { metric: { device: { siteId } } }) },
           orderBy: { time: 'desc' },
           select: { value: true, time: true },
         }),
-        // 시간대별 부하: 6개 개별 쿼리 → 1개 GROUP BY
-        prisma.$queryRaw<HourlyRow[]>`
-          SELECT
-            FLOOR(HOUR(time) / 4) * 4 AS hour_bucket,
-            AVG(value)                AS avg_val,
-            MAX(value)                AS max_val
-          FROM measurement
-          WHERE tenant_id = ${tenantId}
-            AND time >= ${todayStart}
-            AND time <  ${tomorrow}
-          GROUP BY hour_bucket
-          ORDER BY hour_bucket
-        `,
-        // 월별 소비량: 12개 개별 쿼리 → 1개 GROUP BY
-        prisma.$queryRaw<MonthlyRow[]>`
-          SELECT
-            MONTH(time)  AS month_num,
-            SUM(value)   AS total_val
-          FROM measurement
-          WHERE tenant_id = ${tenantId}
-            AND time >= ${yearStart}
-            AND time <  ${yearEnd}
-          GROUP BY month_num
-          ORDER BY month_num
-        `,
+        // 시간대별 부하: GROUP BY 단일 쿼리
+        siteId
+          ? prisma.$queryRaw<HourlyRow[]>`
+              SELECT
+                FLOOR(HOUR(me.time) / 4) * 4 AS hour_bucket,
+                AVG(me.value)                 AS avg_val,
+                MAX(me.value)                 AS max_val
+              FROM measurement me
+              INNER JOIN metric mt ON me.metric_id = mt.id
+              INNER JOIN device d  ON mt.device_id = d.id
+              WHERE me.tenant_id = ${tenantId}
+                AND d.site_id    = ${siteId}
+                AND me.time >= ${todayStart}
+                AND me.time <  ${tomorrow}
+              GROUP BY hour_bucket
+              ORDER BY hour_bucket
+            `
+          : prisma.$queryRaw<HourlyRow[]>`
+              SELECT
+                FLOOR(HOUR(time) / 4) * 4 AS hour_bucket,
+                AVG(value)                AS avg_val,
+                MAX(value)                AS max_val
+              FROM measurement
+              WHERE tenant_id = ${tenantId}
+                AND time >= ${todayStart}
+                AND time <  ${tomorrow}
+              GROUP BY hour_bucket
+              ORDER BY hour_bucket
+            `,
+        // 월별 소비량: GROUP BY 단일 쿼리
+        siteId
+          ? prisma.$queryRaw<MonthlyRow[]>`
+              SELECT
+                MONTH(me.time)  AS month_num,
+                SUM(me.value)   AS total_val
+              FROM measurement me
+              INNER JOIN metric mt ON me.metric_id = mt.id
+              INNER JOIN device d  ON mt.device_id = d.id
+              WHERE me.tenant_id = ${tenantId}
+                AND d.site_id    = ${siteId}
+                AND me.time >= ${yearStart}
+                AND me.time <  ${yearEnd}
+              GROUP BY month_num
+              ORDER BY month_num
+            `
+          : prisma.$queryRaw<MonthlyRow[]>`
+              SELECT
+                MONTH(time)  AS month_num,
+                SUM(value)   AS total_val
+              FROM measurement
+              WHERE tenant_id = ${tenantId}
+                AND time >= ${yearStart}
+                AND time <  ${yearEnd}
+              GROUP BY month_num
+              ORDER BY month_num
+            `,
         // 이번 주 일별 합계
-        prisma.$queryRaw<WeeklyRow[]>`
-          SELECT
-            DAYOFWEEK(time) AS dow,
-            SUM(value)      AS total_val
-          FROM measurement
-          WHERE tenant_id = ${tenantId}
-            AND time >= ${weekStart}
-            AND time <  ${weekEnd}
-          GROUP BY dow
-        `,
+        siteId
+          ? prisma.$queryRaw<WeeklyRow[]>`
+              SELECT
+                DAYOFWEEK(me.time) AS dow,
+                SUM(me.value)      AS total_val
+              FROM measurement me
+              INNER JOIN metric mt ON me.metric_id = mt.id
+              INNER JOIN device d  ON mt.device_id = d.id
+              WHERE me.tenant_id = ${tenantId}
+                AND d.site_id    = ${siteId}
+                AND me.time >= ${weekStart}
+                AND me.time <  ${weekEnd}
+              GROUP BY dow
+            `
+          : prisma.$queryRaw<WeeklyRow[]>`
+              SELECT
+                DAYOFWEEK(time) AS dow,
+                SUM(value)      AS total_val
+              FROM measurement
+              WHERE tenant_id = ${tenantId}
+                AND time >= ${weekStart}
+                AND time <  ${weekEnd}
+              GROUP BY dow
+            `,
         // 전주 일별 합계
-        prisma.$queryRaw<WeeklyRow[]>`
-          SELECT
-            DAYOFWEEK(time) AS dow,
-            SUM(value)      AS total_val
-          FROM measurement
-          WHERE tenant_id = ${tenantId}
-            AND time >= ${prevWeekStart}
-            AND time <  ${prevWeekEnd}
-          GROUP BY dow
-        `,
+        siteId
+          ? prisma.$queryRaw<WeeklyRow[]>`
+              SELECT
+                DAYOFWEEK(me.time) AS dow,
+                SUM(me.value)      AS total_val
+              FROM measurement me
+              INNER JOIN metric mt ON me.metric_id = mt.id
+              INNER JOIN device d  ON mt.device_id = d.id
+              WHERE me.tenant_id = ${tenantId}
+                AND d.site_id    = ${siteId}
+                AND me.time >= ${prevWeekStart}
+                AND me.time <  ${prevWeekEnd}
+              GROUP BY dow
+            `
+          : prisma.$queryRaw<WeeklyRow[]>`
+              SELECT
+                DAYOFWEEK(time) AS dow,
+                SUM(value)      AS total_val
+              FROM measurement
+              WHERE tenant_id = ${tenantId}
+                AND time >= ${prevWeekStart}
+                AND time <  ${prevWeekEnd}
+              GROUP BY dow
+            `,
       ]);
 
       // 실시간 지표
@@ -418,6 +479,7 @@ export async function GET(request: NextRequest) {
       meta: {
         timestamp: now.toISOString(),
         tenantId,
+        siteId: siteId ?? null,
         sitesCount: sites,
         devicesCount: devices,
         sensorsCount: sensors,

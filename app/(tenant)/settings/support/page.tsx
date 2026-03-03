@@ -15,6 +15,7 @@ import {
   History,
 } from 'lucide-react';
 import { toast } from '@/lib/toast';
+import { apiPost, ApiError } from '@/lib/api/client';
 
 interface InquiryHistory {
   id: string;
@@ -123,20 +124,11 @@ export default function SupportPage() {
 
     setSubmitting(true);
     try {
-      const res = await fetch('/api/support', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSubmitted(true);
-        setSubmittedId(data.data?.id ?? null);
-      } else {
-        toast.error(data.error ?? '문의 접수에 실패했습니다.');
-      }
-    } catch {
-      toast.error('네트워크 오류가 발생했습니다.');
+      const data = await apiPost<{ id?: string }>('/api/support', form);
+      setSubmitted(true);
+      setSubmittedId(data.data?.id ?? null);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : '네트워크 오류가 발생했습니다.');
     } finally {
       setSubmitting(false);
     }
