@@ -13,6 +13,8 @@ import {
   AlertTriangle,
   FileText,
   Filter,
+  Activity,
+  Cpu,
 } from 'lucide-react';
 
 interface AuditLogItem {
@@ -33,7 +35,117 @@ const RESULT_CONFIG = {
   partial: { icon: AlertTriangle, color: 'text-amber-400' },
 } as const satisfies Record<string, { icon: typeof CheckCircle2; color: string }>;
 
+type TabId = 'all' | 'user' | 'device';
+
+const TABS: { id: TabId; label: string; icon: React.ReactNode; resourceTypes?: string[]; description: string }[] = [
+  {
+    id: 'all',
+    label: '데이터 변경 이력',
+    icon: <FileText className="w-4 h-4" />,
+    description: '모든 데이터 변경 및 액세스 기록',
+  },
+  {
+    id: 'user',
+    label: '사용자 활동',
+    icon: <Activity className="w-4 h-4" />,
+    resourceTypes: ['user', 'USER', 'auth', 'AUTH', 'login'],
+    description: '사용자 로그인, 설정 변경, 권한 수정 기록',
+  },
+  {
+    id: 'device',
+    label: '디바이스/설비',
+    icon: <Cpu className="w-4 h-4" />,
+    resourceTypes: ['DEVICE', 'device', 'SENSOR', 'sensor', 'GATEWAY', 'gateway', 'SITE', 'site', 'control'],
+    description: '설비 제어, 센서 데이터, 게이트웨이 상태 변경 기록',
+  },
+];
+
+function LogList({ logs, isLoading, expandedId, setExpandedId }: {
+  logs: AuditLogItem[];
+  isLoading: boolean;
+  expandedId: string | null;
+  setExpandedId: (id: string | null) => void;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+      </div>
+    );
+  }
+
+  if (logs.length === 0) {
+    return (
+      <div className="text-center py-20 text-slate-500">
+        <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
+        <p>감사 로그가 없습니다.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {logs.map((log) => {
+        const resultKey = (log.result || 'success') as keyof typeof RESULT_CONFIG;
+        const result = RESULT_CONFIG[resultKey] || RESULT_CONFIG.success;
+        const ResultIcon = result.icon;
+        const isExpanded = expandedId === log.id;
+
+        return (
+          <div
+            key={log.id}
+            className="bg-slate-800/50 border border-slate-700/50 rounded-xl transition hover:border-slate-600 cursor-pointer"
+            onClick={() => setExpandedId(isExpanded ? null : log.id)}
+          >
+            <div className="flex items-center gap-4 p-4">
+              <ResultIcon className={`w-5 h-5 flex-shrink-0 ${result.color}`} />
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                  <span className="text-sm font-medium text-white">{log.action}</span>
+                  {log.resourceType && (
+                    <span className="text-[10px] px-2 py-0.5 bg-slate-700/50 text-slate-400 rounded-full">{log.resourceType}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
+                  {log.user && (
+                    <span className="flex items-center gap-1">
+                      <User className="w-3 h-3" /> {log.user.name} ({log.user.role})
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {new Date(log.createdAt).toLocaleString('ko-KR')}
+                  </span>
+                  {log.ipAddress && <span className="font-mono">{log.ipAddress}</span>}
+                </div>
+              </div>
+            </div>
+
+            {isExpanded && (
+              <div className="px-4 pb-4 border-t border-slate-700/30 pt-3">
+                {log.changes && (
+                  <>
+                    <p className="text-xs text-slate-500 mb-2">변경 내역</p>
+                    <pre className="text-xs text-slate-300 bg-slate-900/50 rounded-lg p-3 overflow-x-auto max-h-40">
+                      {JSON.stringify(log.changes, null, 2)}
+                    </pre>
+                  </>
+                )}
+                {log.resourceId && (
+                  <p className="text-xs text-slate-500 mt-2">리소스 ID: <span className="text-slate-400 font-mono">{log.resourceId}</span></p>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function AuditTrailPage() {
+  const [activeTab, setActiveTab] = useState<TabId>('all');
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,17 +156,44 @@ export default function AuditTrailPage() {
   const [resourceTypes, setResourceTypes] = useState<{ type: string; count: number }[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  const currentTab = TABS.find((t) => t.id === activeTab)!;
+
   const fetchLogs = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams({ take: '50' });
       if (search) params.set('action', search);
-      if (filterType) params.set('resourceType', filterType);
+
+      // 탭별 resourceType 필터
+      const effectiveType = filterType || (
+        currentTab.resourceTypes ? currentTab.resourceTypes[0] : ''
+      );
+
+      // 탭이 device/user면 해당 타입으로 필터
+      if (activeTab !== 'all' && currentTab.resourceTypes && !filterType) {
+        // 서버에서 OR 필터링이 복잡하므로 클라이언트에서 필터
+        params.delete('resourceType');
+      } else if (effectiveType) {
+        params.set('resourceType', effectiveType);
+      }
 
       const res = await fetch(`/api/compliance/audit-trail?${params}`);
       const json = await res.json();
       if (json.success) {
-        setLogs(json.data);
+        let data: AuditLogItem[] = json.data;
+
+        // 탭별 클라이언트 필터
+        if (activeTab !== 'all' && currentTab.resourceTypes) {
+          const types = currentTab.resourceTypes.map((t) => t.toLowerCase());
+          data = data.filter((log) =>
+            log.resourceType
+              ? types.some((t) => log.resourceType!.toLowerCase().includes(t))
+              : false
+          );
+        }
+
+        setLogs(data);
         setTotal(json.pagination?.total || 0);
         setTodayCount(json.meta?.todayCount || 0);
         setResourceTypes(json.meta?.resourceTypes || []);
@@ -64,12 +203,20 @@ export default function AuditTrailPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [search, filterType]);
+  }, [search, filterType, activeTab, currentTab]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
+  // 탭 변경 시 필터 초기화
+  const handleTabChange = (tab: TabId) => {
+    setActiveTab(tab);
+    setFilterType('');
+    setSearch('');
+    setExpandedId(null);
+  };
+
   return (
-    <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6">
+    <div className="h-full bg-[#051225] text-white p-4 md:p-6">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -86,16 +233,6 @@ export default function AuditTrailPage() {
         </button>
       </div>
 
-      {/* 에러 배너 */}
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 flex items-center justify-between">
-          <p className="text-sm text-red-300">{error}</p>
-          <button onClick={fetchLogs} className="px-3 py-1.5 bg-red-500/20 text-red-300 rounded-lg text-sm hover:bg-red-500/30 transition">
-            재시도
-          </button>
-        </div>
-      )}
-
       {/* 통계 */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
@@ -107,10 +244,39 @@ export default function AuditTrailPage() {
           <div className="text-2xl font-bold text-emerald-400">{todayCount}</div>
         </div>
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-          <div className="text-xs text-slate-400">리소스 유형</div>
-          <div className="text-2xl font-bold text-blue-400">{resourceTypes.length}</div>
+          <div className="text-xs text-slate-400">현재 탭 결과</div>
+          <div className="text-2xl font-bold text-blue-400">{logs.length}</div>
         </div>
       </div>
+
+      {/* 탭 */}
+      <div className="flex gap-1 mb-6 bg-slate-800/50 border border-slate-700/50 rounded-xl p-1">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => handleTabChange(tab.id)}
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              activeTab === tab.id
+                ? 'bg-cyan-600 text-white shadow'
+                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+            }`}
+          >
+            {tab.icon}
+            <span className="hidden sm:inline">{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* 탭 설명 */}
+      <p className="text-slate-500 text-xs mb-4">{currentTab.description}</p>
+
+      {/* 에러 */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 flex items-center justify-between">
+          <p className="text-sm text-red-300">{error}</p>
+          <button onClick={fetchLogs} className="px-3 py-1.5 bg-red-500/20 text-red-300 rounded-lg text-sm hover:bg-red-500/30 transition">재시도</button>
+        </div>
+      )}
 
       {/* 필터 */}
       <div className="flex items-center gap-4 mb-6">
@@ -124,86 +290,30 @@ export default function AuditTrailPage() {
             className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2 text-sm text-white"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-slate-400" />
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
-          >
-            <option value="">모든 리소스</option>
-            {resourceTypes.map((rt) => (
-              <option key={rt.type} value={rt.type || ''}>{rt.type || '(없음)'} ({rt.count})</option>
-            ))}
-          </select>
-        </div>
+        {activeTab === 'all' && (
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-slate-400" />
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+            >
+              <option value="">모든 리소스</option>
+              {resourceTypes.map((rt) => (
+                <option key={rt.type} value={rt.type || ''}>{rt.type || '(없음)'} ({rt.count})</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* 로그 목록 */}
-      {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
-        </div>
-      ) : logs.length === 0 ? (
-        <div className="text-center py-20 text-slate-500">
-          <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p>감사 로그가 없습니다.</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {logs.map((log) => {
-            const resultKey = (log.result || 'success') as keyof typeof RESULT_CONFIG;
-            const result = RESULT_CONFIG[resultKey] || RESULT_CONFIG.success;
-            const ResultIcon = result.icon;
-            const isExpanded = expandedId === log.id;
-
-            return (
-              <div
-                key={log.id}
-                className="bg-slate-800/50 border border-slate-700/50 rounded-xl transition hover:border-slate-600 cursor-pointer"
-                onClick={() => setExpandedId(isExpanded ? null : log.id)}
-              >
-                <div className="flex items-center gap-4 p-4">
-                  <ResultIcon className={`w-5 h-5 flex-shrink-0 ${result.color}`} />
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-sm font-medium text-white">{log.action}</span>
-                      {log.resourceType && (
-                        <span className="text-[10px] px-2 py-0.5 bg-slate-700/50 text-slate-400 rounded-full">{log.resourceType}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 text-xs text-slate-500">
-                      {log.user && (
-                        <span className="flex items-center gap-1">
-                          <User className="w-3 h-3" /> {log.user.name} ({log.user.role})
-                        </span>
-                      )}
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {new Date(log.createdAt).toLocaleString('ko-KR')}
-                      </span>
-                      {log.ipAddress && <span>{log.ipAddress}</span>}
-                    </div>
-                  </div>
-                </div>
-
-                {isExpanded && log.changes && (
-                  <div className="px-4 pb-4 border-t border-slate-700/30 pt-3">
-                    <p className="text-xs text-slate-500 mb-2">변경 내역</p>
-                    <pre className="text-xs text-slate-300 bg-slate-900/50 rounded-lg p-3 overflow-x-auto max-h-40">
-                      {JSON.stringify(log.changes, null, 2)}
-                    </pre>
-                    {log.resourceId && (
-                      <p className="text-xs text-slate-500 mt-2">리소스 ID: <span className="text-slate-400 font-mono">{log.resourceId}</span></p>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <LogList
+        logs={logs}
+        isLoading={isLoading}
+        expandedId={expandedId}
+        setExpandedId={setExpandedId}
+      />
     </div>
   );
 }

@@ -146,7 +146,7 @@ export default function SuperAdminTenantsPage() {
 
   if (accessDenied) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+      <div className="h-full bg-slate-900 text-white flex items-center justify-center">
         <div className="text-center">
           <Shield className="w-16 h-16 text-red-400 mx-auto mb-4" />
           <h2 className="text-xl font-bold mb-2">접근 거부</h2>
@@ -161,7 +161,7 @@ export default function SuperAdminTenantsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-6">
+    <div className="h-full bg-slate-900 text-white p-6">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <div>

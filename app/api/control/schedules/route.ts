@@ -19,6 +19,7 @@ import {
   serverErrorResponse,
   formatZodErrors,
 } from '@/lib/api/response';
+import { generateSeqNo } from '@/lib/utils/sequence';
 
 const createScheduleSchema = z.object({
   deviceId: z.string().uuid(),
@@ -132,11 +133,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const schedule = await prisma.controlSchedule.create({
+    // 스케줄 코드 자동 채번: CS-YYYYMMDD-NNNN
+    const code = await generateSeqNo('CONTROL_SCHEDULE');
+
+    const schedule = await (prisma as any).controlSchedule.create({
       data: {
         tenantId,
         deviceId: data.deviceId,
         name: data.name,
+        code,
         description: data.description,
         action: data.action,
         targetValue: data.targetValue,

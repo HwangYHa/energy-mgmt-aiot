@@ -9,7 +9,7 @@
  */
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -147,6 +147,21 @@ export default function Sidebar({
   const userRole = (session?.user?.role as UserRole) || ('viewer' as UserRole);
   const planTier = (session?.user as { planTier?: string } | undefined)?.planTier ?? 'trial';
 
+  // planTier 변경 시 메뉴 재조회 (결제 후 즉시 메뉴 잠금 해제)
+  const prevPlanTierRef = React.useRef(planTier);
+  useEffect(() => {
+    if (prevPlanTierRef.current !== planTier && status === 'authenticated') {
+      prevPlanTierRef.current = planTier;
+      // 플랜 변경 감지 → 메뉴 강제 재조회
+      setMenuGroups([]);
+      setIsLoading(true);
+      apiGet<MenuGroup[]>('/api/menus')
+        .then(res => setMenuGroups(res.data ?? []))
+        .catch(() => {})
+        .finally(() => setIsLoading(false));
+    }
+  }, [planTier, status]);
+
   // RBAC: 역할 기반 메뉴 필터링
   const filteredGroups = menuGroups
     .filter((g) => hasRoleOrHigher(userRole, g.minRole))
@@ -271,7 +286,7 @@ export default function Sidebar({
     <aside
       className={cn(
         'h-screen bg-slate-900 border-r border-slate-700/50 flex flex-col transition-all duration-300',
-        effectiveCollapsed ? 'w-16' : 'w-64',
+        effectiveCollapsed ? 'w-16' : 'w-60',
         // hover로 일시 확장 시: absolute 오버레이로 콘텐츠를 밀지 않음
         collapsed && isHovering
           ? 'absolute left-0 top-0 z-50 shadow-2xl shadow-black/70'

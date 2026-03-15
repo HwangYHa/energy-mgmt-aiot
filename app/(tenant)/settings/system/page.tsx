@@ -29,6 +29,25 @@ import {
 import { apiGet, apiPut } from '@/lib/api/client';
 import { toast } from '@/lib/toast';
 
+// ─── 백업 이력 타입 ───────────────────────────────────────────────
+
+interface BackupMetadata {
+  trigger?: string;
+  storageType?: string;
+  backupPath?: string;
+  backupStatus?: string;
+  sizeBytes?: number;
+  durationMs?: number;
+  startedAt?: string;
+  error?: string;
+}
+
+interface BackupHistoryEntry {
+  backupId: string;
+  metadata: BackupMetadata | null;
+  createdAt: string;
+}
+
 // ─── 타입 ────────────────────────────────────────────────────────
 
 interface SystemSettings {
@@ -130,6 +149,8 @@ export default function SystemSettingsPage() {
   const [isDirty,         setIsDirty]         = useState(false);
   const [activeTab,       setActiveTab]       = useState<TabId>('organization');
   const [isBackupRunning, setIsBackupRunning] = useState(false);
+  const [backupHistory,   setBackupHistory]   = useState<BackupHistoryEntry[]>([]);
+  const [defaultBackupDir, setDefaultBackupDir] = useState<string>('');
   const savedRef = useRef<SystemSettings | null>(null);
 
   const fetchSettings = useCallback(async () => {
@@ -148,6 +169,26 @@ export default function SystemSettingsPage() {
   }, []);
 
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
+
+  // 백업 이력 조회
+  const fetchBackupHistory = useCallback(async () => {
+    try {
+      const res = await apiGet<{
+        config: SystemSettings['backup'];
+        defaultDir: string;
+        recentBackups: BackupHistoryEntry[];
+      }>('/api/admin/backup');
+      if (res.success && res.data) {
+        setBackupHistory(res.data.recentBackups);
+        setDefaultBackupDir(res.data.defaultDir);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // 백업 탭 진입 시 이력 로드
+  useEffect(() => {
+    if (activeTab === 'backup') fetchBackupHistory();
+  }, [activeTab, fetchBackupHistory]);
 
   // 저장 (전체 설정 한 번에)
   const handleSave = async () => {
@@ -195,9 +236,28 @@ export default function SystemSettingsPage() {
   const handleManualBackup = async () => {
     setIsBackupRunning(true);
     try {
-      const res = await apiPut('/api/admin/backup', { trigger: 'manual' });
-      if (res.success) {
-        toast.success('백업이 요청되었습니다. 완료 시 알림 이메일로 결과를 받으실 수 있습니다.');
+      const res = await apiPut<{
+        backupId: string;
+        status: 'success' | 'failed';
+        message: string;
+        backupPath: string;
+        sizeBytes?: number;
+        sizeMb?: string;
+        durationMs?: number;
+        error?: string;
+      }>('/api/admin/backup', { trigger: 'manual' });
+
+      if (res.success && res.data) {
+        const d = res.data;
+        if (d.status === 'success') {
+          const sizeStr = d.sizeMb ? ` · ${d.sizeMb} MB` : '';
+          const secStr  = d.durationMs ? ` · ${(d.durationMs / 1000).toFixed(1)}초` : '';
+          toast.success(`백업 완료${sizeStr}${secStr}\n${d.backupPath}`);
+          // 이력 새로고침
+          fetchBackupHistory();
+        } else {
+          toast.error(d.error ?? d.message ?? '백업 실패');
+        }
       } else {
         toast.error(res.error ?? '백업 요청에 실패했습니다.');
       }
@@ -219,7 +279,7 @@ export default function SystemSettingsPage() {
   if (!settings) return null;
 
   return (
-    <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6 max-w-5xl mx-auto">
+    <div className="h-full bg-[#051225] text-white p-4 md:p-6 max-w-5xl mx-auto">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -687,14 +747,26 @@ export default function SystemSettingsPage() {
                     <option value="gcs">Google Cloud Storage</option>
                   </select>
                 </SettingRow>
-                <SettingRow label="저장 경로" description={settings.backup.storageType === 'local' ? '서버 내 백업 디렉토리' : '버킷명 및 경로'}>
-                  <input
-                    value={settings.backup.storagePath ?? ''}
-                    onChange={(e) => update('backup', 'storagePath', e.target.value || undefined)}
-                    disabled={!isAdmin}
-                    placeholder={settings.backup.storageType === 'local' ? '/var/backups/tansoeum' : 's3://my-bucket/backups'}
-                    className="w-64 bg-slate-700/60 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 disabled:opacity-50"
-                  />
+                <SettingRow
+                  label="저장 경로"
+                  description={settings.backup.storageType === 'local'
+                    ? `서버 내 백업 디렉토리 (기본: ${defaultBackupDir || 'BACKUP_DIR 환경변수 또는 ./backups/'})`
+                    : '버킷명 및 경로'}
+                >
+                  <div className="flex flex-col gap-1">
+                    <input
+                      value={settings.backup.storagePath ?? ''}
+                      onChange={(e) => update('backup', 'storagePath', e.target.value || undefined)}
+                      disabled={!isAdmin}
+                      placeholder={settings.backup.storageType === 'local'
+                        ? (defaultBackupDir || './backups/')
+                        : 's3://my-bucket/backups'}
+                      className="w-64 bg-slate-700/60 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 disabled:opacity-50"
+                    />
+                    {settings.backup.storageType === 'local' && !settings.backup.storagePath && defaultBackupDir && (
+                      <span className="text-[10px] text-slate-500">현재 기본값: {defaultBackupDir}</span>
+                    )}
+                  </div>
                 </SettingRow>
                 <SettingRow label="완료 알림 이메일" description="백업 완료·실패 시 결과를 수신할 이메일">
                   <input
@@ -713,7 +785,9 @@ export default function SystemSettingsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-sm font-medium text-white">수동 백업 실행</div>
-                    <div className="text-xs text-slate-400 mt-0.5">지금 즉시 DB 스냅샷 백업을 실행합니다</div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      지금 즉시 mysqldump로 DB 스냅샷을 생성하여 저장합니다
+                    </div>
                   </div>
                   <button
                     onClick={handleManualBackup}
@@ -725,14 +799,24 @@ export default function SystemSettingsPage() {
                       : <><RefreshCw className="w-4 h-4" /> 지금 백업</>}
                   </button>
                 </div>
+
+                {/* S3/GCS 미구현 안내 */}
+                {settings.backup.storageType !== 'local' && (
+                  <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-300 flex items-start gap-2">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    {settings.backup.storageType === 's3'
+                      ? 'S3 백업은 @aws-sdk/client-s3 설치 후 지원됩니다. 현재는 로컬 백업을 권장합니다.'
+                      : 'GCS 백업은 @google-cloud/storage 설치 후 지원됩니다. 현재는 로컬 백업을 권장합니다.'}
+                  </div>
+                )}
               </div>
 
               {/* 안내 */}
-              <div className="mt-4 p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl text-xs text-blue-300 space-y-1.5">
+              <div className="mt-4 p-3 bg-blue-500/5 border border-blue-500/20 rounded-xl text-xs text-blue-300 space-y-1.5">
                 {[
-                  '백업 파일은 AES-256으로 암호화되어 저장됩니다.',
-                  'MySQL 스냅샷 + 설정 파일이 함께 백업됩니다.',
-                  '복원은 관리자 콘솔 또는 CLI를 통해 진행할 수 있습니다.',
+                  'mysqldump --single-transaction으로 InnoDB 무중단 스냅샷을 생성합니다.',
+                  'gzip 압축(.sql.gz) 형식으로 저장됩니다.',
+                  '복원: gunzip backup.sql.gz | mysql -u user -p dbname',
                 ].map((text) => (
                   <div key={text} className="flex items-start gap-2">
                     <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-blue-400" />
@@ -740,6 +824,64 @@ export default function SystemSettingsPage() {
                   </div>
                 ))}
               </div>
+
+              {/* 백업 이력 */}
+              {backupHistory.length > 0 && (
+                <div className="mt-5 border-t border-slate-700/50 pt-4">
+                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <HardDrive className="w-3.5 h-3.5 text-slate-400" /> 최근 백업 이력
+                  </h4>
+                  <div className="space-y-2">
+                    {backupHistory.map((entry) => {
+                      const meta = entry.metadata;
+                      const isOk = meta?.backupStatus === 'success';
+                      const sizeStr = meta?.sizeBytes
+                        ? `${(meta.sizeBytes / (1024 * 1024)).toFixed(2)} MB`
+                        : null;
+                      const durStr = meta?.durationMs
+                        ? `${(meta.durationMs / 1000).toFixed(1)}초`
+                        : null;
+                      return (
+                        <div
+                          key={entry.backupId}
+                          className={`flex items-start gap-3 p-2.5 rounded-lg border text-xs ${
+                            isOk
+                              ? 'bg-emerald-500/5 border-emerald-500/20'
+                              : 'bg-red-500/5 border-red-500/20'
+                          }`}
+                        >
+                          {isOk
+                            ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                            : <AlertCircle  className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={isOk ? 'text-emerald-300' : 'text-red-300'}>
+                                {isOk ? '성공' : '실패'}
+                              </span>
+                              {sizeStr && <span className="text-slate-400">{sizeStr}</span>}
+                              {durStr  && <span className="text-slate-500">{durStr}</span>}
+                              <span className="text-slate-500 ml-auto">
+                                {new Date(entry.createdAt).toLocaleString('ko-KR', {
+                                  month: '2-digit', day: '2-digit',
+                                  hour: '2-digit', minute: '2-digit',
+                                })}
+                              </span>
+                            </div>
+                            {meta?.backupPath && (
+                              <div className="text-slate-500 mt-0.5 truncate" title={meta.backupPath}>
+                                {meta.backupPath}
+                              </div>
+                            )}
+                            {!isOk && meta?.error && (
+                              <div className="text-red-400 mt-0.5 line-clamp-2">{meta.error}</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </Section>
           )}
 

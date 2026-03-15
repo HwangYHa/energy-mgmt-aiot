@@ -6,7 +6,7 @@
 
 import { MetadataRoute } from 'next';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://energyai.io';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://carboneum.kr';
 
 export default function robots(): MetadataRoute.Robots {
   return {

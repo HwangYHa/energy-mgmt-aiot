@@ -11,6 +11,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import {
   CheckCircle, XCircle, Loader2, Settings, ArrowRight, RefreshCw,
@@ -20,10 +21,11 @@ import { apiPost, ApiError } from '@/lib/api/client';
 type Status = 'loading' | 'success' | 'error';
 
 export default function TossPaymentSuccessPage() {
-  const searchParams  = useSearchParams();
+  const searchParams     = useSearchParams();
+  const { update: updateSession } = useSession();
   const [status, setStatus]   = useState<Status>('loading');
   const [errMsg, setErrMsg]   = useState('');
-  const confirmedRef  = useRef(false);
+  const confirmedRef     = useRef(false);
 
   useEffect(() => {
     // React Strict Mode 이중 실행 방지
@@ -52,7 +54,11 @@ export default function TossPaymentSuccessPage() {
     apiPost('/api/payment/toss/confirm', {
       paymentKey, orderId, amount, tier, billingCycle,
     })
-      .then(() => setStatus('success'))
+      .then(async () => {
+        // JWT planTier를 즉시 DB 최신값으로 갱신 (메뉴 잠금 해제)
+        await updateSession();
+        setStatus('success');
+      })
       .catch((e) => {
         setStatus('error');
         setErrMsg(
@@ -61,12 +67,12 @@ export default function TossPaymentSuccessPage() {
           : '결제 확인 중 오류가 발생했습니다.'
         );
       });
-  }, [searchParams]);
+  }, [searchParams, updateSession]);
 
   /* ─── 로딩 ─── */
   if (status === 'loading') {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#040e1c] via-[#051225] to-[#040e1c] flex items-center justify-center px-4">
+      <div className="h-full bg-gradient-to-b from-[#040e1c] via-[#051225] to-[#040e1c] flex items-center justify-center px-4">
         <div className="text-center space-y-4">
           <Loader2 className="w-12 h-12 text-cyan-400 animate-spin mx-auto" />
           <p className="text-white font-semibold text-lg">결제를 확인하는 중입니다...</p>
@@ -79,7 +85,7 @@ export default function TossPaymentSuccessPage() {
   /* ─── 오류 ─── */
   if (status === 'error') {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#040e1c] via-[#051225] to-[#040e1c] flex items-center justify-center px-4">
+      <div className="h-full bg-gradient-to-b from-[#040e1c] via-[#051225] to-[#040e1c] flex items-center justify-center px-4">
         <div className="max-w-lg w-full">
           <div className="bg-slate-900 border border-red-500/30 rounded-2xl p-8 text-center shadow-xl">
             <div className="flex justify-center mb-6">
@@ -127,7 +133,7 @@ export default function TossPaymentSuccessPage() {
 
   /* ─── 성공 ─── */
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#040e1c] via-[#051225] to-[#040e1c] flex items-center justify-center px-4">
+    <div className="h-full bg-gradient-to-b from-[#040e1c] via-[#051225] to-[#040e1c] flex items-center justify-center px-4">
       <div className="max-w-lg w-full">
         <div className="bg-slate-900 border border-emerald-500/30 rounded-2xl p-8 md:p-10 text-center shadow-xl">
 

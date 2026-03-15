@@ -7,6 +7,7 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import { prisma } from '@/lib/db/prisma';
 import bcrypt from 'bcryptjs';
+import { notifyUserLogin } from '@/lib/services/notification.service';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -51,10 +52,11 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error('Missing email or password');
+          throw new Error('이메일 또는 비밀번호를 입력해주세요');
         }
 
         try {
+          // 기본 필드만 조회 (loginAttempts 등은 DB 마이그레이션 여부와 무관하게 처리)
           const user = await prisma.user.findUnique({
             where: { email: credentials.email },
             select: {
@@ -65,25 +67,29 @@ export const authOptions: NextAuthOptions = {
               tenantId: true,
               role: true,
               isActive: true,
-              loginAttempts: true,
-              lockedUntil: true,
             },
           });
 
           if (!user) {
-            throw new Error('User not found');
+            throw new Error('사용자를 찾을 수 없습니다');
           }
 
           if (!user.passwordHash || user.passwordHash === 'OAUTH_USER') {
-            throw new Error('OAuth-only account');
+            throw new Error('소셜 로그인 전용 계정입니다');
           }
 
-          if (user.lockedUntil && new Date() < user.lockedUntil) {
-            throw new Error('Account is locked. Try again later.');
+          // 계정 잠금 확인 (컬럼 존재 시)
+          const userExt = await (prisma as any).user.findUnique({
+            where: { id: user.id },
+            select: { loginAttempts: true, lockedUntil: true },
+          }).catch(() => null);
+
+          if (userExt?.lockedUntil && new Date() < new Date(userExt.lockedUntil)) {
+            throw new Error('로그인 시도 초과로 계정이 잠겼습니다. 잠시 후 다시 시도해주세요.');
           }
 
           if (!user.isActive) {
-            throw new Error('User account is inactive');
+            throw new Error('비활성화된 계정입니다');
           }
 
           const passwordValid = await bcrypt.compare(
@@ -91,40 +97,82 @@ export const authOptions: NextAuthOptions = {
             user.passwordHash
           );
 
-          if (!passwordValid) {
-            const newAttempts = user.loginAttempts + 1;
-            const maxAttempts = 5;
+          const loginIp = (req?.headers?.['x-forwarded-for'] as string) ?? 'unknown';
+          const userAgent = (req?.headers?.['user-agent'] as string) ?? undefined;
 
-            if (newAttempts >= maxAttempts) {
-              await prisma.user.update({
-                where: { id: user.id },
+          // loginHistory 모델 존재 여부 사전 확인 (prisma generate 미실행 환경 대응)
+          const hasLoginHistory = typeof (prisma as any).loginHistory?.create === 'function';
+
+          if (!passwordValid) {
+            const currentAttempts = userExt?.loginAttempts ?? 0;
+            const newAttempts = currentAttempts + 1;
+            const maxAttempts = 5;
+            const locked = newAttempts >= maxAttempts;
+
+            // loginAttempts 업데이트 (컬럼 없으면 무시)
+            (prisma as any).user.update({
+              where: { id: user.id },
+              data: {
+                loginAttempts: newAttempts,
+                ...(locked ? { lockedUntil: new Date(Date.now() + 30 * 60 * 1000) } : {}),
+              },
+            }).catch(() => {});
+
+            // 실패 이력 기록 (모델 존재 시에만)
+            if (hasLoginHistory) {
+              (prisma as any).loginHistory.create({
                 data: {
-                  loginAttempts: newAttempts,
-                  lockedUntil: new Date(Date.now() + 30 * 60 * 1000),
+                  userId: user.id,
+                  tenantId: user.tenantId,
+                  ipAddress: loginIp !== 'unknown' ? loginIp : null,
+                  userAgent,
+                  provider: 'credentials',
+                  success: false,
+                  failReason: locked ? '계정 잠금 (5회 초과)' : '비밀번호 불일치',
                 },
-              });
-              throw new Error(
-                'Too many failed login attempts. Account locked for 30 minutes.'
-              );
+              }).catch(() => {});
             }
 
-            await prisma.user.update({
-              where: { id: user.id },
-              data: { loginAttempts: newAttempts },
-            });
-
-            throw new Error('Invalid password');
+            throw new Error(
+              locked
+                ? '로그인 시도 횟수 초과로 계정이 30분간 잠겼습니다.'
+                : '비밀번호가 올바르지 않습니다'
+            );
           }
 
-          await prisma.user.update({
+          // 성공 시 loginAttempts 초기화 (컬럼 없으면 무시)
+          (prisma as any).user.update({
             where: { id: user.id },
             data: {
               loginAttempts: 0,
               lockedUntil: null,
               lastLoginAt: new Date(),
-              lastLoginIp: (req?.headers?.['x-forwarded-for'] as string) ?? 'unknown',
+              lastLoginIp: loginIp !== 'unknown' ? loginIp : null,
             },
-          });
+          }).catch(() => {});
+
+          // 성공 이력 기록 (모델 존재 시에만)
+          if (hasLoginHistory) {
+            (prisma as any).loginHistory.create({
+              data: {
+                userId: user.id,
+                tenantId: user.tenantId,
+                ipAddress: loginIp !== 'unknown' ? loginIp : null,
+                userAgent,
+                provider: 'credentials',
+                success: true,
+              },
+            }).catch(() => {});
+          }
+
+          // 로그인 카카오 알림 (fire-and-forget)
+          notifyUserLogin({
+            userId: user.id,
+            userName: user.name ?? user.email,
+            loginTime: new Date(),
+            ipAddress: loginIp !== 'unknown' ? loginIp : undefined,
+            provider: 'credentials',
+          }).catch((e) => console.warn('[인증] 로그인 알림 발송 실패:', e));
 
           return {
             id: user.id,
@@ -134,7 +182,7 @@ export const authOptions: NextAuthOptions = {
             role: user.role,
           };
         } catch (error) {
-          console.error('[Auth] Login error:', error instanceof Error ? error.message : error);
+          console.error('[인증] 로그인 오류:', error instanceof Error ? error.message : error);
           throw error;
         }
       },
@@ -187,6 +235,23 @@ export const authOptions: NextAuthOptions = {
                 passwordHash: true,
               },
             });
+
+            // Trial 구독 자동 생성 (plan_trial이 DB에 존재하는 경우)
+            const trialPlan = await prisma.plan.findUnique({ where: { id: 'plan_trial' }, select: { id: true } });
+            if (trialPlan) {
+              const trialEnd = new Date();
+              trialEnd.setDate(trialEnd.getDate() + 30);
+              await prisma.subscription.create({
+                data: {
+                  tenantId: tenant.id,
+                  planId: 'plan_trial',
+                  status: 'ACTIVE',
+                  billingCycle: 'monthly',
+                  startDate: new Date(),
+                  endDate: trialEnd,
+                },
+              });
+            }
           } else {
             await prisma.user.update({
               where: { id: dbUser.id },
@@ -203,9 +268,29 @@ export const authOptions: NextAuthOptions = {
           (user as any).tenantId = dbUser.tenantId;
           (user as any).role = dbUser.role;
 
+          // 소셜 로그인 이력 기록 (모델 존재 시에만)
+          if (typeof (prisma as any).loginHistory?.create === 'function') {
+            (prisma as any).loginHistory.create({
+              data: {
+                userId: dbUser.id,
+                tenantId: dbUser.tenantId,
+                provider: account.provider,
+                success: true,
+              },
+            }).catch(() => {});
+          }
+
+          // 소셜 로그인 카카오 알림 (fire-and-forget)
+          notifyUserLogin({
+            userId: dbUser.id,
+            userName: user.name ?? email,
+            loginTime: new Date(),
+            provider: account.provider,
+          }).catch((e) => console.warn('[인증] 소셜 로그인 알림 발송 실패:', e));
+
           return true;
         } catch (error) {
-          console.error(`[Auth] ${account.provider} OAuth error:`, error);
+          console.error(`[인증] ${account.provider} OAuth 오류:`, error);
           return false;
         }
       }
@@ -214,42 +299,48 @@ export const authOptions: NextAuthOptions = {
     },
 
     async jwt({ token, user, account }) {
+      // ── 최초 로그인 시: 기본 사용자 정보 세팅 ──────────────────
       if (user) {
         token.id = user.id;
         token.tenantId = (user as any).tenantId;
         token.role = (user as any).role;
         token.email = user.email || '';
         token.name = user.name || '';
-
-        // 구독 플랜 apiRateLimit + 온보딩 완료 여부를 JWT에 포함
-        const tid = (user as any).tenantId as string | undefined;
-        if (tid) {
-          try {
-            const [sub, tenant] = await Promise.all([
-              prisma.subscription.findFirst({
-                where: { tenantId: tid, status: { in: ['ACTIVE', 'EXPIRE_SOON'] } },
-                select: { plan: { select: { apiRateLimit: true, tier: true } } },
-                orderBy: { startDate: 'desc' },
-              }),
-              prisma.tenant.findUnique({
-                where: { id: tid },
-                select: { onboardingCompletedAt: true },
-              }),
-            ]);
-            token.apiRateLimit = sub?.plan.apiRateLimit ?? 1000;
-            token.onboardingCompleted = !!tenant?.onboardingCompletedAt;
-            token.planTier = (sub?.plan.tier ?? 'trial').toLowerCase();
-          } catch {
-            token.apiRateLimit = 1000;
-            token.onboardingCompleted = false;
-            token.planTier = 'trial';
-          }
-        }
       }
 
       if (account) {
         token.accessToken = account.access_token;
         token.provider = account.provider;
+      }
+
+      // ── 매 JWT 갱신마다 planTier + onboardingCompleted DB 재조회 ──
+      // update() 호출 또는 updateAge(1h) 도달 시마다 실행됨.
+      // 결제/플랜 변경 후 update()를 호출하면 즉시 최신 값 반영.
+      if (token.tenantId) {
+        try {
+          const [sub, tenant] = await Promise.all([
+            prisma.subscription.findFirst({
+              where: {
+                tenantId: token.tenantId as string,
+                status: { in: ['ACTIVE', 'EXPIRE_SOON'] },
+              },
+              select: { plan: { select: { apiRateLimit: true, tier: true } } },
+              orderBy: { startDate: 'desc' },
+            }),
+            prisma.tenant.findUnique({
+              where: { id: token.tenantId as string },
+              select: { onboardingCompletedAt: true },
+            }),
+          ]);
+          token.planTier = (sub?.plan.tier ?? 'trial').toLowerCase();
+          token.apiRateLimit = sub?.plan.apiRateLimit ?? 1000;
+          token.onboardingCompleted = !!tenant?.onboardingCompletedAt;
+        } catch {
+          // DB 오류 시 기존 값 유지 (초기값 폴백)
+          if (token.planTier === undefined) token.planTier = 'trial';
+          if (token.apiRateLimit === undefined) token.apiRateLimit = 1000;
+          if (token.onboardingCompleted === undefined) token.onboardingCompleted = false;
+        }
       }
 
       return token;

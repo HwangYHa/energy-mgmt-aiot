@@ -16,6 +16,9 @@ import { NextRequest } from 'next/server';
 import { verifyAuth } from '@/lib/auth/verify';
 import { prisma } from '@/lib/db/prisma';
 import { successResponse, unauthorizedResponse, serverErrorResponse } from '@/lib/api/response';
+import { getEnergySettings } from '@/lib/services/system-settings.service';
+
+export const dynamic = 'force-dynamic';
 
 interface DashboardStats {
   kpis: {
@@ -53,6 +56,10 @@ interface DashboardStats {
     online: number;
     types: Array<{ type: string; count: number }>;
   };
+  topology: {
+    sites: Array<{ id: string; name: string; siteType: string }>;
+    gateways: Array<{ id: string; name: string; status: string }>;
+  };
   dataSource: 'db' | 'simulation';
 }
 
@@ -62,19 +69,7 @@ const weekdayNames = ['월', '화', '수', '목', '금', '토', '일'];
 // MySQL DAYOFWEEK 인덱스 매핑: d=0(월)→2, d=1(화)→3, ..., d=5(토)→7, d=6(일)→1
 const DOW_FOR_INDEX = [2, 3, 4, 5, 6, 7, 1];
 
-// 시스템 설정에서 전기요금 조회
-async function getEnergySettings(tenantId: string) {
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { settings: true },
-  });
-  const settings = (tenant?.settings as Record<string, Record<string, number>>) || {};
-  return {
-    electricityRate: settings?.energy?.electricityRate || 120,
-    carbonFactor: settings?.energy?.carbonFactor || 0.4567,
-    targetReduction: settings?.energy?.targetReduction || 10,
-  };
-}
+// 에너지 설정은 system-settings.service (캐시 60초)에서 조회
 
 // Raw 쿼리 결과 행 타입 (MySQL: 정수 집계 → bigint, Decimal 집계 → string)
 interface HourlyRow {
@@ -132,6 +127,8 @@ export async function GET(request: NextRequest) {
       energySettings,
       drParticipation,
       emissionFactorRow,
+      siteList,
+      gatewayList,
     ] = await Promise.all([
       prisma.site.count({ where: { tenantId, deletedAt: null, isActive: true } }),
       prisma.device.count({ where: { tenantId, deletedAt: null, ...(siteId && { siteId }) } }),
@@ -167,6 +164,20 @@ export async function GET(request: NextRequest) {
         },
         orderBy: { year: 'desc' },
         select: { factor: true },
+      }),
+      // 토폴로지: 사이트 목록 (최대 4개)
+      prisma.site.findMany({
+        where: { tenantId, deletedAt: null, isActive: true },
+        select: { id: true, name: true, siteType: true },
+        take: 4,
+        orderBy: { createdAt: 'asc' },
+      }),
+      // 토폴로지: 게이트웨이 목록 (최대 4개)
+      prisma.gateway.findMany({
+        where: { tenantId },
+        select: { id: true, name: true, status: true },
+        take: 4,
+        orderBy: { createdAt: 'asc' },
       }),
     ]);
 
@@ -425,14 +436,14 @@ export async function GET(request: NextRequest) {
     // 신재생 에너지: 별도 데이터 모델 없음 → 빈 배열
     const renewableEnergy: DashboardStats['renewableEnergy'] = [];
 
-    // 피크 시간대
+    // 피크 시간대 (hourlyLoad 인덱스: 0→00시, 1→04시, 2→08시, 3→12시, 4→16시, 5→20시)
     const peakHourAnalysis = [
-      { name: '06-09', value: hourlyLoad[2]?.load || 180, avg: 150 },
-      { name: '09-12', value: hourlyLoad[3]?.load || 320, avg: 280 },
-      { name: '12-15', value: Math.round(((hourlyLoad[3]?.load || 0) + (hourlyLoad[4]?.load || 0)) / 2) || 280, avg: 260 },
-      { name: '15-18', value: hourlyLoad[4]?.load || 350, avg: 300 },
-      { name: '18-21', value: hourlyLoad[5]?.load || 290, avg: 250 },
-      { name: '21-24', value: Math.round((hourlyLoad[5]?.load || 0) * 0.6) || 150, avg: 120 },
+      { name: '00-04', value: hourlyLoad[0]?.load || 0,   avg: 80  },
+      { name: '04-08', value: hourlyLoad[1]?.load || 120, avg: 100 },
+      { name: '08-12', value: hourlyLoad[2]?.load || 280, avg: 250 },
+      { name: '12-16', value: hourlyLoad[3]?.load || 320, avg: 280 },
+      { name: '16-20', value: hourlyLoad[4]?.load || 350, avg: 300 },
+      { name: '20-24', value: hourlyLoad[5]?.load || 180, avg: 150 },
     ];
 
     const stats: DashboardStats = {
@@ -471,6 +482,10 @@ export async function GET(request: NextRequest) {
           type: s.sensorType,
           count: s._count.id,
         })),
+      },
+      topology: {
+        sites: siteList.map(s => ({ id: s.id, name: s.name, siteType: String(s.siteType) })),
+        gateways: gatewayList.map(g => ({ id: g.id, name: g.name ?? 'GW', status: String(g.status) })),
       },
       dataSource: hasRealData ? 'db' : 'simulation',
     };

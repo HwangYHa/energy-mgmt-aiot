@@ -223,6 +223,10 @@ export const PLAN_DISPLAY: Record<string, {
   description: string;
   monthlyPrice: number | null;
   yearlyPrice: number | null;
+  /** 초기 1회 설치(공사)비 — null = 별도 견적 */
+  installationFee: number | null;
+  /** 설치비에 포함된 내용 */
+  installationIncludes: string[];
   badge?: string;
   color: string;
 }> = {
@@ -231,6 +235,8 @@ export const PLAN_DISPLAY: Record<string, {
     description: '소규모 사업장을 위한 기본 에너지 관리',
     monthlyPrice: 0,
     yearlyPrice: 0,
+    installationFee: 0,
+    installationIncludes: ['소프트웨어 전용 (하드웨어 미포함)'],
     color: 'slate',
   },
   basic: {
@@ -238,6 +244,12 @@ export const PLAN_DISPLAY: Record<string, {
     description: '성장하는 기업을 위한 확장된 기능',
     monthlyPrice: 99000,
     yearlyPrice: 990000,
+    installationFee: 500000,
+    installationIncludes: [
+      '원격 설치 지원 (4시간)',
+      '게이트웨이 1대 설정',
+      '센서 최대 5개 등록',
+    ],
     color: 'blue',
   },
   pro: {
@@ -245,6 +257,13 @@ export const PLAN_DISPLAY: Record<string, {
     description: 'AI 기반 고급 에너지 최적화',
     monthlyPrice: 299000,
     yearlyPrice: 2990000,
+    installationFee: 1500000,
+    installationIncludes: [
+      '현장 방문 설치 (1일)',
+      '게이트웨이 + 센서 커미셔닝',
+      'EMS 대시보드 커스터마이징',
+      '사용자 교육 (2시간)',
+    ],
     badge: '인기',
     color: 'cyan',
   },
@@ -253,6 +272,8 @@ export const PLAN_DISPLAY: Record<string, {
     description: '대규모 조직을 위한 맞춤형 솔루션',
     monthlyPrice: null,
     yearlyPrice: null,
+    installationFee: null,
+    installationIncludes: ['전담 PM 배정', '멀티 사이트 통합 설치', '맞춤형 시스템 연동 (PLC/SCADA)', '운영자 교육 프로그램'],
     color: 'purple',
   },
 };

@@ -78,7 +78,7 @@ export default function ViewerDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#051225]">
+    <div className="h-full bg-[#051225]">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-slate-800/80 backdrop-blur border-b border-slate-700/50 px-6 py-4">
         <div className="max-w-7xl mx-auto">

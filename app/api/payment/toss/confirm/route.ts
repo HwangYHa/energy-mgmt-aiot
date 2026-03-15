@@ -13,6 +13,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/session';
 import { TossService } from '@/lib/services/toss.service';
 import { prisma } from '@/lib/db/prisma';
+import { invalidateTenantPermissionCache } from '@/lib/auth/permission-engine';
 import { SubscriptionStatus, PaymentStatus, BillingCycle, AuditResult, PlanTier } from '@prisma/client';
 import { z } from 'zod';
 
@@ -133,6 +134,11 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    // 결제 완료 후 권한 캐시 즉시 무효화 (플랜 업그레이드 즉시 반영)
+    invalidateTenantPermissionCache(tenantId).catch(err =>
+      console.error('[TossConfirm] 캐시 무효화 실패:', err)
+    );
 
     return NextResponse.json({ success: true, subscription });
   } catch (error) {

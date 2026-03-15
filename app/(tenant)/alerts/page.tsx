@@ -135,7 +135,7 @@ export default function AlertsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6">
+    <div className="h-full bg-[#051225] text-white p-4 md:p-6">
       {/* 에러 배너 */}
       {error && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 flex items-center justify-between">

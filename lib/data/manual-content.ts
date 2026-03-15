@@ -45,8 +45,8 @@ export interface ManualData {
 }
 
 export const MANUAL_DATA: ManualData = {
-  version: '2.0',
-  updatedAt: '2026-02-20',
+  version: '2.1',
+  updatedAt: '2026-03-09',
   chapters: [
     // ──────────────────────────────────────────────
     // 1. 시작하기
@@ -614,19 +614,85 @@ export const MANUAL_DATA: ManualData = {
             {
               type: 'list',
               items: [
-                '온실가스 명세서 (Scope 1/2/3)',
+                '온실가스 명세서 (Scope 1/2/3) — GHG Protocol, K-MRV 기준',
+                'ESG 보고서 — TCFD, EU CSRD(ESRS E1), US SEC Climate, ISSB(IFRS S2), CDP',
                 'RE100 진행 현황 리포트',
                 '에너지관리공단 제출용 에너지사용 현황',
-                'ISO 14064 감사 대응 자료',
+                'ISO 14064 / K-ETS 감사 대응 자료',
               ],
             },
             {
               type: 'steps',
               items: [
                 '리포트 종류와 기간을 선택합니다.',
-                '출력 형식(PDF / Excel)을 선택합니다.',
+                '출력 형식(PDF / Excel / JSON)을 선택합니다.',
                 '"생성" 버튼 클릭 후 완료되면 자동 다운로드됩니다.',
+                'ESG 보고서는 승인 워크플로우(초안→검토→승인→발행) 후 발행됩니다.',
               ],
+            },
+            {
+              type: 'tip',
+              text: 'ESG 보고서는 SHA-256 무결성 서명이 포함되어 Big4 감사 대응이 가능합니다. 보고서 발행 후 내용 변경이 불가합니다.',
+            },
+          ],
+        },
+        {
+          id: 'regulatory-sandbox',
+          title: '규제 샌드박스',
+          description: '신기술·신서비스 규제 특례 신청 및 심사 현황 관리 방법입니다.',
+          body: [
+            {
+              type: 'p',
+              text: '관리 > 규제 샌드박스에서 신기술·에너지 서비스의 규제 특례를 신청하고 심사 현황을 추적합니다.',
+            },
+            {
+              type: 'list',
+              items: [
+                '신청 가능 유형: P2P 전력 거래, 수요반응(DR) 자동화, RE100 PPA 중개, K-ETS 탄소 토큰화, 신규 EMS 서비스',
+                '신청 상태: 접수(Pending) → 검토중(Reviewing) → 승인(Approved) / 반려(Rejected)',
+                '승인 후 특례 만료일 관리 — 만료 30일 전 알림 자동 발송',
+                '심사 노트·조건·연락처 일괄 관리',
+              ],
+            },
+            {
+              type: 'steps',
+              items: [
+                '규제 샌드박스 > "신청하기" 버튼을 클릭합니다.',
+                '규제 유형, 서비스 제목, 특례 범위(관련 법령), 신청자 정보를 입력합니다.',
+                '제출 후 "접수" 상태로 등록됩니다.',
+                '슈퍼 관리자가 검토 후 승인/반려 및 조건을 설정합니다.',
+              ],
+            },
+            {
+              type: 'warn',
+              text: '승인된 샌드박스 특례는 지정된 만료일 이전에 연장 신청을 완료해야 합니다. 만료 후 서비스 중단 위험이 있습니다.',
+            },
+          ],
+        },
+        {
+          id: 'esg-report',
+          title: 'ESG 보고서 시스템',
+          description: 'TCFD, EU CSRD, US SEC, ISSB 등 글로벌 ESG 기준 보고서 생성 방법입니다.',
+          body: [
+            {
+              type: 'p',
+              text: '탄소이음 ESG 보고서 시스템은 주요 글로벌 ESG 규제 기준에 맞는 보고서를 자동으로 생성합니다.',
+            },
+            {
+              type: 'roles',
+              items: [
+                { role: 'GHG Protocol', desc: 'Scope 1/2/3 온실가스 인벤토리 기준 (글로벌 표준)' },
+                { role: 'TCFD', desc: '기후 관련 재무 정보공개 태스크포스 — 지배구조·전략·위험·지표 4개 필라' },
+                { role: 'EU CSRD', desc: 'ESRS E1 — 유럽 기업지속가능성 보고 지침 (2024년 이후 EU 법인 의무)' },
+                { role: 'US SEC', desc: '미국 SEC 기후공시 규칙 (2024) — Scope 1/2 의무, Scope 3 조건부' },
+                { role: 'ISSB', desc: 'IFRS S2 — 국제 지속가능성 기준위원회 (한국 적용 추진 중)' },
+                { role: 'CDP', desc: '탄소정보공개프로젝트 — 투자자·공급망 기후 정보 제출' },
+                { role: 'K-MRV', desc: '한국 온실가스 명세서 (환경부, 연간 제출 의무)' },
+              ],
+            },
+            {
+              type: 'tip',
+              text: '보고서는 초안(Draft) → 검토(In Review) → 승인(Approved) → 발행(Published) 단계로 관리됩니다. 발행 후 SHA-256 무결성 해시가 생성되어 변조 불가 상태가 됩니다.',
             },
           ],
         },

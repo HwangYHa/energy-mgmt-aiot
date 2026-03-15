@@ -283,7 +283,37 @@ function LoginPageContent() {
           </div>
         </div>
 
-        <div className="mt-8 text-center">
+        {/* 데모 체험 */}
+        <div className="mt-6">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-white/10" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="px-3 bg-dark-card text-gray-500">데모 체험</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setEmail('demo@carbonieum.com');
+              setPassword('Demo1234!');
+              setError('');
+            }}
+            disabled={loading || socialLoading !== null}
+            className="mt-4 w-full py-2.5 px-4 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-400 text-sm font-medium hover:bg-amber-500/20 hover:border-amber-500/60 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            데모 계정으로 체험하기
+          </button>
+          <p className="mt-2 text-center text-[11px] text-gray-600">
+            demo@carbonieum.com · 모든 기능 체험 가능 (Enterprise 플랜)
+          </p>
+        </div>
+
+        <div className="mt-6 text-center">
           <p className="text-sm text-gray-400">
             계정이 없으신가요?{' '}
             <Link

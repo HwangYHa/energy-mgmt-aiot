@@ -1,0 +1,73 @@
+# ============================================================
+# Stage 1: deps — 의존성 설치 (캐시 레이어 최적화)
+# ============================================================
+FROM node:22-alpine AS deps
+RUN apk add --no-cache libc6-compat openssl
+
+WORKDIR /app
+
+# pnpm 활성화
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# ============================================================
+# Stage 2: builder — Next.js 빌드
+# ============================================================
+FROM node:22-alpine AS builder
+RUN apk add --no-cache libc6-compat openssl
+
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Prisma Client 생성
+RUN npx prisma generate
+
+# 환경변수 (빌드 시점 — 런타임 비밀은 포함하지 않음)
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+
+RUN pnpm build
+
+# ============================================================
+# Stage 3: runner — 최소 런타임 이미지
+# ============================================================
+FROM node:22-alpine AS runner
+RUN apk add --no-cache libc6-compat openssl curl
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# 전용 시스템 사용자 (비-root 실행)
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# 필수 파일만 복사
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# 한국어 PDF 폰트 (Linux 프로덕션)
+RUN mkdir -p ./public/fonts
+# COPY --from=builder /app/public/fonts/NanumGothic.ttf ./public/fonts/
+
+USER nextjs
+
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# 헬스체크
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
+
+CMD ["node", "server.js"]

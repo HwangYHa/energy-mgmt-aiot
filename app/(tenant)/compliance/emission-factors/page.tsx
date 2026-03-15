@@ -71,7 +71,7 @@ export default function EmissionFactorsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 p-4 md:p-6">
+    <div className="h-full bg-slate-950 p-4 md:p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -202,7 +202,7 @@ export default function EmissionFactorsPage() {
 
 function CreateFactorModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [form, setForm] = useState({
-    name: '', code: '', category: 'electricity', sourceType: '',
+    name: '', category: 'electricity', sourceType: '',
     factor: '', unit: 'tCO2eq/MWh', inputUnit: 'kWh',
     source: '', year: new Date().getFullYear(), region: 'KR',
     isDefault: false, validFrom: new Date().toISOString().split('T')[0],
@@ -236,15 +236,9 @@ function CreateFactorModal({ onClose, onCreated }: { onClose: () => void; onCrea
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> {error}</div>}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm text-slate-300 block mb-1">계수명 *</label>
-              <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" required />
-            </div>
-            <div>
-              <label className="text-sm text-slate-300 block mb-1">코드 *</label>
-              <input type="text" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" required placeholder="예: EF_ELEC_KR" />
-            </div>
+          <div>
+            <label className="text-sm text-slate-300 block mb-1">계수명 *</label>
+            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm" required />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

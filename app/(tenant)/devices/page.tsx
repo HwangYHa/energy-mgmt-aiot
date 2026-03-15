@@ -179,7 +179,7 @@ function DevicesPageContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#051225] p-4 md:p-6">
+    <div className="h-full bg-[#051225] p-4 md:p-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div>
@@ -785,7 +785,7 @@ function DeviceCreateModal({
 // Loading fallback component
 function DevicesPageLoading() {
   return (
-    <div className="min-h-screen bg-[#051225] flex items-center justify-center">
+    <div className="h-full bg-[#051225] flex items-center justify-center">
       <div className="text-center">
         <div className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto" />
         <p className="mt-4 text-slate-400">Loading devices...</p>

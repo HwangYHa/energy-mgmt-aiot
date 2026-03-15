@@ -45,6 +45,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '연료 종류와 사용량을 올바르게 입력해주세요.' }, { status: 400 });
     }
 
+    // period 형식 검사 (YYYY-MM)
+    if (period !== undefined && period !== null) {
+      if (typeof period !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
+        return NextResponse.json({ error: 'period는 YYYY-MM 형식이어야 합니다 (예: 2026-03)' }, { status: 400 });
+      }
+    }
+
     const sourceType = rawSrc; // already normalized
 
     // 요인 확인 후 400으로 응답

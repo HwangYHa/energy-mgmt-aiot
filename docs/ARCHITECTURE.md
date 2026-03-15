@@ -1,314 +1,322 @@
-# 탄소중립 에너지 관리 솔루션 (EMS) 아키텍처 설계
+# 탄소이음 EMS AIoT — 프로덕션 아키텍처
 
-## 1. 구현 우선순위 (Implementation Priority)
-
-### 우선순위 결정 기준
-| 기준 | 설명 | 가중치 |
-|------|------|--------|
-| 데이터 의존성 | 다른 기능의 기반이 되는 데이터 | 30% |
-| 서비스 가치 | 핵심 비즈니스 가치 전달 | 25% |
-| 사용자 온보딩 | 첫 사용 경험에 필수 | 25% |
-| 운영 안정성 | 시스템 안정 운영에 필수 | 20% |
-
-### Phase 1: 기반 인프라 (Foundation) - Week 1-2
-**목표: 데이터 수집의 기반이 되는 핵심 관리 기능**
-
-| 순위 | 메뉴 | 근거 | 의존성 |
-|------|------|------|--------|
-| 1 | 사이트 관리 | 모든 데이터의 기준점, 테넌트 하위 조직 단위 | 없음 |
-| 2 | 설비 모니터링 | 실제 데이터 수집 대상, 사이트에 종속 | 사이트 |
-| 3 | 사용자 관리 | 접근 제어, 역할 기반 권한 | 사이트 |
-
-### Phase 2: 핵심 대시보드 (Core Dashboard) - Week 3-4
-**목표: 실시간 데이터 시각화 및 현황 파악**
-
-| 순위 | 메뉴 | 근거 | 의존성 |
-|------|------|------|--------|
-| 4 | 대시보드 개요 | KPI 한눈에 파악, 의사결정 지원 | 사이트, 설비 |
-| 5 | 실시간 모니터링 | 현재 상태 즉시 확인 | 설비 데이터 |
-| 6 | 사이트 조회 | 사이트별 상세 현황 | 사이트 |
-
-### Phase 3: 분석 및 인사이트 (Analytics) - Week 5-6
-**목표: 데이터 기반 의사결정 지원**
-
-| 순위 | 메뉴 | 근거 | 의존성 |
-|------|------|------|--------|
-| 7 | 에너지 분석 | 소비 패턴 파악, 절감 기회 발굴 | 측정 데이터 |
-| 8 | 리포트 | 정기 보고서 생성, 규제 대응 | 분석 데이터 |
-| 9 | AI 예측 | 수요 예측, 최적화 기반 | 히스토리 데이터 |
-
-### Phase 4: 제어 및 최적화 (Control) - Week 7-8
-**목표: 능동적 에너지 관리**
-
-| 순위 | 메뉴 | 근거 | 의존성 |
-|------|------|------|--------|
-| 10 | 수동 제어 | 운영자 직접 제어 | 설비, 권한 |
-| 11 | DR 참여 | 수요반응 이벤트 참여 | 제어 기능 |
-
-### Phase 5: 고급 기능 (Advanced) - Week 9-10
-**목표: 차별화된 고급 기능**
-
-| 순위 | 메뉴 | 근거 | 의존성 |
-|------|------|------|--------|
-| 12 | 디지털 트윈 | 3D 시각화, 시뮬레이션 | 전체 데이터 |
-| 13 | 알림 설정 | 사용자 맞춤 알림 | 알림 규칙 |
-| 14 | 구독 관리 | 과금, 플랜 관리 | 사용량 데이터 |
+> 멀티 테넌트 에너지 관리 SaaS 시스템 아키텍처 가이드
 
 ---
 
-## 2. 메뉴 구조 재설계 (Restructured Menu)
+## 1. 시스템 아키텍처 다이어그램
 
 ```
-[대시보드] - LayoutDashboard
-├── 개요 (/dashboard)                    # 핵심 KPI, 요약 정보
-├── 실시간 모니터링 (/monitoring)         # 실시간 데이터 스트림
-└── 디지털 트윈 (/digital-twin)          # 3D 시각화
+인터넷
+  │
+  ▼
+┌─────────────────────────────────────────────────────────┐
+│  CDN (Cloudflare / AWS CloudFront)                      │
+│  - 정적 파일 캐싱 (_next/static, images, fonts)          │
+│  - DDoS 방어 / WAF                                      │
+└─────────────────────┬───────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────┐
+│  Nginx 리버스 프록시 (443 SSL + 80→443 리다이렉트)        │
+│  - TLS 종료 (Let's Encrypt)                             │
+│  - 로드밸런싱 (Least Connection)                         │
+│  - Rate Limiting (Auth: 10rpm, API: 60rpm)              │
+│  - Brotli / Gzip 압축                                   │
+└──────────┬──────────────────────┬───────────────────────┘
+           │                      │
+     ┌─────▼──────┐        ┌──────▼─────┐
+     │  app1:3000 │        │  app2:3000 │   ← Next.js 15
+     │  (Node 22) │        │  (Node 22) │     App Router
+     └─────┬──────┘        └──────┬─────┘
+           └────────┬─────────────┘
+                    │
+         ┌──────────▼──────────┐
+         │   ai-engine:8001    │   ← FastAPI (Python 3.11)
+         │   이상감지/예측/최적화│
+         └──────────┬──────────┘
+                    │
+     ┌──────────────┴──────────────────┐
+     │                                 │
+┌────▼────┐  ┌──────────┐  ┌──────────▼──┐
+│ MySQL   │  │  Redis   │  │ Mosquitto   │
+│  8.0    │  │   7.x    │  │ MQTT 2.x    │
+│ (멀티   │  │ (캐시/   │  │ (IoT 실시간 │
+│  테넌트)│  │  세션)   │  │  데이터)    │
+└─────────┘  └──────────┘  └─────────────┘
+                                   │
+                         ┌─────────▼──────────┐
+                         │  IoT 게이트웨이      │
+                         │  (각 사이트 현장)   │
+                         │  → 센서 데이터      │
+                         │  → 제어 명령        │
+                         └────────────────────┘
 
-[사이트 & 설비] - Building2              # 메뉴명 변경 제안
-├── 사이트 목록 (/sites)                 # 사이트 CRUD
-├── 사이트 상세 (/sites/[id])            # 사이트 대시보드
-├── 설비 목록 (/devices)                 # 설비 CRUD
-└── 설비 상세 (/devices/[id])            # 설비 상세 + 실시간
-
-[제어] - Sliders
-├── 수동 제어 (/control/manual)          # 직접 제어
-├── DR 참여 (/control/dr)                # 수요반응
-└── 자동 최적화 (/control/optimization)  # AI 기반 자동화
-
-[분석 & 리포트] - BarChart3
-├── 에너지 분석 (/analytics/energy)      # 소비 분석
-├── 비용 분석 (/analytics/cost)          # 비용 최적화
-├── 탄소 분석 (/analytics/carbon)        # 탄소 배출
-├── AI 예측 (/analytics/forecast)        # 예측 분석
-└── 리포트 (/reports)                    # 보고서 생성
-
-[관리] - Settings
-├── 사용자 관리 (/admin/users)           # 사용자 CRUD
-├── 구독 관리 (/admin/subscription)      # 플랜/결제
-└── 알림 규칙 (/admin/alerts)            # 알림 설정
-
-[설정] - Cog
-├── 계정 설정 (/settings/account)        # 개인 설정
-├── 알림 설정 (/settings/notifications)  # 알림 채널
-└── 도움말 (/settings/help)              # 매뉴얼/FAQ
+모니터링 스택:
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│  Prometheus  │→ │   Grafana    │  │  Alertmanager│
+│  (메트릭 수집)│  │  (대시보드)  │  │  (알람 발송) │
+└──────────────┘  └──────────────┘  └──────────────┘
 ```
 
 ---
 
-## 3. 데이터베이스 설계 (Database Schema)
+## 2. 서버 스펙 (권장)
 
-### 핵심 도메인 모델
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Tenant    │────<│    Site     │────<│   Device    │
-│  (테넌트)   │     │  (사업장)   │     │   (설비)    │
-└─────────────┘     └─────────────┘     └─────────────┘
-       │                   │                   │
-       │                   │                   │
-       ▼                   ▼                   ▼
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│    User     │     │   Gateway   │     │   Metric    │
-│  (사용자)   │     │ (게이트웨이)│     │ (계측포인트)│
-└─────────────┘     └─────────────┘     └─────────────┘
-                                               │
-                                               ▼
-                                        ┌─────────────┐
-                                        │ Measurement │
-                                        │  (측정값)   │
-                                        └─────────────┘
-```
+### 소규모 (테넌트 ~50, 센서 ~500)
+| 용도 | 사양 | 수량 |
+|------|------|------|
+| 앱 서버 (Next.js + Nginx) | 4 vCPU / 8GB RAM / SSD 100GB | 1대 |
+| DB 서버 (MySQL) | 4 vCPU / 16GB RAM / SSD 200GB | 1대 |
+| AI 엔진 | 2 vCPU / 4GB RAM / SSD 50GB | 1대 |
 
-### 에너지/탄소 도메인
+### 중규모 (테넌트 ~500, 센서 ~5,000)
+| 용도 | 사양 | 수량 |
+|------|------|------|
+| Nginx (로드밸런서) | 2 vCPU / 4GB RAM | 1대 |
+| 앱 서버 (Next.js) | 4 vCPU / 8GB RAM | 2대 |
+| AI 엔진 | 4 vCPU / 8GB RAM | 1대 |
+| DB 서버 (MySQL Primary) | 8 vCPU / 32GB RAM / NVMe 500GB | 1대 |
+| DB 서버 (MySQL Replica) | 8 vCPU / 32GB RAM / NVMe 500GB | 1대 |
+| Redis | 2 vCPU / 8GB RAM | 1대 |
+| MQTT | 2 vCPU / 4GB RAM | 1대 |
+
+### 대규모 (테넌트 1,000+)
+- Kubernetes 클러스터 전환
+- HPA (Horizontal Pod Autoscaler) 적용
+- MySQL → AWS RDS Aurora (Multi-AZ)
+- Redis → ElastiCache Cluster Mode
+- MQTT → AWS IoT Core
+
+---
+
+## 3. 폴더 구조
+
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   DrEvent   │     │EmissionsData│     │   Report    │
-│ (DR 이벤트) │     │ (탄소배출)  │     │  (보고서)   │
-└─────────────┘     └─────────────┘     └─────────────┘
+energy-mgmt-aiot/
+├── app/                         # Next.js 15 App Router
+│   ├── (auth)/                  # 인증 페이지 (로그인, 회원가입)
+│   ├── (public)/                # 퍼블릭 페이지 (데모, 마케팅)
+│   ├── (tenant)/                # 인증 필요 앱 페이지
+│   │   ├── admin/               # 관리자 (메뉴/사용자/테넌트/보안)
+│   │   ├── analytics/           # 에너지/탄소/비용 분석
+│   │   ├── control/             # 수동/스케줄/DR/최적화 제어
+│   │   ├── dashboard/           # 대시보드
+│   │   ├── monitoring/          # 실시간 모니터링
+│   │   └── ...
+│   ├── api/                     # API Routes
+│   │   ├── auth/                # NextAuth + 커스텀 JWT
+│   │   ├── health/              # 헬스 체크
+│   │   ├── security/            # 보안 이벤트
+│   │   └── ...
+│   └── layout.tsx               # 루트 레이아웃 (JSON-LD, SEO)
+│
+├── lib/
+│   ├── auth/                    # 인증 (session.ts, verify.ts, permissions.ts)
+│   ├── db/                      # Prisma 클라이언트
+│   ├── domains/                 # DDD 도메인 레이어
+│   │   ├── carbon/              # 탄소 배출 (Big4 감사 대응)
+│   │   ├── carbon-trading/      # 탄소 거래 (VCM, 블록체인, XBRL)
+│   │   └── esg-report/          # ESG 보고서 (TCFD, CSRD, SEC)
+│   ├── services/                # 애플리케이션 서비스
+│   └── middleware/              # Plan Limit 등
+│
+├── components/                  # React 컴포넌트
+├── prisma/                      # Prisma 스키마 + 마이그레이션
+├── ai-engine/                   # FastAPI Python 서비스
+│
+├── infra/                       # 인프라 설정
+│   ├── mysql/                   # MySQL 설정 + 초기화 SQL
+│   ├── mosquitto/               # MQTT 브로커 설정
+│   ├── nginx/                   # Nginx 리버스 프록시
+│   ├── prometheus/              # 메트릭 수집
+│   └── grafana/                 # 대시보드 + 데이터소스
+│
+├── scripts/                     # 운영 스크립트
+│   ├── backup.sh                # MySQL 백업 (cron용)
+│   └── prisma-migrate-prod.sh   # 프로덕션 마이그레이션
+│
+├── .github/workflows/           # CI/CD
+│   ├── ci.yml                   # 타입체크 + 린트 + 테스트
+│   └── deploy.yml               # 프로덕션 배포
+│
+├── Dockerfile                   # Next.js 멀티스테이지 빌드
+├── docker-compose.yml           # 전체 스택 (개발/스테이징)
+└── docker-compose.prod.yml      # 프로덕션 오버라이드
 ```
 
 ---
 
-## 4. API 설계 원칙 (API Design)
+## 4. MQTT 토픽 설계
 
-### RESTful 엔드포인트 구조
 ```
-/api/v1/
-├── sites/                    # 사이트 관리
-│   ├── GET    /              # 목록 조회
-│   ├── POST   /              # 생성
-│   ├── GET    /:id           # 상세 조회
-│   ├── PUT    /:id           # 수정
-│   ├── DELETE /:id           # 삭제
-│   └── GET    /:id/dashboard # 사이트 대시보드
-│
-├── devices/                  # 설비 관리
-│   ├── GET    /              # 목록 조회
-│   ├── POST   /              # 생성
-│   ├── GET    /:id           # 상세 조회
-│   ├── PUT    /:id           # 수정
-│   ├── DELETE /:id           # 삭제
-│   ├── GET    /:id/metrics   # 계측 포인트
-│   └── GET    /:id/realtime  # 실시간 데이터
-│
-├── measurements/             # 측정 데이터
-│   ├── GET    /              # 조회 (시계열)
-│   └── POST   /              # 수집 (게이트웨이)
-│
-├── analytics/                # 분석
-│   ├── GET    /energy        # 에너지 분석
-│   ├── GET    /cost          # 비용 분석
-│   ├── GET    /carbon        # 탄소 분석
-│   └── GET    /forecast      # 예측
-│
-├── control/                  # 제어
-│   ├── POST   /commands      # 제어 명령
-│   ├── GET    /dr-events     # DR 이벤트
-│   └── POST   /dr-events/:id/participate  # DR 참여
-│
-└── admin/                    # 관리
-    ├── users/                # 사용자 관리
-    ├── subscriptions/        # 구독 관리
-    └── alerts/               # 알림 규칙
+ems/<tenantId>/<siteId>/<gatewayId>/<topic>
+
+데이터 발행 (게이트웨이 → 서버):
+  ems/{tenant}/{site}/{gw}/data/energy     # 에너지 측정값
+  ems/{tenant}/{site}/{gw}/data/sensors    # 센서 상태
+  ems/{tenant}/{site}/{gw}/status          # 게이트웨이 상태 (LWT)
+
+명령 수신 (서버 → 게이트웨이):
+  ems/{tenant}/{site}/{gw}/command/relay   # 릴레이 제어
+  ems/{tenant}/{site}/{gw}/command/config  # 설정 변경
+
+시스템:
+  $SYS/broker/clients/connected            # 연결 수 (모니터링)
+  $SYS/broker/messages/received           # 수신 메시지 수
 ```
 
-### 응답 표준 형식
-```typescript
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: Record<string, any>;
-  };
-  meta?: {
-    page?: number;
-    limit?: number;
-    total?: number;
-    timestamp: string;
-  };
+**데이터 형식 (JSON):**
+```json
+{
+  "ts": "2026-03-14T10:00:00.000Z",
+  "gatewayId": "gw_abc123",
+  "measurements": [
+    { "sensorId": "s001", "type": "active_power", "value": 1250.5, "unit": "W" },
+    { "sensorId": "s001", "type": "voltage", "value": 220.1, "unit": "V" }
+  ]
 }
 ```
 
 ---
 
-## 5. 프론트엔드 컴포넌트 구조 (Frontend Architecture)
+## 5. Prisma 마이그레이션 전략
 
-### 디렉토리 구조
-```
-components/
-├── common/                   # 공통 컴포넌트
-│   ├── DataTable/           # 테이블
-│   ├── Modal/               # 모달
-│   ├── Form/                # 폼 요소
-│   └── Charts/              # 차트 컴포넌트
-│
-├── dashboard/               # 대시보드 전용
-│   ├── DashboardPanel/
-│   ├── StatDisplay/
-│   ├── CircularGauge/
-│   └── ImageGauge/
-│
-├── sites/                   # 사이트 관련
-│   ├── SiteCard/
-│   ├── SiteForm/
-│   └── SiteMap/
-│
-├── devices/                 # 설비 관련
-│   ├── DeviceCard/
-│   ├── DeviceForm/
-│   ├── DeviceStatus/
-│   └── DeviceMetrics/
-│
-├── monitoring/              # 모니터링
-│   ├── RealtimeChart/
-│   ├── AlertBanner/
-│   └── StatusIndicator/
-│
-└── layout/                  # 레이아웃
-    ├── Header/
-    ├── Sidebar/
-    └── Breadcrumb/
+### 개발 환경
+```bash
+# 스키마 변경 후
+npx prisma migrate dev --name describe_change
+npx prisma generate
 ```
 
-### 상태 관리
-```typescript
-// 전역 상태 (Zustand 또는 Context)
-interface GlobalState {
-  tenant: Tenant | null;
-  user: User | null;
-  sites: Site[];
-  selectedSite: Site | null;
-  alerts: Alert[];
-  realtimeConnected: boolean;
-}
+### 프로덕션 배포
+```bash
+# 1. 백업 (필수)
+bash scripts/backup.sh
 
-// 페이지별 로컬 상태 (React Query)
-// - 서버 상태는 React Query로 관리
-// - 캐싱, 무효화, 리페칭 자동화
+# 2. 마이그레이션 배포 (reset 없음, 기존 데이터 보존)
+npx prisma migrate deploy
+
+# 3. 클라이언트 재생성
+npx prisma generate
+```
+
+### 위험한 마이그레이션 처리 (컬럼 삭제 등)
+1. 단계적 전개: Feature Flag으로 신 컬럼 활성화 → 구 컬럼 유지 → 검증 후 구 컬럼 삭제
+2. Expand-Contract 패턴 적용
+3. 롤백 SQL 사전 준비
+
+### Windows 개발 환경 주의사항
+```bash
+# EPERM: dev 서버 실행 중 prisma generate 실패 시
+# → 개발 서버 종료 후 실행
+taskkill /F /IM node.exe
+npx prisma generate
+# → 서버 재시작
 ```
 
 ---
 
-## 6. 실시간 데이터 아키텍처
+## 6. 스케일링 전략
 
-### WebSocket 연결 구조
-```
-클라이언트  ──WebSocket──>  API Server  ──>  Redis Pub/Sub
-                                │
-                                ▼
-                           Gateway
-                                │
-                                ▼
-                           Devices
+### 수평 확장 (Horizontal Scaling)
+```yaml
+# docker-compose.yml에서 인스턴스 수 조정
+docker compose up -d --scale app=4
 ```
 
-### 이벤트 타입
-```typescript
-enum RealtimeEventType {
-  MEASUREMENT = 'measurement',
-  DEVICE_STATUS = 'device_status',
-  ALERT = 'alert',
-  DR_EVENT = 'dr_event',
-  CONTROL_RESULT = 'control_result',
-}
-```
+### 데이터베이스 스케일링
+- Read Replica: 분석/리포트 쿼리 분산
+- Connection Pool: `DATABASE_URL` + `?connection_limit=10`
+- 파티셔닝: `measurement` 테이블 → 월별 파티션
+
+### MQTT 클러스터링
+- Mosquitto 브리지 설정으로 다중 브로커 연결
+- 또는 AWS IoT Core / HiveMQ 전환
+
+### Redis 확장
+- Cluster Mode: 데이터 샤딩
+- ElastiCache: 관리형 서비스 전환
 
 ---
 
-## 7. 보안 설계 (Security)
+## 7. 보안 체크리스트
 
-### 인증/인가
-- NextAuth.js + JWT
-- Role-based Access Control (RBAC)
-- Tenant 격리 (모든 쿼리에 tenantId 필터)
+### 네트워크
+- [ ] Nginx WAF 활성화 (ModSecurity 또는 Cloudflare)
+- [ ] 방화벽: 80/443만 퍼블릭 오픈, DB/Redis/MQTT는 내부망
+- [ ] MQTT TLS 적용 (8883 포트)
 
-### API 보안
-- Rate Limiting (플랜별 차등)
-- CORS 설정
-- Input Validation (Zod)
-- SQL Injection 방지 (Prisma)
+### 애플리케이션
+- [ ] NEXTAUTH_SECRET 32자 이상
+- [ ] CSRF 토큰 미들웨어 활성화
+- [ ] Rate Limiting (Auth: 10rpm, API: 60rpm)
+- [ ] Content-Security-Policy 헤더
+- [ ] IP 브루트포스 차단 (5회 실패 → 30분 잠금)
 
-### 데이터 보안
-- 민감 데이터 암호화
-- 감사 로그 (AuditLog)
-- 세션 관리
+### 데이터
+- [ ] 암호화: bcrypt (cost=12) 비밀번호 해싱
+- [ ] 암호화: TLS 전송 암호화
+- [ ] 암호화: 민감 정보 DB 컬럼 암호화 (선택)
+- [ ] 백업: 일 1회 + S3 업로드 + 30일 보존
+- [ ] 감사 로그: AuditLog 테이블 append-only
+
+### 운영
+- [ ] 시크릿 로테이션: 3~6개월 주기
+- [ ] 의존성 취약점 스캔: `pnpm audit`
+- [ ] 컨테이너 이미지 스캔: Trivy
 
 ---
 
-## 8. 확장성 고려사항
+## 8. 모니터링 대시보드 (Grafana)
 
-### 수평 확장
-- Stateless API 서버
-- Redis 세션 저장소
-- 데이터베이스 Read Replica
+**주요 메트릭:**
+| 패널 | 메트릭 | 임계값 |
+|------|--------|--------|
+| API 응답 시간 | p95 latency | > 1000ms → 알람 |
+| 에러율 | 5xx / 전체 | > 1% → 알람 |
+| DB 연결 수 | MySQL connections | > 150 → 알람 |
+| 메모리 사용 | Node.js heap | > 80% → 알람 |
+| CPU | 컨테이너 CPU | > 80% → 알람 |
+| MQTT 연결 | 게이트웨이 수 | < 예상값 → 알람 |
 
-### 시계열 데이터
-- 파티셔닝 (월별)
-- 데이터 보존 정책 (플랜별)
-- 집계 테이블 (hourly, daily, monthly)
+**대시보드 URL:** `http://your-server:3001`
+- 기본 계정: `admin` / `GRAFANA_PASSWORD` 환경변수
 
-### ESG/규제 확장
-- 보고서 템플릿 시스템
-- 규제 프레임워크 플러그인
-- 외부 시스템 연동 (API)
+---
+
+## 9. 배포 체크리스트
+
+### 최초 배포
+```bash
+# 1. .env.production 준비
+cp .env.example .env.production
+# → 모든 값 채우기
+
+# 2. 인프라 시작
+docker compose up -d mysql redis mqtt
+
+# 3. DB 초기화
+docker compose run --rm app1 npx prisma migrate deploy
+docker compose run --rm app1 npx prisma db seed
+
+# 4. 전체 스택 시작
+docker compose up -d
+
+# 5. 헬스 체크
+curl https://carboneum.kr/api/health
+```
+
+### 일반 업데이트
+```bash
+# GitHub Actions CD 자동 실행 (main 브랜치 push 시)
+git push origin main
+# → build-push → DB migration → Rolling restart → Health check
+```
+
+### 롤백
+```bash
+# 이전 이미지 태그로 되돌리기
+docker compose up -d --no-deps app1 app2
+# (docker-compose.override.yml에서 이미지 태그 이전 버전으로 변경)
+```

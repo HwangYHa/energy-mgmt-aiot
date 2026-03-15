@@ -20,7 +20,7 @@ export default function TossPaymentFailPage() {
   const isCanceled = CANCEL_CODES.includes(code);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#040e1c] via-[#051225] to-[#040e1c] flex items-center justify-center px-4">
+    <div className="h-full bg-gradient-to-b from-[#040e1c] via-[#051225] to-[#040e1c] flex items-center justify-center px-4">
       <div className="max-w-lg w-full">
         <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 md:p-10 text-center shadow-xl">
 

@@ -187,14 +187,7 @@ export async function GET(request: NextRequest) {
   // 1. 이 테넌트의 모든 사이트
   const sites = await prisma.site.findMany({
     where: { tenantId: auth.tenantId, isActive: true, deletedAt: null },
-    select: {
-      id: true,
-      name: true,
-      siteType: true,
-      city: true,
-      address: true,
-      peakPowerKw: true,
-    },
+    select: { id: true, name: true, siteType: true, city: true, address: true, peakPowerKw: true },
     orderBy: { name: 'asc' },
   });
 
@@ -319,6 +312,9 @@ export async function GET(request: NextRequest) {
       },
     };
   });
+
+  // 데이터 있는 사이트 우선 정렬 (TwinNode 많은 순 → 이름 순)
+  result.sort((a, b) => b.summary.totalNodes - a.summary.totalNodes || a.name.localeCompare(b.name, 'ko'));
 
   const summary = {
     totalSites: result.length,

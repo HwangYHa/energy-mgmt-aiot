@@ -91,7 +91,7 @@ export default function AlertRulesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6">
+    <div className="h-full bg-[#051225] text-white p-4 md:p-6">
       {/* 뒤로 가기 */}
       <Link
         href="/alerts"

@@ -8,7 +8,7 @@ export default function TenantNotFound() {
   const router = useRouter();
 
   return (
-    <div className="min-h-screen bg-[#051225] flex items-center justify-center p-4">
+    <div className="h-full bg-[#051225] flex items-center justify-center p-4">
       <div className="text-center space-y-6 max-w-md">
         <p className="text-8xl font-bold text-slate-700 leading-none">404</p>
         <div className="space-y-2">

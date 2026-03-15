@@ -76,6 +76,31 @@ export async function PUT(request: NextRequest) {
     },
   });
 
+  // 온보딩 완료 시 구독이 없으면 Trial 구독 자동 생성
+  if (complete) {
+    const existingSub = await prisma.subscription.findFirst({
+      where: { tenantId: auth.tenantId, status: { in: ['ACTIVE', 'EXPIRE_SOON'] } },
+      select: { id: true },
+    });
+    if (!existingSub) {
+      const trialPlan = await prisma.plan.findUnique({ where: { id: 'plan_trial' }, select: { id: true } });
+      if (trialPlan) {
+        const trialEnd = new Date();
+        trialEnd.setDate(trialEnd.getDate() + 30);
+        await prisma.subscription.create({
+          data: {
+            tenantId: auth.tenantId,
+            planId: 'plan_trial',
+            status: 'ACTIVE',
+            billingCycle: 'monthly',
+            startDate: new Date(),
+            endDate: trialEnd,
+          },
+        }).catch(() => null);
+      }
+    }
+  }
+
   await prisma.auditLog.create({
     data: {
       tenantId: auth.tenantId,

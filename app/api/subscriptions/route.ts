@@ -3,6 +3,7 @@ import { verifyAuth, requireRoleOrHigher } from '@/lib/auth/verify';
 import { UserRole } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { z } from 'zod';
+import { invalidateTenantPermissionCache } from '@/lib/auth/permission-engine';
 
 const subscriptionCreateSchema = z.object({
   planId: z.string().uuid(),
@@ -140,6 +141,11 @@ export async function POST(request: NextRequest) {
 
       return newSub;
     });
+
+    // 구독 생성 후 권한 캐시 무효화 (플랜 기능 즉시 반영)
+    invalidateTenantPermissionCache(auth.tenantId).catch(err =>
+      console.error('[Subscription] 캐시 무효화 실패:', err)
+    );
 
     return NextResponse.json(
       { success: true, data: subscription },

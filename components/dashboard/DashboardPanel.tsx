@@ -10,6 +10,8 @@ interface DashboardPanelProps {
   headerRight?: React.ReactNode;
   noPadding?: boolean;
   variant?: 'default' | 'frame' | 'glow';
+  /** 내부 콘텐츠가 패널 높이를 가득 채우도록 (flex-1 컨테이너에서 차트 사용 시) */
+  fill?: boolean;
 }
 
 export function DashboardPanel({
@@ -19,10 +21,11 @@ export function DashboardPanel({
   headerRight,
   noPadding = false,
   variant = 'default',
+  fill = false,
 }: DashboardPanelProps) {
   if (variant === 'frame') {
     return (
-      <div className={cn('relative group', className)}>
+      <div className={cn('relative group', fill && 'flex flex-col', className)}>
         {/* Background image - frame style */}
         <div className="absolute inset-0 pointer-events-none transition-opacity">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -35,9 +38,9 @@ export function DashboardPanel({
         {/* Subtle border glow on hover */}
         <div className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg border border-cyan-500/20" />
         {/* Content */}
-        <div className="relative z-10">
+        <div className={cn('relative z-10', fill && 'flex-1 flex flex-col min-h-0')}>
           {title && (
-            <div className="flex items-center justify-between px-4 md:px-5 pt-3 pb-1">
+            <div className="flex items-center justify-between px-4 md:px-5 pt-3 pb-1 flex-shrink-0">
               <h3 className="text-xs md:text-sm font-semibold text-cyan-400 uppercase tracking-wider flex items-center gap-2">
                 <span className="w-1 h-3 bg-cyan-500 rounded-full" />
                 {title}
@@ -45,7 +48,10 @@ export function DashboardPanel({
               {headerRight}
             </div>
           )}
-          <div className={cn(!noPadding && 'px-3 md:px-4 pb-3 pt-1')}>{children}</div>
+          <div className={cn(
+            fill && 'flex-1 min-h-0',
+            !noPadding && 'px-3 md:px-4 pb-3 pt-1'
+          )}>{children}</div>
         </div>
       </div>
     );

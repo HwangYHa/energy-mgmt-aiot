@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { verifyAuth } from '@/lib/auth/verify';
 import { requireFeature } from '@/lib/auth/subscription';
+import { generateSeqNo } from '@/lib/utils/sequence';
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,6 +54,9 @@ export async function POST(request: NextRequest) {
 
     const newQty = Math.max(0, credit.quantity - quantity);
 
+    // 소각 거래 코드 자동 채번: CR-YYYYMMDD-NNNN
+    const code = await generateSeqNo('CARBON_RETIRE');
+
     // ── 트랜잭션: credit 먼저 UPDATE 후 trade CREATE ──
     // credit을 절대 DELETE 하지 않음 → CarbonTrade FK 보존 (감사 추적)
     const [, trade] = await prisma.$transaction([
@@ -60,7 +64,7 @@ export async function POST(request: NextRequest) {
         where: { id: creditId },
         data: { quantity: newQty },
       }),
-      prisma.carbonTrade.create({
+      (prisma as any).carbonTrade.create({
         data: {
           tenantId: auth.tenantId,
           creditId,
@@ -69,6 +73,7 @@ export async function POST(request: NextRequest) {
           price: 0,
           totalAmount: 0,
           memo: memo ?? null,
+          code,
         },
       }),
     ]);

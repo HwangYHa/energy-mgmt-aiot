@@ -10,6 +10,8 @@ import { z } from 'zod';
 import { verifyAuth, requireRoleOrHigher } from '@/lib/auth/verify';
 import { prisma } from '@/lib/db/prisma';
 import { UserRole } from '@/lib/constants/roles';
+import { EmissionFactorService } from '@/lib/domains/carbon/services/emission-factor.service';
+import { generateSeqNo } from '@/lib/utils/sequence';
 import {
   successResponse,
   unauthorizedResponse,
@@ -20,8 +22,7 @@ import {
 } from '@/lib/api/response';
 
 const createFactorSchema = z.object({
-  name: z.string().min(1).max(200),
-  code: z.string().min(1).max(50),
+  code: z.string().max(50).optional(),
   category: z.string().min(1).max(50),
   sourceType: z.string().min(1).max(100),
   factor: z.number().positive(),
@@ -88,11 +89,12 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parsed.data;
+    const code = data.code || await generateSeqNo('EMISSION_FACTOR');
 
-    const factor = await prisma.emissionFactor.create({
-      data: {
-        tenantId: auth.tenantId,
-        code: data.code,
+    // EmissionFactorService: 생성 + Hash-chain 감사 로그 자동 기록
+    const factor = await EmissionFactorService.createVersion(
+      {
+        code,
         category: data.category,
         sourceType: data.sourceType,
         factor: data.factor,
@@ -101,14 +103,14 @@ export async function POST(request: NextRequest) {
         source: data.source,
         year: data.year,
         region: data.region,
-        version: '1.0.0',
-        isDefault: data.isDefault,
         validFrom: new Date(data.validFrom),
-        validTo: data.validTo ? new Date(data.validTo) : undefined,
+        validTo: data.validTo ? new Date(data.validTo) : null,
+        tenantId: auth.tenantId,
       },
-    });
+      auth.userId
+    );
 
-    return successResponse({ ...factor, factor: Number(factor.factor) }, { status: 201 });
+    return successResponse(factor, { status: 201 });
   } catch (error) {
     console.error('[API] 배출계수 등록 오류:', error);
     return serverErrorResponse();

@@ -35,15 +35,25 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const take = Math.min(parseInt(searchParams.get('take') || '10'), 50);
 
-    const reports = await prisma.report.findMany({
+    const reports = await prisma.regulationReport.findMany({
       where: { tenantId: auth.tenantId },
       orderBy: { createdAt: 'desc' },
       take,
       select: {
         id: true,
-        type: true,
+        reportType: true,
+        reportName: true,
         period: true,
+        status: true,
+        dueDate: true,
+        submittedDate: true,
+        approvedDate: true,
+        totalEmissions: true,
+        scope1: true,
+        scope2: true,
+        scope3: true,
         fileUrl: true,
+        pdfUrl: true,
         createdAt: true,
       },
     });

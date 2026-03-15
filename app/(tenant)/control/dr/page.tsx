@@ -108,7 +108,7 @@ export default function DRDashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#051225] text-white flex items-center justify-center">
+      <div className="h-full bg-[#051225] text-white flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-cyan-400" />
           <p className="text-slate-400">DR 이벤트 로딩 중...</p>
@@ -118,7 +118,7 @@ export default function DRDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6">
+    <div className="h-full bg-[#051225] text-white p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
 
         {/* Header */}

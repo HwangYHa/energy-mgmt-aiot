@@ -1,0 +1,80 @@
+# ============================================================
+# 프로덕션 오버라이드 — docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# ============================================================
+
+version: '3.9'
+
+services:
+  mysql:
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  redis:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  app1:
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1G
+        reservations:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
+    environment:
+      NODE_ENV: production
+
+  app2:
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1G
+        reservations:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
+    environment:
+      NODE_ENV: production
+
+  ai-engine:
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  nginx:
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
+      - /etc/letsencrypt:/etc/nginx/ssl:ro   # Let's Encrypt 인증서
+      - ./infra/nginx/logs:/var/log/nginx
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"

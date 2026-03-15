@@ -3,7 +3,7 @@
  */
 export default function MonitoringLoading() {
   return (
-    <div className="min-h-screen bg-slate-950 p-6 animate-pulse">
+    <div className="h-full bg-slate-950 p-6 animate-pulse">
       <div className="h-8 w-40 bg-slate-800 rounded mb-6" />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         {Array.from({ length: 3 }).map((_, i) => (

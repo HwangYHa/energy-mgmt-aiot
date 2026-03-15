@@ -25,7 +25,7 @@
 
 import { prisma } from '@/lib/db/prisma';
 import { sendNotificationEmail, SUPPORT_EMAIL } from '@/lib/services/email.service';
-import { sendKakao } from '@/lib/services/kakao.service';
+import { sendKakao, sendLoginAlert, type KakaoEventType } from '@/lib/services/kakao.service';
 
 // ─── 역할 계층 ──────────────────────────────────────────────────
 
@@ -94,7 +94,24 @@ interface NotifyRoleOpts {
   severity: 'info' | 'warning' | 'critical' | 'high' | 'medium' | 'low';
   message: string;
   excludeUserId?: string;
+  /** 카카오 이벤트 타입 (템플릿 자동 선택에 사용) */
+  kakaoEventType?: KakaoEventType;
 }
+
+/** 카테고리 → 카카오 이벤트 타입 기본 매핑 */
+const KAKAO_EVENT_MAP: Record<string, KakaoEventType> = {
+  anomaly:         'anomaly',
+  energy:          'power_warning',
+  dr_event:        'dr_event',
+  dr:              'dr_event',
+  gateway:         'gateway',
+  device:          'gateway',
+  subscription:    'subscription',
+  system:          'general',
+  security:        'security',
+  carbon:          'general',
+  cost:            'general',
+};
 
 interface LogEntry {
   ruleId: string;
@@ -226,12 +243,22 @@ export async function notifyByRole(opts: NotifyRoleOpts): Promise<void> {
         if (rule.smsEnabled && user.phone) {
           let status: 'sent' | 'failed' = 'sent';
           let errorMsg: string | null = null;
-          const kakaoText =
-            `[탄소이음] ${opts.ruleName}\n` +
-            opts.message.substring(0, 60) +
-            (opts.message.length > 60 ? '...' : '');
+          const kakaoEventType =
+            opts.kakaoEventType ??
+            KAKAO_EVENT_MAP[opts.category] ??
+            KAKAO_EVENT_MAP[alertCategory] ??
+            'general';
           try {
-            await sendKakao({ to: user.phone, message: kakaoText });
+            await sendKakao({
+              to:        user.phone,
+              eventType: kakaoEventType,
+              message:   opts.message,
+              variables: {
+                '#{alert_name}': opts.ruleName,
+                '#{message}':    opts.message.substring(0, 200),
+                '#{service}':    '탄소이음 EMS',
+              },
+            });
           } catch (err) {
             status = 'failed';
             errorMsg = err instanceof Error ? err.message : String(err);
@@ -256,10 +283,10 @@ export async function notifyByRole(opts: NotifyRoleOpts): Promise<void> {
     );
 
     console.info(
-      `[Notification] ${opts.ruleName} → ${users.length}명 처리 (tenantId: ${opts.tenantId})`
+      `[알림] "${opts.ruleName}" → ${users.length}명 발송 처리 완료 (테넌트: ${opts.tenantId})`
     );
   } catch (err) {
-    console.error('[Notification] notifyByRole 오류:', err instanceof Error ? err.message : err);
+    console.error('[알림] notifyByRole 오류:', err instanceof Error ? err.message : err);
   }
 }
 
@@ -353,9 +380,9 @@ export async function notifySupportStatusChanged(inquiry: {
       message,
       isTest:   false,
     });
-    console.info(`[Notification] 문의 상태 변경 → ${inquiry.email.substring(0, 3)}*** (${statusLabel})`);
+    console.info(`[알림] 문의 상태 변경 이메일 발송 → ${inquiry.email.substring(0, 3)}*** (${statusLabel})`);
   } catch (err) {
-    console.error('[Notification] 문의 상태 알림 오류:', err instanceof Error ? err.message : err);
+    console.error('[알림] 문의 상태 알림 오류:', err instanceof Error ? err.message : err);
   }
 }
 
@@ -404,16 +431,105 @@ export async function notifyAnomalyDetected(opts: {
     message,
   });
 
-  // critical 이상이면 관리자 메일에도 추가 발송
+  // Critical 이상이면 운영팀 메일에도 추가 발송
   if (opts.criticalCount > 0) {
     sendNotificationEmail({
       to:       SUPPORT_EMAIL,
-      ruleName: 'AI 에너지 이상 탐지 (Critical)',
+      ruleName: 'AI 에너지 이상 탐지 (위험)',
       category: 'anomaly',
       severity: 'critical',
       message:  `[테넌트: ${opts.tenantId}]\n` + message,
       isTest:   false,
     }).catch(() => null);
+  }
+}
+
+// ── 7. 로그인 보안 알림 ──────────────────────────────────────────
+
+/**
+ * 로그인 성공 시 해당 사용자 본인의 휴대폰으로 카카오 알림톡 발송.
+ * 사용자가 phone을 등록하지 않은 경우 발송 생략.
+ *
+ * session.ts signIn 콜백에서 fire-and-forget으로 호출.
+ */
+export async function notifyUserLogin(opts: {
+  userId: string;
+  userName: string;
+  loginTime: Date;
+  ipAddress?: string;
+  provider?: string;
+}): Promise<void> {
+  try {
+    const user = await prisma.user.findUnique({
+      where:  { id: opts.userId },
+      select: { phone: true },
+    });
+
+    if (!user?.phone) return; // 전화번호 미등록 시 발송 생략
+
+    await sendLoginAlert({
+      to:         user.phone,
+      userName:   opts.userName,
+      loginTime:  opts.loginTime,
+      ipAddress:  opts.ipAddress,
+      provider:   opts.provider,
+    });
+  } catch (err) {
+    // 로그인 알림 실패가 로그인 자체를 막지 않도록 처리
+    console.warn('[알림] 로그인 알림톡 발송 실패 (비크리티컬):', err instanceof Error ? err.message : err);
+  }
+}
+
+// ── 8. 역할/권한 변경 보안 알림 ─────────────────────────────────
+
+/**
+ * 사용자 역할 변경, 비밀번호 재설정 등 보안 이벤트 시 알림.
+ */
+export async function notifySecurityEvent(opts: {
+  tenantId: string;
+  targetUserId: string;
+  eventDescription: string;
+  performedByName?: string;
+}): Promise<void> {
+  try {
+    const user = await prisma.user.findUnique({
+      where:  { id: opts.targetUserId },
+      select: { phone: true, name: true, email: true },
+    });
+
+    if (!user) return;
+
+    const { sendSecurityAlert } = await import('@/lib/services/kakao.service');
+
+    // 카카오 알림 (전화번호 있을 때)
+    if (user.phone) {
+      await sendSecurityAlert({
+        to:               user.phone,
+        userName:         user.name ?? user.email,
+        eventDescription: opts.eventDescription,
+        eventTime:        new Date(),
+      }).catch((err) =>
+        console.warn('[알림] 보안 이벤트 알림톡 발송 실패:', err instanceof Error ? err.message : err)
+      );
+    }
+
+    // 보안 알림은 역할 제한 없이 해당 사용자에게만 발송
+    await notifyByRole({
+      tenantId:      opts.tenantId,
+      minRole:       'tenant_admin',
+      ruleName:      '보안 이벤트',
+      category:      'security',
+      severity:      'warning',
+      kakaoEventType: 'security',
+      message:
+        `보안 이벤트가 발생했습니다.\n\n` +
+        `• 대상: ${user.name ?? user.email}\n` +
+        `• 내용: ${opts.eventDescription}\n` +
+        `• 발생 시각: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}\n` +
+        (opts.performedByName ? `• 처리자: ${opts.performedByName}\n` : ''),
+    });
+  } catch (err) {
+    console.error('[알림] 보안 이벤트 알림 오류:', err instanceof Error ? err.message : err);
   }
 }
 

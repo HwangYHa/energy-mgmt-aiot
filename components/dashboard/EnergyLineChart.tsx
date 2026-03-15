@@ -28,7 +28,7 @@ interface LineConfig {
 interface EnergyLineChartProps {
   data: DataPoint[];
   lines: LineConfig[];
-  height?: number;
+  height?: number | string;
   showGrid?: boolean;
   showLegend?: boolean;
 }

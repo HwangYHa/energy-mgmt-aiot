@@ -21,6 +21,7 @@ import {
   serverErrorResponse,
   formatZodErrors,
 } from '@/lib/api/response';
+import { generateSeqNo } from '@/lib/utils/sequence';
 
 const createRuleSchema = z.object({
   name: z.string().min(1).max(200),
@@ -80,10 +81,14 @@ export async function POST(request: NextRequest) {
       return validationErrorResponse(formatZodErrors(parsed.error));
     }
 
-    const rule = await prisma.notificationRule.create({
+    // 알림 규칙 코드 자동 채번: NR-YYYYMMDD-NNNN
+    const code = await generateSeqNo('NOTIFICATION_RULE');
+
+    const rule = await (prisma as any).notificationRule.create({
       data: {
         tenantId: auth.tenantId,
         userId: auth.userId,
+        code,
         ...parsed.data,
       },
     });

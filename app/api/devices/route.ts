@@ -16,6 +16,8 @@ import { deviceCreateSchema, formatValidationError } from '@/lib/validation/sche
 import { z } from 'zod';
 import { successResponse, serverErrorResponse, unauthorizedResponse } from '@/lib/api/response';
 import { logActivity, MENU_CODES, ACTION_TYPES } from '@/lib/services/activity-log.service';
+import { generateSeqNo } from '@/lib/utils/sequence';
+import { getAllowedSiteIds } from '@/lib/auth/site-access';
 
 export async function GET(request: NextRequest) {
   try {
@@ -32,12 +34,14 @@ export async function GET(request: NextRequest) {
     const cursor = searchParams.get('cursor');
     const skip = Number(searchParams.get('skip') || 0);
 
-    // ✅ 기기 조회 (tenantId 필터 자동 포함)
+    // ✅ 기기 조회 (tenantId 필터 + 사용자별 사이트 접근 권한)
+    const allowedSiteIds = await getAllowedSiteIds(auth);
     const where: Record<string, unknown> = {
       tenantId: auth.tenantId,
       deletedAt: null,
+      ...(allowedSiteIds !== null ? { siteId: { in: allowedSiteIds } } : {}),
     };
-    if (siteId) where.siteId = siteId;
+    if (siteId) where.siteId = siteId; // explicit filter overrides (but still within allowed)
     if (controlCapable === 'true') where.controlCapable = true;
     if (controlCapable === 'false') where.controlCapable = false;
     if (statusFilter) where.status = statusFilter;
@@ -132,10 +136,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 기기 코드 자동 채번: DV-YYYYMMDD-NNNN
+    const code = await generateSeqNo('DEVICE_MGMT');
+
     // ✅ 기기 생성
     const device = await prisma.device.create({
       data: {
         ...validated,
+        code,
         tenantId: auth.tenantId, // ← 검증된 tenantId만 사용
         status: 'offline',
       },

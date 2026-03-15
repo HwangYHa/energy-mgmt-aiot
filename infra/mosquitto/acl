@@ -1,0 +1,17 @@
+# ============================================================
+# Mosquitto ACL — 토픽 접근 제어
+# 형식: user <username> / topic [read|write|readwrite] <pattern>
+# ============================================================
+
+# EMS 서버 계정: 모든 토픽 읽기/쓰기
+user ems
+topic readwrite #
+
+# 게이트웨이 계정: 자신의 테넌트 토픽만 발행
+# user gw_<tenantId>
+# topic write ems/<tenantId>/+/+/data
+# topic read  ems/<tenantId>/+/+/command
+
+# 모니터링 계정: 읽기 전용
+user monitor
+topic read #

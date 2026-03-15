@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import {
   Zap,
   TrendingUp,
@@ -14,6 +15,10 @@ import {
   CheckCircle2,
   Loader2,
   MapPin,
+  XCircle,
+  WifiOff,
+  Wrench,
+  ExternalLink,
 } from 'lucide-react';
 
 interface Site {
@@ -61,6 +66,15 @@ const SENSOR_TYPE_LABELS: Record<string, string> = {
   light: '조도',
 };
 
+interface ErrorDevice {
+  id: string;
+  name: string;
+  deviceType: string;
+  status: string;
+  lastSeenAt: string | null;
+  site: { name: string } | null;
+}
+
 export default function MonitoringPage() {
   const [data, setData] = useState<MonitoringData | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
@@ -69,6 +83,7 @@ export default function MonitoringPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshInterval, setRefreshInterval] = useState(10);
+  const [errorDevices, setErrorDevices] = useState<ErrorDevice[]>([]);
 
   // 사이트 목록 로드 (최초 1회)
   useEffect(() => {
@@ -98,6 +113,19 @@ export default function MonitoringPage() {
           },
           dataSource: json.data.dataSource,
         });
+        // 오류/점검/오프라인 설비 상세 조회
+        const devUrl = siteId
+          ? `/api/devices?siteId=${siteId}&take=20`
+          : '/api/devices?take=20';
+        const devRes = await fetch(devUrl);
+        const devJson = await devRes.json();
+        if (devJson.success && Array.isArray(devJson.data)) {
+          setErrorDevices(
+            devJson.data.filter((d: ErrorDevice) =>
+              d.status === 'error' || d.status === 'maintenance' || d.status === 'offline'
+            )
+          );
+        }
       }
     } catch {
       setError('모니터링 데이터를 불러오지 못했습니다.');
@@ -132,7 +160,7 @@ export default function MonitoringPage() {
 
   if (!data) {
     return (
-      <div className="min-h-screen bg-[#051225] text-white flex items-center justify-center">
+      <div className="h-full bg-[#051225] text-white flex items-center justify-center">
         <div className="text-center">
           {error ? (
             <>
@@ -156,7 +184,7 @@ export default function MonitoringPage() {
   const selectedSite = sites.find((s) => s.id === selectedSiteId);
 
   return (
-    <div className="min-h-screen bg-[#051225] text-white p-6 space-y-4">
+    <div className="h-full bg-[#051225] text-white p-6 space-y-4">
       {/* 사이트 선택 바 */}
       <div className="bg-slate-800/60 border border-slate-700 rounded-lg px-4 py-3 flex items-center gap-3">
         <MapPin className="w-4 h-4 text-cyan-400 shrink-0" />
@@ -356,6 +384,54 @@ export default function MonitoringPage() {
           )}
         </div>
       </div>
+
+      {/* 오류/주의 설비 상세 */}
+      {errorDevices.length > 0 && (
+        <div className="bg-slate-800 rounded-lg border border-red-800/40 p-5">
+          <h3 className="text-sm font-semibold text-red-400 mb-3 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            주의·오류 설비 ({errorDevices.length}대) — 즉시 확인 필요
+          </h3>
+          <div className="space-y-2">
+            {errorDevices.map((dev) => {
+              const isError = dev.status === 'error';
+              const isMaint = dev.status === 'maintenance';
+              return (
+                <div key={dev.id} className={`flex items-center justify-between rounded-lg border px-4 py-2.5 ${
+                  isError ? 'bg-red-900/20 border-red-700/40'
+                  : isMaint ? 'bg-amber-900/20 border-amber-700/40'
+                  : 'bg-slate-700/30 border-slate-600/40'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    {isError ? <XCircle className="w-4 h-4 text-red-400" />
+                    : isMaint ? <Wrench className="w-4 h-4 text-amber-400" />
+                    : <WifiOff className="w-4 h-4 text-slate-500" />}
+                    <div>
+                      <p className="text-sm font-medium text-white">{dev.name}</p>
+                      <p className="text-xs text-slate-500">
+                        {dev.deviceType}{dev.site ? ` · ${dev.site.name}` : ''}
+                        {dev.lastSeenAt && ` · 최근 통신: ${new Date(dev.lastSeenAt).toLocaleString('ko-KR')}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      isError ? 'bg-red-900/50 text-red-400'
+                      : isMaint ? 'bg-amber-900/50 text-amber-400'
+                      : 'bg-slate-700 text-slate-400'
+                    }`}>
+                      {isError ? '오류' : isMaint ? '점검중' : '오프라인'}
+                    </span>
+                    <Link href={`/devices/${dev.id}`} className="text-cyan-500 hover:text-cyan-400 transition-colors" title="상세 보기">
+                      <ExternalLink className="w-4 h-4" />
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* 빠른 액션 */}
       <div className="grid grid-cols-4 gap-3">

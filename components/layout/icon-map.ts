@@ -35,6 +35,11 @@ import {
   Wifi,
   MessageSquare,
   Link2,
+  FlaskConical,
+  Package,
+  PackagePlus,
+  Warehouse,
+  ClipboardList,
 } from 'lucide-react';
 
 export const iconMap: Record<string, any> = {
@@ -74,6 +79,11 @@ export const iconMap: Record<string, any> = {
   Wifi,
   MessageSquare,
   Link2,
+  FlaskConical,
+  Package,
+  PackagePlus,
+  Warehouse,
+  ClipboardList,
   // Aliases for compatibility
   Gauge: Activity,
   Building: Building2,

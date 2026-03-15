@@ -1,14 +1,23 @@
 /**
  * HMI Style Header Component
  *
- * 산업용 HMI + 현대적 SaaS UI/UX 결합
- * - 시스템 상태 즉시 확인
- * - 빠른 알림 접근 (실제 notification_log 기반 /api/alerts)
- * - 직관적인 사용자 메뉴
+ * 실시간 데이터 업데이트 전략:
+ * ┌─────────────┬──────────────────────────────────────────────────────┐
+ * │ 데이터       │ 방식                                                 │
+ * ├─────────────┼──────────────────────────────────────────────────────┤
+ * │ 현재 전력    │ SSE Zustand 실시간 (aggregates.totalPower)            │
+ * │             │ → fallback: /api/dashboard/stats 60초 폴링           │
+ * │ 장비 상태    │ /api/dashboard/stats 60초 폴링 (변화 빈도 낮음)       │
+ * │ 알림 요약    │ 30초 폴링 + SSE 새 alert 수신 시 즉시 re-fetch        │
+ * │ 현재 시간    │ setInterval 1초                                       │
+ * └─────────────┴──────────────────────────────────────────────────────┘
+ *
+ * SSE 연결: authenticated 확인 후 1회 connect → 전역 단일 연결 유지
+ * 값 변화 피드백: 전력 변화 시 0.8초 플래시 애니메이션
  */
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import {
@@ -25,11 +34,13 @@ import {
   Clock,
   Menu,
   Loader2,
-  Headset
+  Headset,
+  WifiOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useRealtime } from '@/hooks/use-realtime';
+
 // ⭐ GET 요청에는 CSRF 불필요 — fetchWithCsrf는 POST/PUT/DELETE/PATCH 전용
-//    새로고침 시 globalCsrfToken 캐시가 초기화되어 /api/security/csrf 재호출 → 지연/실패 유발
 
 interface AlertCounts {
   critical: number;
@@ -57,15 +68,14 @@ interface HeaderProps {
 
 export default function Header({ onMenuToggle }: HeaderProps) {
   const router = useRouter();
-  // status: 'loading' | 'authenticated' | 'unauthenticated'
-  // ⭐ data만 구독하면 session.user.email이 undefined/''일 때 트리거가 불가능해지므로
-  //    status를 함께 구독 → 세션 확인 여부를 원시값(string)으로 판별
   const { data: session, status } = useSession();
+
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
 
-  const [power, setPower]     = useState({ value: 0, unit: 'kW', status: 'normal' });
+  // API 폴링 상태
+  const [power, setPower]     = useState({ value: 0, unit: 'kW' });
   const [devices, setDevices] = useState({ online: 0, offline: 0 });
   const [alertsSummary, setAlertsSummary] = useState<AlertsSummary>({
     counts: { critical: 0, warning: 0, info: 0, total: 0 },
@@ -74,7 +84,55 @@ export default function Header({ onMenuToggle }: HeaderProps) {
   const [alertsLoading, setAlertsLoading] = useState(false);
   const [alertsFetchedOnce, setAlertsFetchedOnce] = useState(false);
 
-  // 전력/장비 상태 — /api/dashboard/stats
+  // 전력값 변화 플래시 효과
+  const [powerFlash, setPowerFlash] = useState(false);
+  const prevPowerRef = useRef<number>(0);
+
+  // ─── SSE 실시간 스토어 연결 ─────────────────────────────────────
+  // autoConnect=false: 직접 connect() 호출로 authenticated 이후에만 연결
+  const {
+    aggregates: sseAggregates,
+    status: sseStatus,
+    connect: sseConnect,
+    alerts: sseAlerts,
+  } = useRealtime(false);
+
+  // authenticated 확인 후 SSE 연결 (전역 단일 연결이므로 중복 호출 무해)
+  useEffect(() => {
+    if (status === 'authenticated') {
+      sseConnect();
+    }
+  }, [status, sseConnect]);
+
+  // ─── 현재 전력 표시값 ────────────────────────────────────────────
+  // SSE 연결됨 + 실제 값 있음 → SSE 우선, 그 외 → API 폴링값 fallback
+  const ssePower = sseStatus === 'connected' && sseAggregates.totalPower > 0
+    ? sseAggregates.totalPower
+    : null;
+  const displayPower = ssePower ?? power.value;
+
+  // 전력값 변화 플래시 애니메이션
+  useEffect(() => {
+    if (Math.abs(displayPower - prevPowerRef.current) < 0.05) return;
+    setPowerFlash(true);
+    prevPowerRef.current = displayPower;
+    const t = setTimeout(() => setPowerFlash(false), 800);
+    return () => clearTimeout(t);
+  }, [displayPower]);
+
+  // ─── SSE 새 alert 수신 → 즉시 알림 목록 재조회 ─────────────────
+  const prevSseAlertLenRef = useRef(0);
+  const fetchAlertsSummaryRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    if (sseAlerts.length > prevSseAlertLenRef.current) {
+      fetchAlertsSummaryRef.current(); // 새 alert → 즉시 배지 갱신
+    }
+    prevSseAlertLenRef.current = sseAlerts.length;
+  }, [sseAlerts.length]);
+
+  // ─── /api/dashboard/stats 폴링 (60초) ───────────────────────────
+  // 전력은 SSE로 실시간 보완되므로 장비 카운트 목적으로만 사용
   const fetchSystemStatus = useCallback(async () => {
     try {
       const res = await fetch('/api/dashboard/stats', { credentials: 'include', cache: 'no-store' });
@@ -85,7 +143,6 @@ export default function Header({ onMenuToggle }: HeaderProps) {
       setPower({
         value:  data.realtime?.currentPower ?? 0,
         unit:   'kW',
-        status: (data.realtime?.peakRatio ?? 0) > 90 ? 'warning' : 'normal',
       });
       setDevices({
         online:  data.devices?.online ?? 0,
@@ -96,17 +153,11 @@ export default function Header({ onMenuToggle }: HeaderProps) {
     }
   }, []);
 
-  // 알림 요약 — /api/alerts?summary=true&days=7
-  // ⚠️ useCallback 의존성은 빈 배열로 안정적 참조 유지
-  //    (state setter는 React가 안정성을 보장하므로 클로저에 캡처해도 안전)
+  // ─── /api/alerts 폴링 (30초) ────────────────────────────────────
   const fetchAlertsSummary = useCallback(async () => {
     setAlertsLoading(true);
     try {
       const url = '/api/alerts?summary=true&days=7';
-
-      // Retry logic: sometimes session cookie / auth is not immediately
-      // available on first client fetch after a hard refresh. Retry a
-      // couple times on 401/403 before giving up.
       let res: Response | null = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
@@ -115,35 +166,17 @@ export default function Header({ onMenuToggle }: HeaderProps) {
           console.warn('[Header] fetchAlertsSummary fetch error', e);
           res = null;
         }
-
-        if (!res) {
-          // network error, small backoff
-          await new Promise((r) => setTimeout(r, 300));
-          continue;
-        }
-
+        if (!res) { await new Promise((r) => setTimeout(r, 300)); continue; }
         if (res.ok) break;
-
         if (res.status === 401 || res.status === 403) {
-          // possible transient auth race after refresh — retry after short delay
-          if (attempt < 2) {
-            await new Promise((r) => setTimeout(r, 500));
-            continue;
-          }
+          if (attempt < 2) { await new Promise((r) => setTimeout(r, 500)); continue; }
           console.warn('[Header] alerts API unauthorized', res.status);
-          // fallthrough to final handling
           break;
         }
-
-        // other non-ok status: stop retrying
         console.warn('[Header] alerts API error:', res.status);
         break;
       }
-
-      if (!res) return;
-
-      if (!res.ok) return;
-
+      if (!res?.ok) return;
       const json = await res.json();
       if (json.success && json.data) {
         setAlertsSummary(json.data as AlertsSummary);
@@ -154,29 +187,29 @@ export default function Header({ onMenuToggle }: HeaderProps) {
     } finally {
       setAlertsLoading(false);
     }
-  }, []); // ← 빈 배열: 안정적인 참조(stable reference) 유지
+  }, []);
 
-  // 시스템 상태 폴링 — 세션 무관, 항상 실행
+  // ref를 통해 SSE handler에서 최신 fetchAlertsSummary 접근
+  useEffect(() => {
+    fetchAlertsSummaryRef.current = fetchAlertsSummary;
+  }, [fetchAlertsSummary]);
+
+  // stats 폴링: 60초 (전력은 SSE 실시간으로 보완되므로 장비 카운트용)
   useEffect(() => {
     fetchSystemStatus();
-    const t = setInterval(fetchSystemStatus, 30_000);
+    const t = setInterval(fetchSystemStatus, 60_000);
     return () => clearInterval(t);
   }, [fetchSystemStatus]);
 
-  // 알림 폴링 — status === 'authenticated' 이후에만 실행
-  // ⭐ 핵심 수정: session?.user?.email 대신 status 문자열 상수를 의존성으로 사용
-  //   - email은 NextAuth JWT 구성에 따라 undefined 또는 '' (빈 문자열, falsy)일 수 있음
-  //   - status는 'loading' | 'authenticated' | 'unauthenticated' 중 하나로 항상 신뢰 가능
-  //   - 새로고침 후 session loading → authenticated 전환 시 정확히 1회 트리거
+  // 알림 폴링: 30초 (authenticated 이후)
   useEffect(() => {
-    if (status !== 'authenticated') return; // 로딩 중 or 미인증 skip
+    if (status !== 'authenticated') return;
     fetchAlertsSummary();
     const t = setInterval(fetchAlertsSummary, 30_000);
     return () => clearInterval(t);
   }, [status, fetchAlertsSummary]);
 
-  const user = session?.user;
-
+  // 현재 시간: 1초 갱신
   useEffect(() => {
     const updateTime = () => {
       setCurrentTime(
@@ -187,9 +220,11 @@ export default function Header({ onMenuToggle }: HeaderProps) {
       );
     };
     updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
+    const t = setInterval(updateTime, 1_000);
+    return () => clearInterval(t);
   }, []);
+
+  const user = session?.user;
 
   const handleLogout = async () => {
     await signOut({ redirect: false });
@@ -232,11 +267,20 @@ export default function Header({ onMenuToggle }: HeaderProps) {
     return `${Math.floor(h / 24)}일 전`;
   };
 
+  // SSE 연결 상태 표시
+  const sseIndicator = {
+    connected:    { dot: 'bg-emerald-400',                    title: 'SSE 실시간 연결됨' },
+    connecting:   { dot: 'bg-amber-400 animate-pulse',        title: 'SSE 연결 중...' },
+    disconnected: { dot: 'bg-slate-500',                      title: 'SSE 미연결 (폴링 모드)' },
+    error:        { dot: 'bg-red-400 animate-pulse',          title: 'SSE 연결 오류 (재연결 중)' },
+  }[sseStatus];
+
   const { counts, recent } = alertsSummary;
   const totalAlerts = counts.critical + counts.warning;
 
   return (
     <header className="h-16 bg-slate-900 border-b border-slate-700/50 px-4 flex items-center justify-between relative z-50">
+
       {/* 좌측: 메뉴 토글 + 시스템 상태 */}
       <div className="flex items-center gap-4">
         <button
@@ -248,31 +292,58 @@ export default function Header({ onMenuToggle }: HeaderProps) {
         </button>
 
         <div className="hidden md:flex items-center gap-6">
-          {/* 현재 전력 */}
+
+          {/* 현재 전력 — SSE 실시간 or API 폴링 fallback */}
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-cyan-500/10 rounded">
+            <div className="p-1.5 bg-cyan-500/10 rounded relative">
               <Zap className="w-4 h-4 text-cyan-400" />
+              {/* SSE 연결 상태 점 */}
+              <span
+                className={cn(
+                  'absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-slate-900',
+                  sseIndicator.dot
+                )}
+                title={sseIndicator.title}
+              />
             </div>
             <div>
-              <p className="text-xs text-slate-500">현재 전력</p>
-              <p className="text-sm font-semibold text-white">
-                {power.value}
-                <span className="text-xs text-slate-400 ml-1">{power.unit}</span>
+              <p className="text-xs text-slate-500 flex items-center gap-1">
+                현재 전력
+                {ssePower !== null && (
+                  <span className="text-[9px] text-emerald-500 font-medium">LIVE</span>
+                )}
+              </p>
+              <p
+                className={cn(
+                  'text-sm font-semibold tabular-nums transition-colors duration-300',
+                  powerFlash ? 'text-cyan-300' : 'text-white'
+                )}
+              >
+                {displayPower.toFixed(1)}
+                <span className="text-xs text-slate-400 ml-1">kW</span>
               </p>
             </div>
           </div>
 
           <div className="h-8 w-px bg-slate-700" />
 
-          {/* 장비 상태 */}
+          {/* 장비 상태 — 60초 폴링 */}
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-emerald-500/10 rounded">
-              <CheckCircle className="w-4 h-4 text-emerald-400" />
+            <div className={cn(
+              'p-1.5 rounded',
+              devices.offline > 0 ? 'bg-amber-500/10' : 'bg-emerald-500/10'
+            )}>
+              {devices.offline > 0
+                ? <WifiOff className="w-4 h-4 text-amber-400" />
+                : <CheckCircle className="w-4 h-4 text-emerald-400" />
+              }
             </div>
             <div>
               <p className="text-xs text-slate-500">장비 상태</p>
               <p className="text-sm font-semibold text-white">
-                <span className="text-emerald-400">{devices.online}</span>
+                <span className={devices.offline > 0 ? 'text-amber-400' : 'text-emerald-400'}>
+                  {devices.online}
+                </span>
                 <span className="text-slate-500 mx-1">/</span>
                 <span className="text-slate-400">{devices.online + devices.offline}</span>
                 <span className="text-xs text-slate-500 ml-1">대</span>
@@ -282,7 +353,7 @@ export default function Header({ onMenuToggle }: HeaderProps) {
 
           <div className="h-8 w-px bg-slate-700" />
 
-          {/* 현재 시간 */}
+          {/* 현재 시간 — 1초 */}
           <div className="flex items-center gap-2">
             <div className="p-1.5 bg-slate-700/50 rounded">
               <Clock className="w-4 h-4 text-slate-400" />
@@ -294,11 +365,23 @@ export default function Header({ onMenuToggle }: HeaderProps) {
               </p>
             </div>
           </div>
+
+          {/* SSE 오류/단절 시 별도 배지 */}
+          {(sseStatus === 'error' || sseStatus === 'disconnected') && (
+            <div
+              className="flex items-center gap-1 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-500 cursor-default"
+              title={sseIndicator.title}
+            >
+              <WifiOff className="w-3 h-3" />
+              <span>폴링</span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* 우측: 알림 + 사용자 */}
       <div className="flex items-center gap-2">
+
         {/* 알림 벨 버튼 */}
         <div className="relative">
           <button
@@ -306,7 +389,7 @@ export default function Header({ onMenuToggle }: HeaderProps) {
               const next = !showNotifications;
               setShowNotifications(next);
               setShowDropdown(false);
-              if (next) fetchAlertsSummary(); // 열 때 최신 데이터 갱신
+              if (next) fetchAlertsSummary();
             }}
             className={cn(
               'relative p-2 rounded-lg transition-colors',
@@ -330,7 +413,6 @@ export default function Header({ onMenuToggle }: HeaderProps) {
           {/* 알림 드롭다운 */}
           {showNotifications && (
             <div className="absolute right-0 mt-2 w-80 bg-slate-800 rounded-lg shadow-xl border border-slate-700 overflow-hidden z-50">
-              {/* 드롭다운 헤더 */}
               <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
                 <h3 className="font-semibold text-white text-sm flex items-center">
                   알림 (최근 7일)
@@ -360,13 +442,8 @@ export default function Header({ onMenuToggle }: HeaderProps) {
                 </div>
               </div>
 
-              {/* 최근 알림 목록 (최대 5건) */}
+              {/* 최근 알림 목록 */}
               <div className="max-h-64 overflow-y-auto">
-                {/* ⭐ 로딩 상태 구분:
-                    - status==='loading': 세션 확인 중 (새로고침 직후) → 스피너
-                    - alertsLoading: 세션 확인 완료 후 API fetch 중 → 스피너
-                    - 위 두 경우 모두 "로드 중" 표시 (이전엔 "실패"로 오인 가능했음)
-                */}
                 {(status === 'loading' || alertsLoading) ? (
                   <div className="py-8 text-center">
                     <Loader2 className="w-6 h-6 text-slate-500 mx-auto mb-2 animate-spin" />

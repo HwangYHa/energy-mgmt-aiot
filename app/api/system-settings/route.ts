@@ -23,6 +23,7 @@ import {
   serverErrorResponse,
   formatZodErrors,
 } from '@/lib/api/response';
+import { invalidateSettingsCache } from '@/lib/services/system-settings.service';
 
 // ─── 스키마 ──────────────────────────────────────────────────────
 
@@ -240,6 +241,9 @@ export async function PUT(request: NextRequest) {
         },
       });
 
+      // 설정 캐시 즉시 무효화 → 전체 시스템에 반영
+      await invalidateSettingsCache(auth.tenantId);
+
       return successResponse({ settings: mergedWithOrg, updated: true });
     }
 
@@ -248,6 +252,9 @@ export async function PUT(request: NextRequest) {
       where: { id: auth.tenantId },
       data:  { settings: merged as unknown as Prisma.InputJsonValue },
     });
+
+    // 설정 캐시 즉시 무효화 → 전체 시스템에 반영
+    await invalidateSettingsCache(auth.tenantId);
 
     return successResponse({ settings: merged, updated: true });
   } catch (error) {

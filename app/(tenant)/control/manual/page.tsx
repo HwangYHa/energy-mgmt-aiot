@@ -180,6 +180,11 @@ export default function ManualControlPage() {
       return;
     }
 
+    if (!reason.trim()) {
+      setResultMessage({ type: 'error', text: '제어 사유를 입력하세요' });
+      return;
+    }
+
     setConfirmDialog(false);
     setIsSubmitting(true);
     setResultMessage(null);
@@ -230,7 +235,7 @@ export default function ManualControlPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#051225] p-4 md:p-6">
+    <div className="h-full bg-[#051225] p-4 md:p-6">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -311,7 +316,7 @@ export default function ManualControlPage() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
+              <div className="space-y-2 max-h-[640px] overflow-y-auto pr-2">
                 {devices.map((device) => {
                   const isOffline = device.status === 'offline';
                   return (
@@ -421,12 +426,12 @@ export default function ManualControlPage() {
                 {/* 사유 */}
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    제어 사유
+                    제어 사유 <span className="text-red-400">*</span>
                   </label>
                   <textarea
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
-                    placeholder="제어 사유를 입력하세요 (선택)"
+                    placeholder="제어 사유를 입력하세요 (필수)"
                     rows={3}
                     className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 resize-none"
                   />
@@ -451,7 +456,13 @@ export default function ManualControlPage() {
 
                 {/* 실행 버튼 */}
                 <button
-                  onClick={() => setConfirmDialog(true)}
+                  onClick={() => {
+                    if (!reason.trim()) {
+                      setResultMessage({ type: 'error', text: '제어 사유를 입력하세요' });
+                      return;
+                    }
+                    setConfirmDialog(true);
+                  }}
                   disabled={!action || isSubmitting}
                   className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg font-bold text-white text-lg transition-colors flex items-center justify-center gap-2"
                 >

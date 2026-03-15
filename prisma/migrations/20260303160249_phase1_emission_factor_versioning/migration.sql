@@ -1,0 +1,2 @@
+-- This migration was already applied manually to the database.
+-- Empty placeholder to satisfy Prisma migration tracking.

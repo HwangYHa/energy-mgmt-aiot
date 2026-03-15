@@ -3,7 +3,7 @@
  */
 export default function DashboardLoading() {
   return (
-    <div className="min-h-screen bg-slate-950 p-6 animate-pulse">
+    <div className="h-full bg-slate-950 p-6 animate-pulse">
       {/* Header skeleton */}
       <div className="flex items-center justify-between mb-6">
         <div className="h-8 w-48 bg-slate-800 rounded" />

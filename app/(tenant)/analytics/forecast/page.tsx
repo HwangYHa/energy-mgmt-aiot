@@ -94,7 +94,7 @@ export default function ForecastPage() {
   const maxPrediction = predictions.length > 0 ? Math.max(...predictions.map((p) => p.value)) : 0;
 
   return (
-    <div className="min-h-screen bg-[#051225] text-white p-6">
+    <div className="h-full bg-[#051225] text-white p-6">
       {/* 헤더 */}
       <div className="mb-8">
         <h1 className="text-4xl font-bold mb-2 flex items-center gap-3">

@@ -20,6 +20,7 @@ import {
   sendSupportNotificationToAdmin,
   sendSupportConfirmationToUser,
 } from '@/lib/services/email.service';
+import { generateSeqNo } from '@/lib/utils/sequence';
 
 const VALID_CATEGORIES = ['general', 'technical', 'billing', 'account', 'feature', 'bug'];
 const VALID_STATUSES = ['pending', 'in_progress', 'resolved', 'closed'];
@@ -160,7 +161,10 @@ export async function POST(request: NextRequest) {
       // 비로그인 사용자 → 무시
     }
 
-    const inquiry = await prisma.supportInquiry.create({
+    // 문의 코드 자동 채번: SI-YYYYMMDD-NNNN
+    const code = await generateSeqNo('SUPPORT_INQUIRY');
+
+    const inquiry = await (prisma as any).supportInquiry.create({
       data: {
         name: name.trim(),
         email: email.trim().toLowerCase(),
@@ -169,6 +173,7 @@ export async function POST(request: NextRequest) {
         message: message.trim(),
         tenantId,
         userId,
+        code,
       },
       select: {
         id: true,

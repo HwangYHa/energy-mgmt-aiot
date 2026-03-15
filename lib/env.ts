@@ -35,8 +35,8 @@ const envSchema = z.object({
   LOG_LEVEL: z
     .enum(['debug', 'info', 'warn', 'error'])
     .default('info'),
-  // Development helpers
-  DEV_BYPASS_FEATURES: z.boolean().optional(),
+  // Development helpers (env 파일의 문자열 "true"/"false"를 boolean으로 변환)
+  DEV_BYPASS_FEATURES: z.coerce.boolean().optional(),
 
   // Optional: Redis
   REDIS_URL: z.string().url().optional(),

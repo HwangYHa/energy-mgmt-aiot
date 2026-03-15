@@ -129,6 +129,23 @@ export async function GET(request: NextRequest) {
       });
 
       console.log('[Naver OAuth] User created:', user.id);
+
+      // Trial 구독 자동 생성
+      const trialPlan = await prisma.plan.findUnique({ where: { id: 'plan_trial' }, select: { id: true } });
+      if (trialPlan) {
+        const trialEnd = new Date();
+        trialEnd.setDate(trialEnd.getDate() + 30);
+        await prisma.subscription.create({
+          data: {
+            tenantId: tenant.id,
+            planId: 'plan_trial',
+            status: 'ACTIVE',
+            billingCycle: 'monthly',
+            startDate: new Date(),
+            endDate: trialEnd,
+          },
+        });
+      }
     } else {
       // 기존 사용자 - 로그인 시간 업데이트
       await prisma.user.update({
@@ -148,15 +165,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 구독 플랜 apiRateLimit 조회 (미들웨어 Rate Limiting용)
+    // 구독 플랜 apiRateLimit + 온보딩 완료 여부 조회
     let apiRateLimit = 1000;
+    let onboardingCompleted = false;
     try {
-      const sub = await prisma.subscription.findFirst({
-        where: { tenantId: user.tenantId, status: { in: ['ACTIVE', 'EXPIRE_SOON'] } },
-        select: { plan: { select: { apiRateLimit: true } } },
-        orderBy: { startDate: 'desc' },
-      });
+      const [sub, tenant] = await Promise.all([
+        prisma.subscription.findFirst({
+          where: { tenantId: user.tenantId, status: { in: ['ACTIVE', 'EXPIRE_SOON'] } },
+          select: { plan: { select: { apiRateLimit: true } } },
+          orderBy: { startDate: 'desc' },
+        }),
+        prisma.tenant.findUnique({
+          where: { id: user.tenantId },
+          select: { onboardingCompletedAt: true },
+        }),
+      ]);
       apiRateLimit = sub?.plan.apiRateLimit ?? 1000;
+      onboardingCompleted = !!tenant?.onboardingCompletedAt;
     } catch {
       // 폴백: 기본값 유지
     }
@@ -169,6 +194,7 @@ export async function GET(request: NextRequest) {
       role: user.role,
       email: naverUser.email,
       apiRateLimit,
+      onboardingCompleted,
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()

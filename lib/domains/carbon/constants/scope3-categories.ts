@@ -191,7 +191,7 @@ export const SCOPE3_CATEGORIES: Record<number, Scope3Category> = {
 export function getCategoryNo(sourceType: string): number | null {
   // 직접 숫자 패턴: cat1, cat06, CAT15, category-3
   const directMatch = sourceType.match(/cat(?:egory)?[-_]?(\d{1,2})/i);
-  if (directMatch) {
+  if (directMatch && directMatch[1] !== undefined) {
     const no = parseInt(directMatch[1]);
     if (isValidScope3Category(no)) return no;
   }

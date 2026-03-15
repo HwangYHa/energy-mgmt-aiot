@@ -86,9 +86,9 @@ export interface SiteWithSpaces {
 interface SpaceTreePanelProps {
   sites: SiteWithSpaces[];
   selectedSpaceId: string | null;
-  onSelectSpace: (spaceId: string, space: SpaceNode) => void;
-  onSelectSite: (siteId: string, site: SiteWithSpaces) => void;
   selectedSiteId: string | null;
+  onSelectSpace: (spaceId: string, space: SpaceNode) => void;
+  onSelectSite: (siteId: string) => void;
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -274,7 +274,7 @@ export function SpaceTreePanel({
                 )}
                 onClick={() => {
                   toggleSite(site.id);
-                  onSelectSite(site.id, site);
+                  onSelectSite(site.id);
                 }}
               >
                 <MapPin className="w-4 h-4 text-cyan-400 flex-shrink-0" />
@@ -309,9 +309,10 @@ export function SpaceTreePanel({
               {isExpanded && (
                 <div className="mt-1 ml-2">
                   {site.spaces.length === 0 ? (
-                    <p className="text-[11px] text-slate-600 px-4 py-2">
-                      등록된 공간 없음
-                    </p>
+                    <div className="px-4 py-3 text-center">
+                      <p className="text-[11px] text-slate-600">공간 데이터 없음</p>
+                      <p className="text-[10px] text-slate-700 mt-0.5">PhysicalSpace 를 먼저 등록하세요</p>
+                    </div>
                   ) : (
                     site.spaces.map((space) => (
                       <SpaceTreeNode

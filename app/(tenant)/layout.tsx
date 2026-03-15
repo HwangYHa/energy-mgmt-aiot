@@ -24,6 +24,7 @@ export default function TenantLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // h-screen + [height:100dvh]: iOS Safari 주소창 포함 viewport 높이 정확히 계산
+  // overflow-hidden: 브라우저 스크롤바 완전 차단 → 내부 섹션에서만 스크롤
   return (
     <div className="flex h-screen [height:100dvh] bg-slate-950 overflow-hidden">
       {/* Mobile Sidebar Overlay */}
@@ -34,12 +35,13 @@ export default function TenantLayout({
         />
       )}
 
-      {/* Sidebar - Desktop */}
-      {/* wrapper 너비는 collapsed 상태에 따라 고정 — hover 확장은 absolute 오버레이 */}
+      {/* Sidebar - Desktop
+          wrapper 너비 = Sidebar 컴포넌트 너비와 일치(w-60) → 갭 없음
+          hover 확장은 absolute 오버레이이므로 wrapper 너비 변경 불필요 */}
       <div
         className={cn(
           'hidden lg:block flex-shrink-0 transition-all duration-300',
-          sidebarCollapsed ? 'w-16' : 'w-64'
+          sidebarCollapsed ? 'w-16' : 'w-60'
         )}
       >
         <Sidebar
@@ -62,14 +64,19 @@ export default function TenantLayout({
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* Header */}
         <Header onMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)} />
 
-        {/* Page Content — ErrorBoundary로 페이지 오류가 레이아웃 전체를 crash하는 것 방지 */}
-        <main className="flex-1 overflow-y-auto bg-slate-950">
+        {/* Page Content
+            main: overflow-hidden — 브라우저·컨테이너 수준 스크롤 차단
+            inner-scroll: h-full overflow-y-auto — 페이지 콘텐츠만 스크롤
+            h-full 페이지도 이 래퍼 안에서 클립되어 브라우저 스크롤 없음 */}
+        <main className="flex-1 min-h-0 overflow-hidden bg-slate-950">
           <ErrorBoundary>
-            {children}
+            <div className="h-full overflow-y-auto">
+              {children}
+            </div>
           </ErrorBoundary>
         </main>
       </div>

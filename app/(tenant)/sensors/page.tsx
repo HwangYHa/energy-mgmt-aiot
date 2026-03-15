@@ -157,7 +157,7 @@ export default function SensorsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-6">
+    <div className="h-full bg-slate-900 text-white p-6">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <div>

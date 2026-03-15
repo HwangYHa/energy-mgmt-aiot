@@ -8,6 +8,18 @@ import {
   getAuthRateLimit,
 } from '@/lib/middleware/rate-limit';
 
+// ── 보안 이벤트 (Edge 런타임 미지원 → 동적 import 패턴) ──────
+// isIpBlocked: 메모리 Map 기반이라 Edge 런타임에서도 동작하나,
+// Node.js 런타임에서만 AuditLog DB 기록 실행됨 (미들웨어 = Edge)
+// → 차단 여부만 빠르게 확인, 실제 DB 기록은 API Route에서 처리
+const BLOCKED_IPS = new Map<string, number>(); // ip → expiresAt ms
+function isMemoryBlocked(ip: string): boolean {
+  const exp = BLOCKED_IPS.get(ip);
+  if (!exp) return false;
+  if (exp < Date.now()) { BLOCKED_IPS.delete(ip); return false; }
+  return true;
+}
+
 // ──────────────────────────────────────────────────────────────
 // 공개 경로 (인증 불필요)
 // ──────────────────────────────────────────────────────────────
@@ -85,6 +97,14 @@ export async function middleware(request: NextRequest) {
   const method = request.method;
   const ip = getClientIp(request);
 
+  // ── 0. IP 차단 체크 (가장 먼저 처리) ─────────────────────
+  if (isMemoryBlocked(ip)) {
+    return NextResponse.json(
+      { success: false, error: '접근이 차단되었습니다. 보안팀에 문의하세요.', code: 'IP_BLOCKED' },
+      { status: 403 }
+    );
+  }
+
   // ── 1. 공개 경로 처리 ─────────────────────────────────────
   const isPublic =
     PUBLIC_PREFIXES.some(p => pathname.startsWith(p)) ||
@@ -97,6 +117,12 @@ export async function middleware(request: NextRequest) {
       const result = await checkRateLimit(authLimit);
 
       if (!result.allowed) {
+        // 반복 초과 시 Edge 메모리 IP 차단 (30분)
+        const prevCount = Number(request.headers.get('x-brute-count') ?? 0);
+        if (prevCount >= 3) {
+          BLOCKED_IPS.set(ip, Date.now() + 30 * 60 * 1000);
+        }
+
         return NextResponse.json(
           {
             success: false,
@@ -224,6 +250,8 @@ export async function middleware(request: NextRequest) {
         }
 
         if (!verifyCsrfToken(csrfHeader, csrfCookie)) {
+          // 반복 CSRF 위반 IP → 10분 임시 차단
+          BLOCKED_IPS.set(ip, Date.now() + 10 * 60 * 1000);
           return NextResponse.json(
             {
               error: 'CSRF 토큰 검증에 실패했습니다. 페이지를 새로고침해주세요.',

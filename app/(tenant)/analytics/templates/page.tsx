@@ -294,7 +294,7 @@ export default function AnalysisTemplatesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6 space-y-6">
+    <div className="h-full bg-[#051225] text-white p-4 md:p-6 space-y-6">
       {/* 플랜 잠금 배너 */}
       {isPlanLocked && (
         <PlanLockedBanner

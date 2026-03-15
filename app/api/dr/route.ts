@@ -1,9 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/prisma';
 import { notifyDrEventCreated } from '@/lib/services/notification.service';
 import { logActivity, MENU_CODES, ACTION_TYPES } from '@/lib/services/activity-log.service';
+import { DrEventStatus } from '@prisma/client';
+
+// ── 유효 상태 목록 ──────────────────────────────────────────────
+const VALID_STATUSES = Object.values(DrEventStatus) as string[];
+
+// ── 요청 스키마 ─────────────────────────────────────────────────
+const drEventSchema = z.object({
+  title:             z.string().min(1, '제목을 입력하세요').max(200, '제목은 200자 이하'),
+  startTime:         z.string().refine((v) => !isNaN(Date.parse(v)), '유효한 시작 시간을 입력하세요'),
+  endTime:           z.string().refine((v) => !isNaN(Date.parse(v)), '유효한 종료 시간을 입력하세요'),
+  targetReductionKw: z.number({ invalid_type_error: 'targetReductionKw는 숫자여야 합니다' })
+                       .positive('감축 목표는 0보다 커야 합니다')
+                       .max(100000, '감축 목표가 너무 큽니다 (최대 100,000 kW)'),
+}).refine(
+  (d) => new Date(d.startTime) < new Date(d.endTime),
+  { message: '종료 시간은 시작 시간 이후여야 합니다', path: ['endTime'] }
+);
+
+// ── 권한: operator 이상 ─────────────────────────────────────────
+const ALLOWED_ROLES = ['super_admin', 'tenant_admin', 'site_manager', 'operator'];
+
+function hasWritePermission(role?: string): boolean {
+  return ALLOWED_ROLES.includes(role ?? '');
+}
 
 // GET: DR 이벤트 목록
 export async function GET(request: NextRequest) {
@@ -16,11 +41,18 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const statusParam = searchParams.get('status');
 
-    // TODO: DB에서 DR 이벤트 조회
+    // 상태 파라미터 유효성 검사
+    if (statusParam && !VALID_STATUSES.includes(statusParam)) {
+      return NextResponse.json(
+        { error: `유효하지 않은 status 값입니다. 허용값: ${VALID_STATUSES.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
     const events = await prisma.drEvent.findMany({
       where: {
         tenantId: session.user.tenantId,
-        ...(statusParam && { status: statusParam as any }),
+        ...(statusParam && { status: statusParam as DrEventStatus }),
       },
       orderBy: { startTime: 'desc' },
     });
@@ -41,22 +73,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { title, startTime, endTime, targetReductionKw } = body;
+    // 권한 검사: operator 이상만 DR 이벤트 생성 가능
+    const userRole = (session.user as { role?: string }).role;
+    if (!hasWritePermission(userRole)) {
+      return NextResponse.json({ error: 'DR 이벤트 생성 권한이 없습니다 (operator 이상 필요)' }, { status: 403 });
+    }
 
-    // DR 이벤트 생성
+    const rawBody = await request.json().catch(() => null);
+    if (!rawBody) {
+      return NextResponse.json({ error: '요청 본문이 올바르지 않습니다' }, { status: 400 });
+    }
+
+    // Zod 검증
+    const parsed = drEventSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      const fields = parsed.error.errors.reduce<Record<string, string>>((acc, e) => {
+        acc[e.path.join('.')] = e.message;
+        return acc;
+      }, {});
+      return NextResponse.json({ error: '입력값 오류', fields }, { status: 400 });
+    }
+
+    const { title, startTime, endTime, targetReductionKw } = parsed.data;
+
     const event = await prisma.drEvent.create({
       data: {
         tenantId: session.user.tenantId,
         title,
         startTime: new Date(startTime),
-        endTime: new Date(endTime),
+        endTime:   new Date(endTime),
         targetReductionKw,
         status: 'scheduled',
       },
     });
 
-    // DR 이벤트 생성 알림 → operator 이상 모든 사용자 (비동기)
+    // DR 이벤트 생성 알림 (비동기, fire-and-forget)
     notifyDrEventCreated({
       tenantId: session.user.tenantId,
       eventId: event.id,
@@ -80,7 +131,7 @@ export async function POST(request: NextRequest) {
       userId: session.user.id,
       userName: session.user.name ?? undefined,
       userEmail: session.user.email ?? undefined,
-      userRole: (session.user as { role?: string }).role ?? undefined,
+      userRole: userRole ?? undefined,
       request,
     });
 

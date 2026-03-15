@@ -13,6 +13,8 @@ import {
   serverErrorResponse,
 } from '@/lib/api/response';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await verifyAuth(request);
@@ -141,7 +143,7 @@ export async function GET(request: NextRequest) {
       type: s.lastValue !== null && s.minRange !== null && s.lastValue < s.minRange ? 'below_range' : 'above_range',
     }));
 
-    return successResponse({
+    const res = successResponse({
       timestamp: now.toISOString(),
       devices: devices.map((d) => ({
         ...d,
@@ -157,6 +159,8 @@ export async function GET(request: NextRequest) {
       activeAlertRules: alertRules,
       recentMeasurementCount: recentMeasurements.length,
     });
+    res.headers.set('Cache-Control', 'no-store');
+    return res;
   } catch (error) {
     console.error('[API] 실시간 모니터링 오류:', error);
     return serverErrorResponse();

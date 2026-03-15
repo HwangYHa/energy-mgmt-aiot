@@ -36,7 +36,7 @@ export default async function SubscriptionPage() {
   const currentTier = subscription?.plan.tier || null;
 
   return (
-    <div className="min-h-screen bg-[#051225] p-4 md:p-6 max-w-6xl mx-auto">
+    <div className="h-full bg-[#051225] p-4 md:p-6 max-w-6xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <div className="p-2 bg-cyan-500/10 rounded-lg">
           <CreditCard className="w-6 h-6 text-cyan-400" />
@@ -73,11 +73,17 @@ export default async function SubscriptionPage() {
               <Clock className="w-3.5 h-3.5" /> 별도 설정 후 활성화
             </p>
             <ul className="text-xs text-slate-400 space-y-1">
-              <li className="flex items-center gap-1.5"><Wifi className="w-3 h-3 text-slate-500" /> 실시간 에너지 모니터링 (센서 설치)</li>
+              <li className="flex items-center gap-1.5"><Wifi className="w-3 h-3 text-slate-500" /> 실시간 에너지 모니터링 (센서·게이트웨이 설치)</li>
               <li className="flex items-center gap-1.5"><Wifi className="w-3 h-3 text-slate-500" /> AI 부하 예측 · 이상 탐지 (데이터 연동)</li>
               <li className="flex items-center gap-1.5"><Wifi className="w-3 h-3 text-slate-500" /> 자동 배출량 계산 (IoT/PLC 연동)</li>
               <li className="flex items-center gap-1.5"><Upload className="w-3 h-3 text-slate-500" /> 디지털 트윈 (시설 매핑)</li>
             </ul>
+            <div className="mt-2 pt-2 border-t border-slate-600/30">
+              <p className="text-[10px] text-amber-400/80 flex items-start gap-1">
+                <span className="mt-0.5">⚠</span>
+                IoT 기능 활성화를 위한 초기 설치(공사)비가 플랜별 별도 부과됩니다. 아래 플랜 비교에서 확인하세요.
+              </p>
+            </div>
           </div>
         </div>
         {!subscription && (

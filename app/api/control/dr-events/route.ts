@@ -17,6 +17,7 @@ import {
   validationErrorResponse,
   serverErrorResponse,
 } from '@/lib/api/response';
+import { generateSeqNo } from '@/lib/utils/sequence';
 
 // GET: DR 이벤트 목록 조회
 export async function GET(request: NextRequest) {
@@ -77,7 +78,10 @@ export async function POST(request: NextRequest) {
     const startDate = new Date(scheduledAt);
     const endDate = new Date(startDate.getTime() + (duration || 60) * 60 * 1000);
 
-    const event = await prisma.drEvent.create({
+    // DR 이벤트 코드 자동 채번: DR-YYYYMMDD-NNNN
+    const code = await generateSeqNo('DR_EVENT');
+
+    const event = await (prisma as any).drEvent.create({
       data: {
         tenantId,
         title: name,
@@ -86,6 +90,7 @@ export async function POST(request: NextRequest) {
         status: 'scheduled',
         targetReductionKw: targetReduction || 0,
         revenue: compensation || null,
+        code,
       },
     });
 

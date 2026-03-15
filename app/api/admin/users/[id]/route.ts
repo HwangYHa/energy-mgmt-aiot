@@ -38,7 +38,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // 3. Fetch user
-    const user = await prisma.user.findFirst({
+    const user = await (prisma as any).user.findFirst({
       where: {
         id,
         tenantId: auth.tenantId,
@@ -46,15 +46,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
       select: {
         id: true,
+        code: true,
         email: true,
         name: true,
         phone: true,
+        country: true,
+        city: true,
         role: true,
         isActive: true,
         isEmailVerified: true,
         mfaEnabled: true,
         lastLoginAt: true,
         lastLoginIp: true,
+        loginAttempts: true,
+        lockedUntil: true,
         createdAt: true,
         updatedAt: true,
         preferences: true,
@@ -189,6 +194,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           ...(validated.phone !== undefined && { phone: validated.phone }),
           ...(validated.role && { role: validated.role as UserRole }),
           ...(validated.isActive !== undefined && { isActive: validated.isActive }),
+          ...((body as Record<string, unknown>).country !== undefined && { country: String((body as Record<string, unknown>).country) }),
+          ...((body as Record<string, unknown>).city !== undefined && { city: (body as Record<string, unknown>).city as string | null }),
         },
         select: {
           id: true,

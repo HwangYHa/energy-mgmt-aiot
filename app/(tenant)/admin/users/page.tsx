@@ -22,21 +22,44 @@ import {
   Loader2,
   RefreshCw,
   UserCog,
+  Lock,
+  Globe,
+  Hash,
+  MapPin,
+  History,
+  Building2,
+  X,
 } from 'lucide-react';
 import { apiGet, apiPost, apiPut, apiDelete, ApiError } from '@/lib/api/client';
 import { toast } from '@/lib/toast';
 
 interface User {
   id: string;
+  code: string | null;
   email: string;
   name: string;
   phone: string | null;
+  country: string;
+  city: string | null;
   role: 'viewer' | 'operator' | 'site_manager' | 'tenant_admin';
   isActive: boolean;
   isEmailVerified: boolean;
   lastLoginAt: string | null;
+  lastLoginIp: string | null;
+  loginAttempts: number;
+  lockedUntil: string | null;
   createdAt: string;
   managedSites: { id: string; name: string }[];
+}
+
+interface LoginHistory {
+  id: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  provider: string;
+  success: boolean;
+  failReason: string | null;
+  createdAt: string;
 }
 
 interface UsersResponse {
@@ -87,6 +110,12 @@ const roleConfig: Record<
   },
 };
 
+const providerLabel: Record<string, string> = {
+  credentials: '이메일/PW',
+  google: 'Google',
+  naver: '네이버',
+};
+
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [stats, setStats] = useState<UsersResponse['stats'] | null>(null);
@@ -107,8 +136,11 @@ export default function UsersPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [loginHistory, setLoginHistory] = useState<LoginHistory[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   // Dropdown
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -119,6 +151,8 @@ export default function UsersPage() {
     password: '',
     name: '',
     phone: '',
+    country: 'KR',
+    city: '',
     role: 'viewer' as User['role'],
     isActive: true,
   });
@@ -142,7 +176,6 @@ export default function UsersPage() {
 
       if (response.success && response.data) {
         setUsers(response.data as User[]);
-        // stats와 meta는 response에 포함되어 있음
         const fullResponse = response as unknown as UsersResponse & { stats: UsersResponse['stats']; meta: UsersResponse['meta'] };
         if (fullResponse.stats) setStats(fullResponse.stats);
         if (fullResponse.meta) {
@@ -167,144 +200,117 @@ export default function UsersPage() {
     fetchUsers();
   }, [fetchUsers]);
 
-  // Handle search with debounce
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setPage(1);
-    }, 300);
+    const timer = setTimeout(() => setPage(1), 300);
     return () => clearTimeout(timer);
   }, [search]);
+
+  // Fetch login history
+  const openHistory = async (user: User) => {
+    setSelectedUser(user);
+    setShowHistoryModal(true);
+    setHistoryLoading(true);
+    setOpenDropdown(null);
+    try {
+      const res = await apiGet<LoginHistory[]>(`/api/admin/users/${user.id}/login-history`);
+      if (res.success && res.data) setLoginHistory(res.data);
+    } catch {
+      setLoginHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   // Validate form
   const validateForm = (isCreate: boolean) => {
     const errors: Record<string, string> = {};
-
-    if (!formData.name.trim()) {
-      errors.name = '이름을 입력하세요';
-    }
-
+    if (!formData.name.trim()) errors.name = '이름을 입력하세요';
     if (isCreate) {
-      if (!formData.email.trim()) {
-        errors.email = '이메일을 입력하세요';
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-        errors.email = '올바른 이메일 형식이 아닙니다';
-      }
-
-      if (!formData.password) {
-        errors.password = '비밀번호를 입력하세요';
-      } else if (formData.password.length < 8) {
-        errors.password = '비밀번호는 8자 이상이어야 합니다';
-      } else if (!/[A-Z]/.test(formData.password)) {
-        errors.password = '대문자를 포함해야 합니다';
-      } else if (!/[a-z]/.test(formData.password)) {
-        errors.password = '소문자를 포함해야 합니다';
-      } else if (!/[0-9]/.test(formData.password)) {
-        errors.password = '숫자를 포함해야 합니다';
-      }
+      if (!formData.email.trim()) errors.email = '이메일을 입력하세요';
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) errors.email = '올바른 이메일 형식이 아닙니다';
+      if (!formData.password) errors.password = '비밀번호를 입력하세요';
+      else if (formData.password.length < 8) errors.password = '비밀번호는 8자 이상이어야 합니다';
+      else if (!/[A-Z]/.test(formData.password)) errors.password = '대문자를 포함해야 합니다';
+      else if (!/[a-z]/.test(formData.password)) errors.password = '소문자를 포함해야 합니다';
+      else if (!/[0-9]/.test(formData.password)) errors.password = '숫자를 포함해야 합니다';
     }
-
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  // Create user
   const handleCreate = async () => {
     if (!validateForm(true)) return;
-
     setActionLoading(true);
     try {
       const response = await apiPost<User>('/api/admin/users', formData);
-
       if (response.success) {
         setShowCreateModal(false);
         resetForm();
         fetchUsers();
+        toast.success('사용자가 생성되었습니다');
       } else {
         setFormErrors({ submit: response.error || '사용자 생성에 실패했습니다' });
       }
     } catch (err) {
-      if (err instanceof ApiError) {
-        setFormErrors({ submit: err.message });
-      } else {
-        setFormErrors({ submit: '네트워크 오류가 발생했습니다' });
-      }
+      setFormErrors({ submit: err instanceof ApiError ? err.message : '네트워크 오류가 발생했습니다' });
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Update user
   const handleUpdate = async () => {
     if (!selectedUser || !validateForm(false)) return;
-
     setActionLoading(true);
     try {
       const response = await apiPut<User>(`/api/admin/users/${selectedUser.id}`, {
         name: formData.name,
         phone: formData.phone || null,
+        country: formData.country,
+        city: formData.city || null,
         role: formData.role,
         isActive: formData.isActive,
       });
-
       if (response.success) {
         setShowEditModal(false);
         setSelectedUser(null);
         resetForm();
         fetchUsers();
+        toast.success('사용자 정보가 수정되었습니다');
       } else {
         setFormErrors({ submit: response.error || '사용자 수정에 실패했습니다' });
       }
     } catch (err) {
-      if (err instanceof ApiError) {
-        setFormErrors({ submit: err.message });
-      } else {
-        setFormErrors({ submit: '네트워크 오류가 발생했습니다' });
-      }
+      setFormErrors({ submit: err instanceof ApiError ? err.message : '네트워크 오류가 발생했습니다' });
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Delete user
   const handleDelete = async () => {
     if (!selectedUser) return;
-
     setActionLoading(true);
     try {
       const response = await apiDelete(`/api/admin/users/${selectedUser.id}`);
-
       if (response.success) {
         setShowDeleteModal(false);
         setSelectedUser(null);
         fetchUsers();
+        toast.success('사용자가 삭제되었습니다');
       } else {
         toast.error(response.error || '사용자 삭제에 실패했습니다');
       }
     } catch (err) {
-      if (err instanceof ApiError) {
-        toast.error(err.message);
-      } else {
-        toast.error('네트워크 오류가 발생했습니다');
-      }
+      toast.error(err instanceof ApiError ? err.message : '네트워크 오류가 발생했습니다');
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Reset form
   const resetForm = () => {
-    setFormData({
-      email: '',
-      password: '',
-      name: '',
-      phone: '',
-      role: 'viewer',
-      isActive: true,
-    });
+    setFormData({ email: '', password: '', name: '', phone: '', country: 'KR', city: '', role: 'viewer', isActive: true });
     setFormErrors({});
   };
 
-  // Open edit modal
   const openEdit = (user: User) => {
     setSelectedUser(user);
     setFormData({
@@ -312,6 +318,8 @@ export default function UsersPage() {
       password: '',
       name: user.name,
       phone: user.phone || '',
+      country: user.country || 'KR',
+      city: user.city || '',
       role: user.role,
       isActive: user.isActive,
     });
@@ -320,35 +328,26 @@ export default function UsersPage() {
     setOpenDropdown(null);
   };
 
-  // Open delete modal
   const openDelete = (user: User) => {
     setSelectedUser(user);
     setShowDeleteModal(true);
     setOpenDropdown(null);
   };
 
-  // Format date
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-';
-    return new Date(dateStr).toLocaleDateString('ko-KR', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    return new Date(dateStr).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   const formatDateTime = (dateStr: string | null) => {
-    if (!dateStr) return '로그인 기록 없음';
-    return new Date(dateStr).toLocaleString('ko-KR', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
+  const isLocked = (user: User) => user.lockedUntil && new Date(user.lockedUntil) > new Date();
+
   return (
-    <div className="min-h-screen bg-[#051225] p-4 md:p-6">
+    <div className="h-full bg-[#051225] p-4 md:p-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
@@ -356,15 +355,10 @@ export default function UsersPage() {
             <Users className="w-7 h-7 text-cyan-400" />
             사용자 관리
           </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            팀 멤버를 관리하고 역할을 할당합니다
-          </p>
+          <p className="text-slate-400 text-sm mt-1">팀 멤버를 관리하고 역할 및 사이트 접근 권한을 할당합니다</p>
         </div>
         <button
-          onClick={() => {
-            resetForm();
-            setShowCreateModal(true);
-          }}
+          onClick={() => { resetForm(); setShowCreateModal(true); }}
           className="flex items-center gap-2 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors"
         >
           <Plus className="w-5 h-5" />
@@ -375,76 +369,29 @@ export default function UsersPage() {
       {/* Stats Cards */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-          <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-slate-600/30 rounded-lg">
-                <Users className="w-5 h-5 text-slate-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-white">{stats.total}</p>
-                <p className="text-xs text-slate-400">전체</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-slate-800/50 border border-purple-500/30 rounded-lg p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-500/20 rounded-lg">
-                <ShieldCheck className="w-5 h-5 text-purple-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-purple-400">
-                  {stats.tenant_admin || 0}
-                </p>
-                <p className="text-xs text-slate-400">관리자</p>
+          {[
+            { label: '전체', value: stats.total, icon: <Users className="w-5 h-5 text-slate-400" />, color: 'text-white', border: 'border-slate-600/30', bg: 'bg-slate-600/30' },
+            { label: '관리자', value: stats.tenant_admin || 0, icon: <ShieldCheck className="w-5 h-5 text-purple-400" />, color: 'text-purple-400', border: 'border-purple-500/30', bg: 'bg-purple-500/20' },
+            { label: '사이트 관리자', value: stats.site_manager || 0, icon: <Shield className="w-5 h-5 text-blue-400" />, color: 'text-blue-400', border: 'border-blue-500/30', bg: 'bg-blue-500/20' },
+            { label: '운영자', value: stats.operator || 0, icon: <UserCog className="w-5 h-5 text-cyan-400" />, color: 'text-cyan-400', border: 'border-cyan-500/30', bg: 'bg-cyan-500/20' },
+            { label: '조회자', value: stats.viewer || 0, icon: <Eye className="w-5 h-5 text-slate-400" />, color: 'text-slate-300', border: 'border-slate-600/30', bg: 'bg-slate-600/20' },
+          ].map((s) => (
+            <div key={s.label} className={`bg-slate-800/50 border ${s.border} rounded-lg p-4`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 ${s.bg} rounded-lg`}>{s.icon}</div>
+                <div>
+                  <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+                  <p className="text-xs text-slate-400">{s.label}</p>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="bg-slate-800/50 border border-blue-500/30 rounded-lg p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-500/20 rounded-lg">
-                <Shield className="w-5 h-5 text-blue-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-blue-400">
-                  {stats.site_manager || 0}
-                </p>
-                <p className="text-xs text-slate-400">사이트 관리자</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-slate-800/50 border border-cyan-500/30 rounded-lg p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-cyan-500/20 rounded-lg">
-                <UserCog className="w-5 h-5 text-cyan-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-cyan-400">
-                  {stats.operator || 0}
-                </p>
-                <p className="text-xs text-slate-400">운영자</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-slate-800/50 border border-slate-600/30 rounded-lg p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-slate-600/20 rounded-lg">
-                <Eye className="w-5 h-5 text-slate-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-300">
-                  {stats.viewer || 0}
-                </p>
-                <p className="text-xs text-slate-400">조회자</p>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
       )}
 
       {/* Filters */}
       <div className="bg-slate-800/30 border border-slate-700/50 rounded-lg p-4 mb-6">
         <div className="flex flex-col md:flex-row gap-4">
-          {/* Search */}
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
@@ -455,16 +402,11 @@ export default function UsersPage() {
               className="w-full pl-10 pr-4 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50"
             />
           </div>
-
-          {/* Role Filter */}
           <div className="flex items-center gap-2">
             <Filter className="w-5 h-5 text-slate-400" />
             <select
               value={roleFilter}
-              onChange={(e) => {
-                setRoleFilter(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
               className="px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500/50"
             >
               <option value="all">모든 역할</option>
@@ -474,22 +416,15 @@ export default function UsersPage() {
               <option value="viewer">조회자</option>
             </select>
           </div>
-
-          {/* Status Filter */}
           <select
             value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPage(1);
-            }}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
             className="px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500/50"
           >
             <option value="all">모든 상태</option>
             <option value="active">활성</option>
             <option value="inactive">비활성</option>
           </select>
-
-          {/* Refresh */}
           <button
             onClick={() => fetchUsers()}
             disabled={loading}
@@ -500,7 +435,6 @@ export default function UsersPage() {
         </div>
       </div>
 
-      {/* Error */}
       {error && (
         <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 mb-6 flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-red-400" />
@@ -514,78 +448,65 @@ export default function UsersPage() {
           <table className="w-full">
             <thead className="bg-slate-800/50">
               <tr>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  사용자
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  역할
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider hidden md:table-cell">
-                  연락처
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider hidden lg:table-cell">
-                  최근 로그인
-                </th>
-                <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  상태
-                </th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  작업
-                </th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">사용자</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">역할</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider hidden md:table-cell">연락처</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider hidden xl:table-cell">최근 로그인</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider hidden lg:table-cell">로그인 IP</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">상태</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">작업</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700/50">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center">
+                  <td colSpan={7} className="px-4 py-12 text-center">
                     <Loader2 className="w-8 h-8 text-cyan-400 animate-spin mx-auto mb-2" />
                     <p className="text-slate-400">불러오는 중...</p>
                   </td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center">
+                  <td colSpan={7} className="px-4 py-12 text-center">
                     <Users className="w-12 h-12 text-slate-600 mx-auto mb-2" />
                     <p className="text-slate-400">사용자가 없습니다</p>
                   </td>
                 </tr>
               ) : (
                 users.map((user) => {
-                  const role = roleConfig[user.role] || {
-                    label: '조회자',
-                    icon: <Eye className="w-3.5 h-3.5" />,
-                    color: 'text-slate-400',
-                    bgColor: 'bg-slate-500/20',
-                  };
+                  const role = roleConfig[user.role] ?? roleConfig['viewer']!;
+                  const locked = isLocked(user);
                   return (
-                    <tr
-                      key={user.id}
-                      className="hover:bg-slate-800/30 transition-colors"
-                    >
+                    <tr key={user.id} className="hover:bg-slate-800/30 transition-colors">
                       {/* User Info */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+                          <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
                             {user.name.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <p className="text-white font-medium">{user.name}</p>
-                            <p className="text-slate-400 text-sm flex items-center gap-1">
+                            <p className="text-white font-medium flex items-center gap-1.5">
+                              {user.name}
+                              {locked && <Lock className="w-3.5 h-3.5 text-red-400" aria-label="계정 잠금" />}
+                            </p>
+                            <p className="text-slate-400 text-xs flex items-center gap-1">
                               <Mail className="w-3 h-3" />
                               {user.email}
-                              {user.isEmailVerified && (
-                                <CheckCircle className="w-3 h-3 text-emerald-400 ml-1" />
-                              )}
+                              {user.isEmailVerified && <CheckCircle className="w-3 h-3 text-emerald-400 ml-0.5" />}
                             </p>
+                            {user.code && (
+                              <p className="text-slate-500 text-[11px] flex items-center gap-1 mt-0.5">
+                                <Hash className="w-2.5 h-2.5" />
+                                {user.code}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </td>
 
                       {/* Role */}
                       <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${role.bgColor} ${role.color}`}
-                        >
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${role.bgColor} ${role.color}`}>
                           {role.icon}
                           {role.label}
                         </span>
@@ -593,48 +514,65 @@ export default function UsersPage() {
 
                       {/* Contact */}
                       <td className="px-4 py-3 hidden md:table-cell">
-                        {user.phone ? (
-                          <span className="text-slate-300 text-sm flex items-center gap-1">
-                            <Phone className="w-3 h-3 text-slate-400" />
-                            {user.phone}
-                          </span>
-                        ) : (
-                          <span className="text-slate-500 text-sm">-</span>
-                        )}
+                        <div className="space-y-0.5">
+                          {user.phone ? (
+                            <p className="text-slate-300 text-sm flex items-center gap-1">
+                              <Phone className="w-3 h-3 text-slate-400" />
+                              {user.phone}
+                            </p>
+                          ) : (
+                            <p className="text-slate-500 text-sm">-</p>
+                          )}
+                          <p className="text-slate-500 text-xs flex items-center gap-1">
+                            <Globe className="w-3 h-3" />
+                            {user.country}{user.city ? ` · ${user.city}` : ''}
+                          </p>
+                        </div>
                       </td>
 
                       {/* Last Login */}
-                      <td className="px-4 py-3 hidden lg:table-cell">
+                      <td className="px-4 py-3 hidden xl:table-cell">
                         <span className="text-slate-400 text-sm flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           {formatDateTime(user.lastLoginAt)}
+                        </span>
+                        {user.loginAttempts > 0 && (
+                          <p className="text-orange-400 text-xs mt-0.5">실패 {user.loginAttempts}회</p>
+                        )}
+                      </td>
+
+                      {/* Login IP */}
+                      <td className="px-4 py-3 hidden lg:table-cell">
+                        <span className="text-slate-400 text-sm font-mono">
+                          {user.lastLoginIp || '-'}
                         </span>
                       </td>
 
                       {/* Status */}
                       <td className="px-4 py-3 text-center">
-                        {user.isActive ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-emerald-500/20 text-emerald-400">
-                            <CheckCircle className="w-3 h-3" />
-                            활성
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-slate-500/20 text-slate-400">
-                            <XCircle className="w-3 h-3" />
-                            비활성
-                          </span>
-                        )}
+                        <div className="flex flex-col items-center gap-1">
+                          {user.isActive ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-emerald-500/20 text-emerald-400">
+                              <CheckCircle className="w-3 h-3" />활성
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-slate-500/20 text-slate-400">
+                              <XCircle className="w-3 h-3" />비활성
+                            </span>
+                          )}
+                          {locked && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-red-500/20 text-red-400">
+                              <Lock className="w-3 h-3" />잠금
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Actions */}
                       <td className="px-4 py-3 text-right">
                         <div className="relative">
                           <button
-                            onClick={() =>
-                              setOpenDropdown(
-                                openDropdown === user.id ? null : user.id
-                              )
-                            }
+                            onClick={() => setOpenDropdown(openDropdown === user.id ? null : user.id)}
                             className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
                           >
                             <MoreVertical className="w-5 h-5" />
@@ -642,24 +580,26 @@ export default function UsersPage() {
 
                           {openDropdown === user.id && (
                             <>
-                              <div
-                                className="fixed inset-0 z-10"
-                                onClick={() => setOpenDropdown(null)}
-                              />
-                              <div className="absolute right-0 mt-1 w-40 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-20 py-1">
+                              <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)} />
+                              <div className="absolute right-0 mt-1 w-44 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-20 py-1">
                                 <button
                                   onClick={() => openEdit(user)}
                                   className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white transition-colors"
                                 >
-                                  <Edit className="w-4 h-4" />
-                                  수정
+                                  <Edit className="w-4 h-4" />수정
                                 </button>
+                                <button
+                                  onClick={() => openHistory(user)}
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white transition-colors"
+                                >
+                                  <History className="w-4 h-4" />로그인 이력
+                                </button>
+                                <hr className="border-slate-700 my-1" />
                                 <button
                                   onClick={() => openDelete(user)}
                                   className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/20 transition-colors"
                                 >
-                                  <Trash2 className="w-4 h-4" />
-                                  삭제
+                                  <Trash2 className="w-4 h-4" />삭제
                                 </button>
                               </div>
                             </>
@@ -674,30 +614,15 @@ export default function UsersPage() {
           </table>
         </div>
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700/50">
             <p className="text-sm text-slate-400">
               총 {total}명 중 {(page - 1) * 20 + 1}-{Math.min(page * 20, total)}
             </p>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1.5 text-sm bg-slate-700/50 text-slate-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-700 transition-colors"
-              >
-                이전
-              </button>
-              <span className="text-sm text-slate-400">
-                {page} / {totalPages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="px-3 py-1.5 text-sm bg-slate-700/50 text-slate-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-700 transition-colors"
-              >
-                다음
-              </button>
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1.5 text-sm bg-slate-700/50 text-slate-300 rounded-lg disabled:opacity-50 hover:bg-slate-700 transition-colors">이전</button>
+              <span className="text-sm text-slate-400">{page} / {totalPages}</span>
+              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="px-3 py-1.5 text-sm bg-slate-700/50 text-slate-300 rounded-lg disabled:opacity-50 hover:bg-slate-700 transition-colors">다음</button>
             </div>
           </div>
         )}
@@ -709,162 +634,83 @@ export default function UsersPage() {
           <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-700">
               <h2 className="text-xl font-semibold text-white">사용자 추가</h2>
-              <p className="text-sm text-slate-400 mt-1">
-                새 팀 멤버를 추가합니다
-              </p>
+              <p className="text-sm text-slate-400 mt-1">새 팀 멤버를 추가합니다</p>
             </div>
             <div className="p-6 space-y-4">
-              {/* Name */}
+              {[
+                { label: '이름', key: 'name', type: 'text', placeholder: '홍길동', required: true },
+                { label: '이메일', key: 'email', type: 'email', placeholder: 'user@company.com', required: true },
+                { label: '비밀번호', key: 'password', type: 'password', placeholder: '8자 이상, 대소문자 및 숫자 포함', required: true },
+                { label: '전화번호', key: 'phone', type: 'tel', placeholder: '010-1234-5678', required: false },
+                { label: '도시', key: 'city', type: 'text', placeholder: '서울', required: false },
+              ].map(({ label, key, type, placeholder, required }) => (
+                <div key={key}>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                    {label} {required && <span className="text-red-400">*</span>}
+                  </label>
+                  <input
+                    type={type}
+                    value={(formData as unknown as Record<string, string>)[key]}
+                    onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
+                    placeholder={placeholder}
+                    className={`w-full px-3 py-2.5 bg-slate-900/50 border rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 ${formErrors[key] ? 'border-red-500' : 'border-slate-700'}`}
+                  />
+                  {formErrors[key] && <p className="text-red-400 text-xs mt-1">{formErrors[key]}</p>}
+                </div>
+              ))}
+
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                  이름 <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  placeholder="홍길동"
-                  className={`w-full px-3 py-2.5 bg-slate-900/50 border rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 ${
-                    formErrors.name ? 'border-red-500' : 'border-slate-700'
-                  }`}
-                />
-                {formErrors.name && (
-                  <p className="text-red-400 text-xs mt-1">{formErrors.name}</p>
-                )}
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">국가</label>
+                <select
+                  value={formData.country}
+                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                  className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500/50"
+                >
+                  <option value="KR">대한민국</option>
+                  <option value="US">미국</option>
+                  <option value="JP">일본</option>
+                  <option value="CN">중국</option>
+                  <option value="EU">유럽</option>
+                  <option value="OTHER">기타</option>
+                </select>
               </div>
 
-              {/* Email */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                  이메일 <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                  placeholder="user@company.com"
-                  className={`w-full px-3 py-2.5 bg-slate-900/50 border rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 ${
-                    formErrors.email ? 'border-red-500' : 'border-slate-700'
-                  }`}
-                />
-                {formErrors.email && (
-                  <p className="text-red-400 text-xs mt-1">{formErrors.email}</p>
-                )}
-              </div>
-
-              {/* Password */}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                  비밀번호 <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) =>
-                    setFormData({ ...formData, password: e.target.value })
-                  }
-                  placeholder="8자 이상, 대소문자 및 숫자 포함"
-                  className={`w-full px-3 py-2.5 bg-slate-900/50 border rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 ${
-                    formErrors.password ? 'border-red-500' : 'border-slate-700'
-                  }`}
-                />
-                {formErrors.password && (
-                  <p className="text-red-400 text-xs mt-1">
-                    {formErrors.password}
-                  </p>
-                )}
-              </div>
-
-              {/* Phone */}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                  전화번호
-                </label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) =>
-                    setFormData({ ...formData, phone: e.target.value })
-                  }
-                  placeholder="010-1234-5678"
-                  className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50"
-                />
-              </div>
-
-              {/* Role */}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                  역할 <span className="text-red-400">*</span>
-                </label>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">역할 <span className="text-red-400">*</span></label>
                 <select
                   value={formData.role}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      role: e.target.value as User['role'],
-                    })
-                  }
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value as User['role'] })}
                   className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500/50"
                 >
                   <option value="viewer">조회자 - 데이터 조회만 가능</option>
                   <option value="operator">운영자 - 제어 기능 사용 가능</option>
-                  <option value="site_manager">
-                    사이트 관리자 - 사이트/설비 관리
-                  </option>
-                  <option value="tenant_admin">
-                    관리자 - 모든 기능 사용 가능
-                  </option>
+                  <option value="site_manager">사이트 관리자 - 사이트/설비 관리</option>
+                  <option value="tenant_admin">관리자 - 모든 기능 사용 가능</option>
                 </select>
               </div>
 
-              {/* Active */}
               <div className="flex items-center gap-3">
                 <input
                   type="checkbox"
                   id="isActive"
                   checked={formData.isActive}
-                  onChange={(e) =>
-                    setFormData({ ...formData, isActive: e.target.checked })
-                  }
-                  className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500"
+                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                  className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-cyan-500"
                 />
-                <label htmlFor="isActive" className="text-sm text-slate-300">
-                  계정 활성화
-                </label>
+                <label htmlFor="isActive" className="text-sm text-slate-300">계정 활성화</label>
               </div>
 
-              {/* Error */}
               {formErrors.submit && (
                 <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 flex items-center gap-2">
                   <ShieldAlert className="w-5 h-5 text-red-400" />
-                  <span className="text-red-400 text-sm">
-                    {formErrors.submit}
-                  </span>
+                  <span className="text-red-400 text-sm">{formErrors.submit}</span>
                 </div>
               )}
             </div>
-
             <div className="p-6 border-t border-slate-700 flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowCreateModal(false);
-                  resetForm();
-                }}
-                className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {actionLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                추가
+              <button onClick={() => { setShowCreateModal(false); resetForm(); }} className="px-4 py-2 text-slate-300 hover:text-white transition-colors">취소</button>
+              <button onClick={handleCreate} disabled={actionLoading} className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2">
+                {actionLoading && <Loader2 className="w-4 h-4 animate-spin" />}추가
               </button>
             </div>
           </div>
@@ -877,62 +723,78 @@ export default function UsersPage() {
           <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-700">
               <h2 className="text-xl font-semibold text-white">사용자 수정</h2>
-              <p className="text-sm text-slate-400 mt-1">
-                {selectedUser.email}
-              </p>
+              <p className="text-sm text-slate-400 mt-1">{selectedUser.email}</p>
             </div>
             <div className="p-6 space-y-4">
-              {/* Name */}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                  이름 <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  className={`w-full px-3 py-2.5 bg-slate-900/50 border rounded-lg text-white focus:outline-none focus:border-cyan-500/50 ${
-                    formErrors.name ? 'border-red-500' : 'border-slate-700'
-                  }`}
-                />
-                {formErrors.name && (
-                  <p className="text-red-400 text-xs mt-1">{formErrors.name}</p>
+              {/* User Info Summary */}
+              <div className="bg-slate-900/50 rounded-lg p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-400 flex items-center gap-1"><Hash className="w-3.5 h-3.5" />사용자 코드</span>
+                  <span className="text-slate-300 font-mono">{selectedUser.code || '미부여'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400 flex items-center gap-1"><Clock className="w-3.5 h-3.5" />최근 로그인</span>
+                  <span className="text-slate-300">{formatDateTime(selectedUser.lastLoginAt)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400 flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />로그인 IP</span>
+                  <span className="text-slate-300 font-mono">{selectedUser.lastLoginIp || '-'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400 flex items-center gap-1"><Building2 className="w-3.5 h-3.5" />가입일</span>
+                  <span className="text-slate-300">{formatDate(selectedUser.createdAt)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">이메일 인증</span>
+                  <span className={selectedUser.isEmailVerified ? 'text-emerald-400' : 'text-yellow-400'}>
+                    {selectedUser.isEmailVerified ? '완료' : '미완료'}
+                  </span>
+                </div>
+                {selectedUser.loginAttempts > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">로그인 실패</span>
+                    <span className="text-orange-400">{selectedUser.loginAttempts}회</span>
+                  </div>
                 )}
               </div>
 
-              {/* Phone */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                  전화번호
-                </label>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">이름 <span className="text-red-400">*</span></label>
                 <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) =>
-                    setFormData({ ...formData, phone: e.target.value })
-                  }
-                  placeholder="010-1234-5678"
-                  className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50"
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className={`w-full px-3 py-2.5 bg-slate-900/50 border rounded-lg text-white focus:outline-none focus:border-cyan-500/50 ${formErrors.name ? 'border-red-500' : 'border-slate-700'}`}
                 />
+                {formErrors.name && <p className="text-red-400 text-xs mt-1">{formErrors.name}</p>}
               </div>
 
-              {/* Role */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                  역할
-                </label>
-                <select
-                  value={formData.role}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      role: e.target.value as User['role'],
-                    })
-                  }
-                  className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500/50"
-                >
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">전화번호</label>
+                <input type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="010-1234-5678" className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">국가</label>
+                  <select value={formData.country} onChange={(e) => setFormData({ ...formData, country: e.target.value })} className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500/50">
+                    <option value="KR">대한민국</option>
+                    <option value="US">미국</option>
+                    <option value="JP">일본</option>
+                    <option value="CN">중국</option>
+                    <option value="EU">유럽</option>
+                    <option value="OTHER">기타</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">도시</label>
+                  <input type="text" value={formData.city} onChange={(e) => setFormData({ ...formData, city: e.target.value })} placeholder="서울" className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">역할</label>
+                <select value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value as User['role'] })} className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500/50">
                   <option value="viewer">조회자</option>
                   <option value="operator">운영자</option>
                   <option value="site_manager">사이트 관리자</option>
@@ -940,80 +802,83 @@ export default function UsersPage() {
                 </select>
               </div>
 
-              {/* Active */}
               <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="editIsActive"
-                  checked={formData.isActive}
-                  onChange={(e) =>
-                    setFormData({ ...formData, isActive: e.target.checked })
-                  }
-                  className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-cyan-500 focus:ring-cyan-500"
-                />
-                <label htmlFor="editIsActive" className="text-sm text-slate-300">
-                  계정 활성화
-                </label>
+                <input type="checkbox" id="editIsActive" checked={formData.isActive} onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })} className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-cyan-500" />
+                <label htmlFor="editIsActive" className="text-sm text-slate-300">계정 활성화</label>
               </div>
 
-              {/* Info */}
-              <div className="bg-slate-900/50 rounded-lg p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">가입일</span>
-                  <span className="text-slate-300">
-                    {formatDate(selectedUser.createdAt)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">최근 로그인</span>
-                  <span className="text-slate-300">
-                    {formatDateTime(selectedUser.lastLoginAt)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">이메일 인증</span>
-                  <span
-                    className={
-                      selectedUser.isEmailVerified
-                        ? 'text-emerald-400'
-                        : 'text-yellow-400'
-                    }
-                  >
-                    {selectedUser.isEmailVerified ? '완료' : '미완료'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Error */}
               {formErrors.submit && (
                 <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 flex items-center gap-2">
                   <ShieldAlert className="w-5 h-5 text-red-400" />
-                  <span className="text-red-400 text-sm">
-                    {formErrors.submit}
-                  </span>
+                  <span className="text-red-400 text-sm">{formErrors.submit}</span>
                 </div>
               )}
             </div>
-
             <div className="p-6 border-t border-slate-700 flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowEditModal(false);
-                  setSelectedUser(null);
-                  resetForm();
-                }}
-                className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
-              >
-                취소
+              <button onClick={() => { setShowEditModal(false); setSelectedUser(null); resetForm(); }} className="px-4 py-2 text-slate-300 hover:text-white transition-colors">취소</button>
+              <button onClick={handleUpdate} disabled={actionLoading} className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2">
+                {actionLoading && <Loader2 className="w-4 h-4 animate-spin" />}저장
               </button>
-              <button
-                onClick={handleUpdate}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {actionLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                저장
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Login History Modal */}
+      {showHistoryModal && selectedUser && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div className="p-6 border-b border-slate-700 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+                  <History className="w-5 h-5 text-cyan-400" />
+                  로그인 이력
+                </h2>
+                <p className="text-sm text-slate-400 mt-1">{selectedUser.name} ({selectedUser.email}) · 최근 50건</p>
+              </div>
+              <button onClick={() => setShowHistoryModal(false)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg">
+                <X className="w-5 h-5" />
               </button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-4">
+              {historyLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />
+                </div>
+              ) : loginHistory.length === 0 ? (
+                <div className="text-center py-12">
+                  <History className="w-10 h-10 text-slate-600 mx-auto mb-2" />
+                  <p className="text-slate-400">로그인 이력이 없습니다</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {loginHistory.map((h) => (
+                    <div key={h.id} className={`flex items-start gap-3 p-3 rounded-lg border ${h.success ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
+                      {h.success
+                        ? <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                        : <XCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+                      }
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-sm font-medium ${h.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {h.success ? '로그인 성공' : '로그인 실패'}
+                          </span>
+                          <span className="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300">
+                            {providerLabel[h.provider] || h.provider}
+                          </span>
+                          {!h.success && h.failReason && (
+                            <span className="text-xs text-red-300">{h.failReason}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
+                          <span className="font-mono">{h.ipAddress || '-'}</span>
+                          <span>{formatDateTime(h.createdAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1027,36 +892,18 @@ export default function UsersPage() {
               <div className="flex items-center justify-center w-12 h-12 bg-red-500/20 rounded-full mx-auto mb-4">
                 <Trash2 className="w-6 h-6 text-red-400" />
               </div>
-              <h2 className="text-xl font-semibold text-white text-center mb-2">
-                사용자 삭제
-              </h2>
+              <h2 className="text-xl font-semibold text-white text-center mb-2">사용자 삭제</h2>
               <p className="text-slate-400 text-center mb-4">
-                <span className="text-white font-medium">
-                  {selectedUser.name}
-                </span>
-                님을 삭제하시겠습니까?
+                <span className="text-white font-medium">{selectedUser.name}</span>님을 삭제하시겠습니까?
               </p>
               <p className="text-yellow-400 text-sm text-center bg-yellow-500/10 rounded-lg p-3">
                 이 작업은 되돌릴 수 없습니다. 사용자의 모든 권한이 제거됩니다.
               </p>
             </div>
             <div className="p-6 border-t border-slate-700 flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setSelectedUser(null);
-                }}
-                className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {actionLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                삭제
+              <button onClick={() => { setShowDeleteModal(false); setSelectedUser(null); }} className="px-4 py-2 text-slate-300 hover:text-white transition-colors">취소</button>
+              <button onClick={handleDelete} disabled={actionLoading} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2">
+                {actionLoading && <Loader2 className="w-4 h-4 animate-spin" />}삭제
               </button>
             </div>
           </div>

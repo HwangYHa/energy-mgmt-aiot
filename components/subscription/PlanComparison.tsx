@@ -41,6 +41,7 @@ import {
   Loader2,
   ExternalLink,
   Info,
+  Wrench,
 } from 'lucide-react';
 
 interface PlanComparisonProps {
@@ -255,6 +256,32 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
               )}
               {price === 0 && <p className="text-[10px] text-slate-600 mb-3">영구 무료 (기능 제한)</p>}
               {price === null && <p className="text-[10px] text-slate-600 mb-3">맞춤 견적 제공</p>}
+
+              {/* 초기 설치(공사)비 */}
+              <div className="mb-4 p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Wrench className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-[11px] font-medium text-amber-400">초기 설치(공사)비</span>
+                </div>
+                <div className="text-sm font-bold text-white mb-1.5">
+                  {display.installationFee === null
+                    ? '별도 견적'
+                    : display.installationFee === 0
+                    ? '없음'
+                    : `₩${display.installationFee.toLocaleString('ko-KR')}`}
+                  {display.installationFee !== null && display.installationFee > 0 && (
+                    <span className="text-[10px] text-slate-500 font-normal ml-1">1회 (VAT 별도)</span>
+                  )}
+                </div>
+                <ul className="space-y-0.5">
+                  {display.installationIncludes.map((item, i) => (
+                    <li key={i} className="flex items-start gap-1 text-[10px] text-slate-400">
+                      <span className="text-amber-500 mt-0.5">•</span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
 
               {/* 리소스 제한 */}
               <div className="space-y-2 mb-4 pb-4 border-b border-slate-700/50">

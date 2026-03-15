@@ -16,6 +16,7 @@ import {
   notifyNewUserJoined,
   initDefaultNotificationRules,
 } from '@/lib/services/notification.service';
+import { generateSeqNo } from '@/lib/utils/sequence';
 
 // GET: List users
 export async function GET(request: NextRequest) {
@@ -68,17 +69,23 @@ export async function GET(request: NextRequest) {
 
     // 5. Fetch users with pagination
     const [users, total] = await Promise.all([
-      prisma.user.findMany({
+      (prisma as any).user.findMany({
         where,
         select: {
           id: true,
+          code: true,
           email: true,
           name: true,
           phone: true,
+          country: true,
+          city: true,
           role: true,
           isActive: true,
           isEmailVerified: true,
           lastLoginAt: true,
+          lastLoginIp: true,
+          loginAttempts: true,
+          lockedUntil: true,
           createdAt: true,
           managedSites: {
             select: { id: true, name: true },
@@ -196,10 +203,14 @@ export async function POST(request: NextRequest) {
     // 6. Hash password
     const passwordHash = await bcrypt.hash(validated.password, 12);
 
+    // 사용자 코드 채번 (US-YYYYMMDD-NNNN)
+    const userCode = await generateSeqNo('USER');
+
     // 7. Create user with audit log
     const user = await prisma.$transaction(async (tx) => {
-      const newUser = await tx.user.create({
+      const newUser = await (tx as any).user.create({
         data: {
+          code: userCode,
           tenantId: auth.tenantId,
           email: validated.email,
           passwordHash,

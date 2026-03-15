@@ -52,6 +52,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '거리를 올바르게 입력해주세요.' }, { status: 400 });
     }
 
+    // period 형식 검사 (YYYY-MM)
+    if (period !== undefined && period !== null) {
+      if (typeof period !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
+        return NextResponse.json({ error: 'period는 YYYY-MM 형식이어야 합니다 (예: 2026-03)' }, { status: 400 });
+      }
+    }
+
     // 확인용: 등록 가능한 계수인지 먼저 검사
     const factor = getCurrentEmissionFactor('transport', sourceType);
     if (!factor) {

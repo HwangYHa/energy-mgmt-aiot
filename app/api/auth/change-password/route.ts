@@ -8,6 +8,8 @@ import {
   errorResponse,
   serverErrorResponse,
 } from '@/lib/api/response';
+import { validatePassword } from '@/lib/validation/password';
+import { logSecurityEvent } from '@/lib/services/security-event.service';
 
 /**
  * POST /api/auth/change-password - 비밀번호 변경
@@ -24,17 +26,11 @@ export async function POST(request: NextRequest) {
       return errorResponse('VALIDATION_REQUIRED_FIELD');
     }
 
-    if (newPassword.length < 8) {
+    // 패스워드 정책 검증 (강화된 규칙)
+    const pwCheck = validatePassword(newPassword);
+    if (!pwCheck.valid) {
       return errorResponse('VALIDATION_ERROR', {
-        details: { message: '비밀번호는 8자 이상이어야 합니다.' },
-      });
-    }
-
-    if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])/.test(newPassword)) {
-      return errorResponse('VALIDATION_ERROR', {
-        details: {
-          message: '비밀번호는 대문자, 소문자, 숫자를 포함해야 합니다.',
-        },
+        details: { message: pwCheck.errors[0] ?? '비밀번호 정책에 맞지 않습니다.' },
       });
     }
 
@@ -61,6 +57,18 @@ export async function POST(request: NextRequest) {
       where: { id: auth.userId },
       data: { passwordHash },
     });
+
+    // 보안 이벤트 기록 (fire-and-forget)
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+              ?? request.headers.get('x-real-ip')
+              ?? undefined;
+    logSecurityEvent({
+      type: 'PASSWORD_CHANGED',
+      severity: 'LOW',
+      ip,
+      userId: auth.userId,
+      tenantId: auth.tenantId,
+    }).catch(() => {});
 
     return successResponse({ message: '비밀번호가 변경되었습니다.' });
   } catch {

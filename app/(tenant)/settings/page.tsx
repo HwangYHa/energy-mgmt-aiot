@@ -47,7 +47,7 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6">
+    <div className="h-full bg-[#051225] text-white p-4 md:p-6">
       <div className="max-w-4xl mx-auto">
         {/* 헤더 */}
         <div className="mb-8">

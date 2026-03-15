@@ -26,7 +26,7 @@ interface BarConfig {
 interface EnergyBarChartProps {
   data: DataPoint[];
   bars: BarConfig[];
-  height?: number;
+  height?: number | string;
   showGrid?: boolean;
   showLegend?: boolean;
 }

@@ -39,29 +39,28 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
       include: {
         site: {
-          select: {
-            id: true,
-            name: true,
-            code: true,
-          },
+          select: { id: true, name: true, code: true },
         },
         gateway: {
-          select: {
-            id: true,
-            name: true,
-            serialNumber: true,
-            status: true,
-          },
+          select: { id: true, name: true, serialNumber: true, status: true },
         },
         metrics: {
           select: {
-            id: true,
-            key: true,
-            name: true,
-            dataType: true,
-            unit: true,
-            accessLevel: true,
+            id: true, key: true, name: true,
+            dataType: true, unit: true, accessLevel: true,
           },
+          orderBy: { key: 'asc' },
+        },
+        sensors: {
+          where: { deletedAt: null },
+          select: {
+            id: true, name: true, sensorType: true,
+            unit: true, lastValue: true, lastSeenAt: true, status: true,
+          },
+          orderBy: { name: 'asc' },
+        },
+        _count: {
+          select: { metrics: true, sensors: true },
         },
       },
     });

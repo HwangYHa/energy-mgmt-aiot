@@ -30,7 +30,8 @@ datasource db {
 // ========================================
 
 model Tenant {
-  id String @id @default(uuid())
+  id   String  @id @default(uuid())
+  code String? @unique @db.VarChar(30) // TN-YYYYMMDD-NNNN
 
   // 기본 정보
   name           String  @db.VarChar(200)
@@ -82,6 +83,12 @@ model Tenant {
   twinNodes         TwinNode[]
   carbonCredits         CarbonCredit[]
   carbonTrades          CarbonTrade[]
+  carbonCreditRegistries    CarbonCreditRegistry[]
+  carbonLedgerEntries       CarbonLedgerEntry[]
+  carbonRetirementCerts     CarbonRetirementCertificate[]
+  carbonPayments            CarbonPayment[]
+  carbonTokenRecords        CarbonTokenRecord[]
+  carbonWallet              TenantCarbonWallet?
   emissionsRecords           EmissionsRecord[]
   emissionFactors            EmissionFactor[]
   complianceSetting          TenantComplianceSetting?
@@ -89,6 +96,10 @@ model Tenant {
   milestones                 Milestone[]
   esgReports                 ESGReport[]
   activityLogs               ActivityLog[]
+  equipmentLots              EquipmentLot[]
+  regulatorySandboxes        RegulatorySandbox[]
+  loginHistories             LoginHistory[]
+  userSiteAccesses           UserSiteAccess[]
 
   @@index([status])
   @@index([industryType])
@@ -143,6 +154,7 @@ model Plan {
 
   // Relations
   subscriptions Subscription[]
+  planFeatures  PlanFeature[]
 
   @@map("plan")
 }
@@ -231,16 +243,19 @@ enum BillingCycle {
 // ========================================
 
 model User {
-  id       String @id @default(uuid())
-  tenantId String @map("tenant_id")
+  id       String  @id @default(uuid())
+  code     String? @unique @db.VarChar(30) // US-YYYYMMDD-NNNN
+  tenantId String  @map("tenant_id")
 
   // 인증
   email        String @unique @db.VarChar(255)
   passwordHash String @map("password_hash") @db.VarChar(255)
 
   // 기본 정보
-  name  String  @db.VarChar(100)
-  phone String? @db.VarChar(50)
+  name     String  @db.VarChar(100)
+  phone    String? @db.VarChar(50)
+  country  String  @default("KR") @db.VarChar(10)
+  city     String? @db.VarChar(100)
 
   // 권한
   role UserRole @default(viewer)
@@ -278,10 +293,11 @@ model User {
   managedSites      Site[]             @relation("SiteManager")
   auditLogs         AuditLog[]
   menuFavorites     UserMenuFavorite[]
-  menuAccessLogs    MenuAccessLog[]
   generatedReports  Report[]
   notificationRules NotificationRule[]
   apiKeys           ApiKey[]
+  loginHistories    LoginHistory[]
+  siteAccesses      UserSiteAccess[]
 
   @@index([tenantId])
   @@index([email])
@@ -295,6 +311,51 @@ enum UserRole {
   site_manager
   operator
   viewer
+}
+
+// ========================================
+// AUTH: 로그인 이력 + 사이트 접근 권한
+// ========================================
+
+model LoginHistory {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  tenantId  String   @map("tenant_id")
+
+  // 로그인 정보
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  userAgent  String?  @map("user_agent") @db.VarChar(500)
+  provider   String   @default("credentials") @db.VarChar(30) // credentials|google|naver
+  success    Boolean  @default(true)
+  failReason String?  @map("fail_reason") @db.VarChar(255)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("login_history")
+}
+
+/// 사용자별 사이트 접근 권한 (site_manager/operator/viewer 는 반드시 명시적 허용 필요)
+model UserSiteAccess {
+  id       String @id @default(uuid())
+  userId   String @map("user_id")
+  tenantId String @map("tenant_id")
+  siteId   String @map("site_id")
+
+  grantedAt DateTime  @default(now()) @map("granted_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, siteId])
+  @@index([tenantId, siteId])
+  @@map("user_site_access")
 }
 
 // ========================================
@@ -340,11 +401,12 @@ model Site {
   deletedAt DateTime? @map("deleted_at")
 
   // Relations
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  manager        User?           @relation("SiteManager", fields: [managerId], references: [id], onDelete: SetNull)
-  gateways       Gateway[]
-  devices        Device[]
-  physicalSpaces PhysicalSpace[]
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  manager          User?            @relation("SiteManager", fields: [managerId], references: [id], onDelete: SetNull)
+  gateways         Gateway[]
+  devices          Device[]
+  physicalSpaces   PhysicalSpace[]
+  userSiteAccesses UserSiteAccess[]
 
   @@index([tenantId])
   @@index([siteType])
@@ -850,7 +912,6 @@ model MenuItem {
   children  MenuItem[] @relation("MenuItemChildren")
 
   favorites  UserMenuFavorite[]
-  accessLogs MenuAccessLog[]
 
   @@index([menuGroupId, displayOrder])
   @@index([parentId, displayOrder])
@@ -888,31 +949,6 @@ model UserMenuFavorite {
 }
 
 // ========================================
-// MENU: 접근 로그
-// ========================================
-
-model MenuAccessLog {
-  id         String  @id @default(uuid())
-  userId     String  @map("user_id")
-  menuItemId String  @map("menu_item_id")
-  tenantId   String? @map("tenant_id")
-
-  accessedAt DateTime @default(now()) @map("accessed_at")
-  sessionId  String?  @map("session_id") @db.VarChar(100)
-  ipAddress  String?  @map("ip_address") @db.VarChar(45)
-  userAgent  String?  @map("user_agent") @db.Text
-
-  // Relations
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
-
-  @@index([userId, accessedAt(sort: Desc)])
-  @@index([menuItemId, accessedAt(sort: Desc)])
-  @@index([tenantId, accessedAt(sort: Desc)])
-  @@map("menu_access_log")
-}
-
-// ========================================
 // CONTROL: 제어 로그 (감사용 필수)
 // ========================================
 
@@ -939,8 +975,11 @@ model ControlLog {
   executedBy    String        @map("executed_by")
   executionMode ExecutionMode @map("execution_mode")
 
-  // 제어 사유 (명시적 컬럼)
-  reason String? @db.Text @map("reason")
+  // 제어 사유 (필수 입력, 감사 추적)
+  reason String @db.Text @map("reason")
+
+  // 사이트 (사이트별 제어 이력 조회)
+  siteId String? @map("site_id") @db.VarChar(36)
 
   // 컨텍스트
   ipAddress   String?  @map("ip_address") @db.VarChar(45)
@@ -948,6 +987,7 @@ model ControlLog {
 
   @@index([tenantId, requestedAt(sort: Desc)])
   @@index([deviceId, requestedAt(sort: Desc)])
+  @@index([siteId, requestedAt(sort: Desc)])
   @@index([executedBy])
   @@map("control_log")
 }
@@ -1412,40 +1452,66 @@ model EmissionFactor {
   id       String @id @default(uuid())
   tenantId String? @map("tenant_id") // null = 글로벌 기본값
 
-  // 식별
-  name       String? @db.VarChar(200) // 표시명 (예: "한국 전력망 배출계수 2024")
-  code       String @db.VarChar(50)
-  category   String @db.VarChar(50) // electricity, fuel, transport, process
-  sourceType String @map("source_type") @db.VarChar(100) // 전력(한전), LNG, 경유 등
+  // ── 기존 식별 (하위 호환 유지) ──────────────────────────────
+  name       String? @db.VarChar(200)
+  code       String  @db.VarChar(50)
+  category   String  @db.VarChar(50)
+  sourceType String  @map("source_type") @db.VarChar(100)
 
-  // 계수 값
-  factor     Decimal @db.Decimal(15, 8)
-  unit       String  @db.VarChar(50) // tCO2eq/MWh, tCO2eq/TJ 등
-  inputUnit  String  @map("input_unit") @db.VarChar(50) // kWh, L, kg 등
+  // ── v2: 표준화 식별자 (Big4 감사 대응) ─────────────────────
+  // factorCode: "kr-electricity-grid-location" 형태 표준 식별자
+  // code보다 구체적, 국가+에너지타입+계산방식 인코딩
+  factorCode      String? @map("factor_code") @db.VarChar(100)
+  countryCode     String? @map("country_code") @db.Char(2)   // ISO 3166-1: KR, US, EU
+  energyType      String? @map("energy_type") @db.VarChar(50) // electricity|diesel|lng|coal...
+  calculationType String? @map("calculation_type") @db.VarChar(20) // location|market|activity|spend
 
-  // 출처
-  source    String  @db.VarChar(200) // 국가 온실가스 인벤토리 등
+  // ── 계수 값 ─────────────────────────────────────────────────
+  factor     Decimal @db.Decimal(20, 10) // v2: 정밀도 향상 (10자리)
+  unit       String  @db.VarChar(50)
+  inputUnit  String  @map("input_unit") @db.VarChar(50)
+
+  // ── 출처 추적 ────────────────────────────────────────────────
+  source        String  @db.VarChar(200) // 기관명 (하위호환)
+  sourceName    String? @map("source_name") @db.VarChar(200)    // v2: "국가 온실가스 인벤토리"
+  sourceVersion String? @map("source_version") @db.VarChar(50)  // v2: "2024년판", "AR6"
+  sourceUrl     String? @map("source_url") @db.VarChar(500)     // v2: 공식 문서 URL
+  // sourceType (enum): official|international|tenant_custom
+  factorSourceType String? @map("factor_source_type") @db.VarChar(30) // official|international|tenant_custom
   year      Int
   region    String  @default("KR") @db.VarChar(10)
 
-  // ⭐ 버전 관리 (Semantic Versioning)
-  version    String  @db.VarChar(20)   // 1.0.0, 1.1.0, 2.0.0
-  parentId   String? @map("parent_id") // 이전 버전 참조 (체인)
+  // ── Semantic Versioning ──────────────────────────────────────
+  version    String  @db.VarChar(20)
+  parentId   String? @map("parent_id")
 
-  // ⭐ 상태 제어
-  isCustom   Boolean @default(false) @map("is_custom")  // Tenant 커스텀 여부
-  isDefault  Boolean @default(false) @map("is_default")  // 시스템 기본값
-  isActive   Boolean @default(true)  @map("is_active")   // 활성화 (검증 후 활성)
+  // ── 상태 제어 ────────────────────────────────────────────────
+  isCustom   Boolean @default(false) @map("is_custom")
+  isDefault  Boolean @default(false) @map("is_default")
+  isActive   Boolean @default(false) @map("is_active") // v2: default false → 승인 후 활성
 
-  // 유효기간
+  // ── v2: 승인 상태 머신 ──────────────────────────────────────
+  // DRAFT → PENDING_REVIEW → APPROVED | REJECTED
+  approvalStatus String @default("APPROVED") @map("approval_status") @db.VarChar(30)
+
+  // ── 유효기간 ─────────────────────────────────────────────────
   validFrom  DateTime @map("valid_from") @db.Date
   validTo    DateTime? @map("valid_to") @db.Date
 
-  // ⭐ 승인 워크플로우
-  createdBy  String? @map("created_by")
-  createdAt  DateTime @default(now()) @map("created_at")
-  approvedBy String? @map("approved_by")
-  approvedAt DateTime? @map("approved_at")
+  // ── 승인 / 거부 워크플로우 ───────────────────────────────────
+  createdBy      String?   @map("created_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  approvedBy     String?   @map("approved_by")
+  approvedAt     DateTime? @map("approved_at")
+  rejectedBy     String?   @map("rejected_by")
+  rejectedAt     DateTime? @map("rejected_at")
+  rejectionReason String?  @map("rejection_reason") @db.Text
+  changeReason    String?  @map("change_reason") @db.Text
+
+  // ── v2: 레코드 무결성 ───────────────────────────────────────
+  // SHA-256(핵심 필드 JSON) — 감사 시 재계산으로 레코드 변조 탐지
+  recordHash String? @map("record_hash") @db.VarChar(64)
+
   updatedAt  DateTime @updatedAt @map("updated_at")
 
   // Relations
@@ -1455,11 +1521,18 @@ model EmissionFactor {
   emissionsRecords   EmissionsRecord[]
   auditLog           EmissionFactorAuditLog[]
 
+  // ── 제약 ─────────────────────────────────────────────────────
   @@unique([code, version])
+
+  // ── 인덱스 전략 (조회 패턴 최적화) ──────────────────────────
+  @@index([tenantId, factorCode, isActive])                      // 3-tier lookup 핵심
+  @@index([tenantId, countryCode, energyType, calculationType])  // 복합 조건 조회
   @@index([category])
   @@index([tenantId])
   @@index([year, region])
   @@index([validFrom, validTo])
+  @@index([approvalStatus])
+  @@index([factorCode, validFrom(sort: Desc)])                   // 버전 체인 조회
   @@map("emission_factor")
 }
 
@@ -1471,30 +1544,41 @@ model EmissionFactorAuditLog {
   id                  String @id @default(uuid())
   emissionFactorId    String @map("emission_factor_id")
 
-  // 배출계수 스냅샷
-  oldValue            Decimal? @db.Decimal(15, 8)  // 변경 전
-  newValue            Decimal? @db.Decimal(15, 8)  // 변경 후
+  // ── 변경 내용 ─────────────────────────────────────────────────
+  changeType     String   @map("change_type") @db.VarChar(30)
+  // CREATED|SUBMITTED_FOR_REVIEW|APPROVED|REJECTED|DEPRECATED|RESTORED
 
-  // 변경 사유
-  changeType          String @db.VarChar(50)  // CREATED, UPDATED, APPROVED, DEPRECATED
-  changeReason        String? @db.Text         // 변경 사유 (규제 변경, 데이터 수정 등)
+  // 수치 변경 별도 트래킹 (조회 최적화, 기존 oldValue/newValue 유지)
+  oldValue       Decimal? @db.Decimal(20, 10) @map("old_value")
+  newValue       Decimal? @db.Decimal(20, 10) @map("new_value")
+  changeReason   String?  @db.Text @map("change_reason")
 
-  // Tamper resistance (Hash chain)
-  previousHash        String? @map("previous_hash") @db.VarChar(64)  // SHA-256
-  currentHash         String  @map("current_hash") @db.VarChar(64)
+  // ── v2: 전체 스냅샷 (Big4 감사: 변경 전/후 완전 재현) ────────
+  previousSnapshot Json? @map("previous_snapshot")
+  currentSnapshot  Json? @map("current_snapshot")
 
-  // 요청자
-  requestedBy         String  @map("requested_by")
-  requestedAt         DateTime @default(now()) @map("requested_at")
-  approvedBy          String? @map("approved_by")
-  approvedAt          DateTime? @map("approved_at")
+  // ── Hash Chain ─────────────────────────────────────────────────
+  previousHash   String? @map("previous_hash") @db.VarChar(64)
+  currentHash    String  @map("current_hash") @db.VarChar(64)
+
+  // ── 요청자 정보 ───────────────────────────────────────────────
+  requestedBy String   @map("requested_by")
+  requestedAt DateTime @default(now()) @map("requested_at")
+  approvedBy  String?  @map("approved_by")
+  approvedAt  DateTime? @map("approved_at")
+
+  // ── v2: 법적 증거 필드 ────────────────────────────────────────
+  ipAddress  String? @map("ip_address") @db.VarChar(45)  // IPv4/IPv6
+  userAgent  String? @map("user_agent") @db.VarChar(500)
+  auditedBy  String? @map("audited_by")  // 외부 감사인
+  auditedAt  DateTime? @map("audited_at")
 
   // Relations
-  emissionFactor      EmissionFactor @relation(fields: [emissionFactorId], references: [id], onDelete: Cascade)
+  emissionFactor EmissionFactor @relation(fields: [emissionFactorId], references: [id], onDelete: Cascade)
 
-  @@index([emissionFactorId])
+  @@index([emissionFactorId, requestedAt(sort: Asc)])  // 체인 재구성용 (시간순 필수)
   @@index([changeType])
-  @@index([requestedAt(sort: Desc)])
+  @@index([requestedBy])
   @@map("emission_factor_audit_log")
 }
 
@@ -1768,6 +1852,169 @@ model CarbonTrade {
 }
 
 // ========================================
+// CARBON TRADING v2: 프로덕션 레지스트리 + 원장
+// ========================================
+
+/// 탄소 크레딧 레지스트리 (불변 자산 레코드)
+/// K-ETS / Verra / Gold Standard 등 법적 추적 가능 크레딧
+model CarbonCreditRegistry {
+  id                 String   @id @default(uuid())
+  tenantId           String   @map("tenant_id")
+
+  // 레지스트리 식별
+  registry           String   @db.VarChar(50)        // K-ETS | Verra | GoldStandard | CDM
+  projectId          String   @map("project_id") @db.VarChar(100)
+  serialNumberStart  String   @map("serial_number_start") @db.VarChar(200)
+  serialNumberEnd    String   @map("serial_number_end") @db.VarChar(200)
+  vintageYear        Int      @map("vintage_year")
+  creditType         String   @map("credit_type") @db.VarChar(20)     // KAU | KCU | OFFSET | VER | GS-VER
+  certificationBody  String   @map("certification_body") @db.VarChar(100)
+  issuanceDate       DateTime @map("issuance_date") @db.Date
+
+  // 수량 추적 (총량 보존 법칙)
+  totalQuantity      Decimal  @map("total_quantity")     @db.Decimal(20, 6)
+  availableQuantity  Decimal  @map("available_quantity") @db.Decimal(20, 6)
+  retiredQuantity    Decimal  @default(0) @map("retired_quantity") @db.Decimal(20, 6)
+  lockedQuantity     Decimal  @default(0) @map("locked_quantity")  @db.Decimal(20, 6)  // 결제 진행 중 Lock
+
+  // 낙관적 잠금 (동시성 제어)
+  version            Int      @default(0)
+
+  status             String   @default("active") @db.VarChar(20)   // active | retired | cancelled
+
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  tenant             Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ledgerEntries      CarbonLedgerEntry[]
+  retirementCerts    CarbonRetirementCertificate[]
+  vcmProject         CarbonVCMProject?
+  tokenRecords       CarbonTokenRecord[]
+
+  // 이중 계상 방지: 동일 레지스트리+프로젝트+일련번호+빈티지는 1건만
+  @@unique([tenantId, registry, projectId, serialNumberStart, vintageYear])
+  @@index([tenantId, creditType, vintageYear])
+  @@index([tenantId, status])
+  @@map("carbon_credit_registry")
+}
+
+/// 추가전용 거래 원장 (Event Sourcing)
+/// 모든 BUY/SELL/RETIRE 이벤트의 불변 증거
+model CarbonLedgerEntry {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  registryId     String   @map("registry_id")
+
+  // 이벤트
+  eventType      String   @map("event_type") @db.VarChar(20)   // BUY | SELL | RETIRE | LOCK | UNLOCK | CANCEL
+  quantity       Decimal  @db.Decimal(20, 6)
+  unitPrice      Decimal  @default(0) @map("unit_price")  @db.Decimal(15, 2)
+  totalAmount    Decimal  @default(0) @map("total_amount") @db.Decimal(20, 2)
+  currency       String   @default("KRW") @db.VarChar(3)
+
+  // 거래 상대방
+  counterparty   String?  @db.VarChar(200)
+
+  // 결제 상태 라이프사이클
+  paymentStatus    String  @default("N/A") @map("payment_status")    @db.VarChar(20)  // N/A|INITIATED|PENDING|SETTLED|FAILED
+  settlementStatus String  @default("N/A") @map("settlement_status") @db.VarChar(20)  // N/A|PENDING|SETTLED|DISPUTED
+
+  // 멱등성 키 (중복 제출 방지)
+  idempotencyKey String?  @unique @map("idempotency_key") @db.VarChar(128)
+
+  // 해시 체인 무결성
+  hashSignature  String   @map("hash_signature") @db.VarChar(64)
+  prevHash       String?  @map("prev_hash")       @db.VarChar(64)
+
+  memo           String?  @db.Text
+  metadata       Json?
+
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant         Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  registry       CarbonCreditRegistry         @relation(fields: [registryId], references: [id])
+  payment        CarbonPayment?
+  retirementCert CarbonRetirementCertificate?
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, eventType])
+  @@index([registryId])
+  @@map("carbon_ledger_entry")
+}
+
+/// 소각(상계) 인증서 — 배출권 영구 소각 법적 증거
+model CarbonRetirementCertificate {
+  id                 String   @id @default(uuid())
+  tenantId           String   @map("tenant_id")
+  ledgerEntryId      String   @unique @map("ledger_entry_id")
+  registryId         String   @map("registry_id")
+
+  retirementId       String   @unique @map("retirement_id") @db.VarChar(50) // RET-YYYYMMDD-NNNNN
+  serialNumbers      String   @map("serial_numbers") @db.Text               // 소각된 일련번호 목록 (JSON array)
+  retiredQuantity    Decimal  @map("retired_quantity") @db.Decimal(20, 6)
+  retirementReason   String   @map("retirement_reason") @db.Text
+  beneficiaryCompany String   @map("beneficiary_company") @db.VarChar(200)
+  retirementDate     DateTime @map("retirement_date") @db.Date
+  registryReference  String?  @map("registry_reference") @db.VarChar(200)   // 외부 레지스트리 제출 번호
+  certificatePdfUrl  String?  @map("certificate_pdf_url") @db.VarChar(500)
+
+  // K-ETS 규정 준수
+  offsetScope        String?  @map("offset_scope")        @db.VarChar(20)  // scope1 | scope2 | scope3
+  compliancePeriod   String?  @map("compliance_period")   @db.VarChar(10)  // "2025"
+  ketsSubmissionId   String?  @map("kets_submission_id")  @db.VarChar(100) // 환경부 제출 ID
+
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  tenant             Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ledgerEntry        CarbonLedgerEntry      @relation(fields: [ledgerEntryId], references: [id])
+  registry           CarbonCreditRegistry   @relation(fields: [registryId], references: [id])
+
+  @@index([tenantId, retirementDate(sort: Desc)])
+  @@index([tenantId, compliancePeriod])
+  @@map("carbon_retirement_certificate")
+}
+
+/// 결제 라이프사이클 — 거래당 1:1 연결
+model CarbonPayment {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  ledgerEntryId   String   @unique @map("ledger_entry_id")
+
+  paymentMethod   String   @map("payment_method") @db.VarChar(20)             // bank_transfer | pg | escrow
+  paymentStatus   String   @default("INITIATED") @map("payment_status") @db.VarChar(20)
+  // INITIATED → PENDING → SETTLED | FAILED
+
+  amount          Decimal  @db.Decimal(20, 2)
+  currency        String   @default("KRW") @db.VarChar(3)
+
+  // PG 결제
+  pgProvider      String?  @map("pg_provider")       @db.VarChar(50)   // toss | inicis | kcp
+  pgTransactionId String?  @map("pg_transaction_id") @db.VarChar(200)
+
+  // 계좌 이체
+  bankRefNumber   String?  @map("bank_ref_number") @db.VarChar(100)
+  bankCode        String?  @map("bank_code")        @db.VarChar(10)
+  accountLast4    String?  @map("account_last4")    @db.VarChar(4)
+
+  // 에스크로
+  escrowReleaseAt DateTime? @map("escrow_release_at")
+
+  initiatedAt     DateTime  @default(now()) @map("initiated_at")
+  settledAt       DateTime? @map("settled_at")
+  failedAt        DateTime? @map("failed_at")
+  failureReason   String?   @map("failure_reason") @db.Text
+
+  metadata        Json?
+
+  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ledgerEntry     CarbonLedgerEntry  @relation(fields: [ledgerEntryId], references: [id])
+
+  @@index([tenantId, paymentStatus])
+  @@index([pgTransactionId])
+  @@map("carbon_payment")
+}
+
+// ========================================
 // COMPLIANCE: 테넌트 규제 설정
 // ========================================
 
@@ -1963,6 +2210,68 @@ enum ESGReportStatus {
 }
 
 // ========================================
+// ESG REPORT AUDIT: 리포트 감사 추적 테이블
+// ========================================
+
+/// 리포트 생성 시도 감사 로그 (성공/실패 모두 기록)
+model ReportGenerationLog {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  reportId     String?  @map("report_id")      // 성공 시에만 연결
+  standard     String   @db.VarChar(50)
+  period       String   @db.VarChar(10)
+  status       String   @db.VarChar(20)         // pending|success|failed
+  durationMs   Int?     @map("duration_ms")
+  errorMessage String?  @map("error_message") @db.Text
+  triggeredBy  String   @map("triggered_by")
+  inputHash    String?  @map("input_hash") @db.VarChar(64)  // SHA-256 of input (재현성)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([reportId])
+  @@map("report_generation_log")
+}
+
+/// 리포트 상태 변경 감사 로그 (Append-only)
+model ReportAuditLog {
+  id          String   @id @default(uuid())
+  reportId    String   @map("report_id")
+  tenantId    String   @map("tenant_id")
+  action      String   @db.VarChar(50)          // generate|submit_review|approve|publish|withdraw|reissue
+  fromStatus  String?  @map("from_status") @db.VarChar(30)
+  toStatus    String?  @map("to_status") @db.VarChar(30)
+  performedBy String   @map("performed_by")
+  note        String?  @db.Text
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([reportId, createdAt])
+  @@index([tenantId, action])
+  @@map("report_audit_log")
+}
+
+/// 리포트에 사용된 원본 데이터 출처 추적 (데이터 계보/Lineage)
+model ReportDataSource {
+  id           String   @id @default(uuid())
+  reportId     String   @map("report_id")
+  tenantId     String   @map("tenant_id")
+  sourceType   String   @map("source_type") @db.VarChar(50) // emissions_record|manual_input|invoice|meter_reading
+  sourceId     String   @map("source_id")                   // 원본 레코드 ID
+  scope        String   @db.VarChar(30)                     // scope1|scope2_location|scope2_market|scope3
+  period       String   @db.VarChar(10)
+  activityData Decimal  @map("activity_data") @db.Decimal(20, 6)
+  activityUnit String   @map("activity_unit") @db.VarChar(20)
+  emissions    Decimal  @db.Decimal(20, 6)
+  dataQuality  String   @map("data_quality") @db.VarChar(20) // sensor|manual|estimated
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([reportId])
+  @@index([tenantId, period])
+  @@map("report_data_source")
+}
+
+// ========================================
 // DOWNLOAD: 다운로드 이력 관리
 // ========================================
 
@@ -2089,4 +2398,412 @@ model ActivityLogSeq {
 
   @@id([prefix, seqDate])
   @@map("activity_log_seq")
+}
+
+// ========================================
+// CARBON EXTENSIONS: VCM / 블록체인 / 지갑
+// ========================================
+
+/// 자발적 탄소 시장(VCM) 프로젝트 메타데이터
+/// CarbonCreditRegistry 1:1 확장 — Verra/GoldStandard 크레딧 전용
+model CarbonVCMProject {
+  id                    String   @id @default(uuid())
+  registryId            String   @unique @map("registry_id")
+
+  // 프로젝트 분류
+  projectCategory       String   @map("project_category") @db.VarChar(50)
+  // 레지스트리 프로젝트 ID
+  verraProjectId        String?  @map("verra_project_id") @db.VarChar(50)
+  goldStandardId        String?  @map("gold_standard_id") @db.VarChar(50)
+  // 지리 정보
+  countryCode           String   @map("country_code") @db.VarChar(3)
+  // 프로젝트 기간
+  projectStartDate      DateTime @map("project_start_date") @db.Date
+  monitoringPeriodStart DateTime @map("monitoring_period_start") @db.Date
+  monitoringPeriodEnd   DateTime @map("monitoring_period_end") @db.Date
+  // 품질 등급
+  addionalityRating     String   @default("unrated") @map("addiionality_rating") @db.VarChar(10)
+  permanenceRisk        String   @default("medium") @map("permanence_risk") @db.VarChar(10)
+  // 공동편익 (JSON — SDG 배열 포함)
+  sdgGoals              Json     @default("[]") @map("sdg_goals")
+  biodiversityImpact    Boolean  @default(false) @map("biodiversity_impact")
+  communityBenefit      Boolean  @default(false) @map("community_benefit")
+  waterConservation     Boolean  @default(false) @map("water_conservation")
+  livelihoodImprovement Boolean  @default(false) @map("livelihood_improvement")
+  coBenefitDescription  String?  @map("co_benefit_description") @db.Text
+  // 검증 기관
+  thirdPartyVerifier    String?  @map("third_party_verifier") @db.VarChar(100)
+  verificationReportUrl String?  @map("verification_report_url") @db.VarChar(500)
+  baselineMethodology   String?  @map("baseline_methodology") @db.VarChar(100)
+  expectedAnnualReductions Decimal? @map("expected_annual_reductions") @db.Decimal(15, 2)
+
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  registry CarbonCreditRegistry @relation(fields: [registryId], references: [id], onDelete: Cascade)
+
+  @@index([projectCategory])
+  @@index([countryCode])
+  @@map("carbon_vcm_project")
+}
+
+/// 블록체인 토큰화 탄소 크레딧 레코드
+/// CarbonCreditRegistry 기반 — Toucan/KlimaDAO/C3 등 온체인 토큰과 연결
+model CarbonTokenRecord {
+  id                  String    @id @default(uuid())
+  tenantId            String    @map("tenant_id")
+  registryId          String    @map("registry_id")
+
+  // 지갑/토큰 정보
+  walletAddress       String    @map("wallet_address") @db.VarChar(100)
+  tokenStandard       String    @map("token_standard") @db.VarChar(20)    // ERC-20|ERC-1155|ERC-721|SPL
+  network             String    @db.VarChar(30)                            // ethereum|polygon|celo|solana
+  protocol            String    @default("custom") @db.VarChar(20)        // toucan|klimadao|c3|moss|regen|custom
+  contractAddress     String    @map("contract_address") @db.VarChar(100)
+  tokenId             String?   @map("token_id") @db.VarChar(100)         // ERC-1155/721
+
+  // 수량
+  tokenizedQuantity   Decimal   @map("tokenized_quantity") @db.Decimal(20, 6)
+
+  // 온체인 상태
+  onChainStatus       String    @map("on_chain_status") @db.VarChar(30)   // pending|confirmed|bridging|retired_on_chain|failed|syncing
+  txHash              String?   @map("tx_hash") @db.VarChar(100)
+  blockNumber         BigInt?   @map("block_number")
+
+  // 시간 추적
+  bridgedAt           DateTime? @map("bridged_at")
+  retiredOnChainAt    DateTime? @map("retired_on_chain_at")
+
+  metadata            Json?
+
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  registry CarbonCreditRegistry @relation(fields: [registryId], references: [id])
+
+  @@index([tenantId, onChainStatus])
+  @@index([registryId])
+  @@index([walletAddress])
+  @@index([tenantId, network])
+  @@map("carbon_token_record")
+}
+
+/// 테넌트 탄소 지갑 — 블록체인 주소 1:1 관리
+/// 멀티테넌트: 테넌트당 1개 지갑 주소 (네트워크별 확장 가능)
+model TenantCarbonWallet {
+  id            String    @id @default(uuid())
+  tenantId      String    @unique @map("tenant_id")
+  network       String    @db.VarChar(30)             // ethereum|polygon|celo|solana
+  walletAddress String    @map("wallet_address") @db.VarChar(100)
+  isVerified    Boolean   @default(false) @map("is_verified")
+  verifiedAt    DateTime? @map("verified_at")
+
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([network])
+  @@map("tenant_carbon_wallet")
+}
+
+// ========================================
+// RBAC: Feature — 기능 단위 정의
+// ========================================
+// Feature는 메뉴·API 접근의 최소 권한 단위.
+// Plan.features(JSON)을 이 테이블로 정규화하여 DB 기반 제어.
+
+model Feature {
+  id          String  @id @default(uuid())
+  code        String  @unique @db.VarChar(100)   // e.g. "carbon_trading", "ai_forecast"
+  name        String  @db.VarChar(200)
+  description String? @db.Text
+  category    String  @db.VarChar(50)             // analytics|ai|control|report|admin
+  isActive    Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  planFeatures PlanFeature[]
+
+  @@index([category, isActive])
+  @@map("feature")
+}
+
+// ========================================
+// RBAC: PlanFeature — Plan × Feature 매핑
+// ========================================
+// 플랜별 허용 기능 정의. Plan.features JSON을 대체·보완.
+// 이 테이블 기준으로 메뉴/API 접근 제어.
+
+model PlanFeature {
+  id        String @id @default(uuid())
+  planId    String @map("plan_id")
+  featureCode String @map("feature_code") @db.VarChar(100)
+
+  // 제한값 (선택적 — 기능별 할당량)
+  limitValue Int? @map("limit_value")            // e.g. max AI queries/month
+  limitUnit  String? @map("limit_unit") @db.VarChar(30)  // e.g. "monthly"
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  plan    Plan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  feature Feature @relation(fields: [featureCode], references: [code], onDelete: Cascade)
+
+  @@unique([planId, featureCode])
+  @@index([planId])
+  @@index([featureCode])
+  @@map("plan_feature")
+}
+
+// ========================================
+// SUPER ADMIN: 설비 제품 카탈로그
+// ========================================
+
+model EquipmentProduct {
+  id           String          @id @default(uuid())
+
+  // 기본 정보
+  name         String          @db.VarChar(200)
+  modelNumber  String          @unique @map("model_number") @db.VarChar(100)
+  manufacturer String          @db.VarChar(100)
+  category     ProductCategory
+
+  // 적용 시설 유형 (JSON array: ["building","factory","residential"])
+  facilityTypes Json           @map("facility_types")
+
+  // 기술 스펙 (JSON: voltage, current, power, protocol 등)
+  specs        Json
+
+  // 호환 프로토콜 (JSON array: ["modbus_tcp","bacnet","mqtt"])
+  protocols    Json
+
+  // 가격
+  unitPrice    Decimal?        @map("unit_price") @db.Decimal(12, 2)
+
+  // 설명
+  description  String?         @db.Text
+  imageUrl     String?         @map("image_url") @db.VarChar(500)
+
+  // 설치 난이도: easy | medium | hard
+  installDifficulty String    @default("medium") @map("install_difficulty") @db.VarChar(20)
+
+  // 보증 기간 (개월)
+  warrantyMonths Int           @default(12) @map("warranty_months")
+
+  // 활성 여부
+  isActive     Boolean         @default(true) @map("is_active")
+
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  lotItems     EquipmentLotItem[]
+  stockRecords EquipmentStock[]
+
+  @@index([category])
+  @@index([isActive])
+  @@map("equipment_product")
+}
+
+enum ProductCategory {
+  gateway
+  sensor
+  controller
+  meter
+  display
+  accessory
+}
+
+// ========================================
+// SUPER ADMIN: 납품 로트 (도입기업별)
+// ========================================
+
+model EquipmentLot {
+  id           String     @id @default(uuid())
+  tenantId     String     @map("tenant_id")
+
+  // 로트 번호 (예: LOT-20260307-0001)
+  lotNumber    String     @unique @map("lot_number") @db.VarChar(100)
+
+  // 시설 유형: building | factory | residential
+  facilityType String     @map("facility_type") @db.VarChar(50)
+
+  // 상태
+  status       LotStatus  @default(pending)
+
+  // 납품 일정
+  orderedAt    DateTime?  @map("ordered_at") @db.Date
+  shippedAt    DateTime?  @map("shipped_at") @db.Date
+  deliveredAt  DateTime?  @map("delivered_at") @db.Date
+  installedAt  DateTime?  @map("installed_at") @db.Date
+
+  // 설치 담당자
+  technicianName  String? @map("technician_name") @db.VarChar(100)
+  technicianPhone String? @map("technician_phone") @db.VarChar(50)
+
+  // 연결 사이트 (선택 — 테넌트 내 등록된 사이트 참조)
+  siteId          String? @map("site_id") @db.VarChar(36)
+
+  // 설치 사이트 정보 (스냅샷 — 삭제/변경 방지)
+  siteAddress     String? @map("site_address") @db.Text
+  siteContact     String? @map("site_contact") @db.VarChar(100)
+
+  // 비고
+  notes        String?    @db.Text
+
+  // 메타
+  metadata     Json?
+
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items        EquipmentLotItem[]
+
+  @@index([tenantId])
+  @@index([siteId])
+  @@index([status])
+  @@index([facilityType])
+  @@index([deliveredAt])
+  @@map("equipment_lot")
+}
+
+enum LotStatus {
+  pending     // 발주
+  shipped     // 출하
+  delivered   // 납품 완료
+  installing  // 설치 중
+  installed   // 설치 완료
+  active      // 운영 중
+  returned    // 반납
+}
+
+// ========================================
+// SUPER ADMIN: 로트 품목 (설비 단위)
+// ========================================
+
+model EquipmentLotItem {
+  id           String       @id @default(uuid())
+  lotId        String       @map("lot_id")
+  productId    String       @map("product_id")
+
+  // 수량
+  quantity     Int          @default(1)
+
+  // 시리얼 번호 (JSON array)
+  serialNumbers Json        @map("serial_numbers")
+
+  // 품목 상태
+  status       LotItemStatus @default(pending)
+
+  // 연결된 기기/게이트웨이 ID (설치 후 매핑)
+  deviceId     String?      @map("device_id") @db.VarChar(36)
+  gatewayId    String?      @map("gateway_id") @db.VarChar(36)
+
+  // 불량 사유 (반납/불량 시)
+  defectNote   String?      @map("defect_note") @db.Text
+
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  lot          EquipmentLot     @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  product      EquipmentProduct @relation(fields: [productId], references: [id])
+
+  @@index([lotId])
+  @@index([productId])
+  @@map("equipment_lot_item")
+}
+
+enum LotItemStatus {
+  pending
+  installed
+  active
+  faulty
+  returned
+}
+
+// ────────────────────────────────────────────────────────────────
+// 창고 입고 이력 (equipment_stock)
+// ────────────────────────────────────────────────────────────────
+
+model EquipmentStock {
+  id          String           @id @default(uuid())
+  productId   String           @map("product_id") @db.VarChar(36)
+  quantity    Int              @default(1)
+  receivedAt  DateTime         @map("received_at")
+  supplier    String?          @db.VarChar(200)
+  unitCost    Decimal?         @map("unit_cost") @db.Decimal(15, 2)
+  batchNo     String?          @map("batch_no") @db.VarChar(100)
+  notes       String?          @db.Text
+  createdBy   String?          @map("created_by") @db.VarChar(36)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  product     EquipmentProduct @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@map("equipment_stock")
+}
+
+// ────────────────────────────────────────────────────────────────
+// 규제 샌드박스 신청 (regulatory_sandbox)
+// ────────────────────────────────────────────────────────────────
+
+model RegulatorySandbox {
+  id               String    @id @default(uuid())
+  tenantId         String    @map("tenant_id") @db.VarChar(36)
+  title            String    @db.VarChar(300)
+  description      String?   @db.Text
+  regulationType   String    @map("regulation_type") @db.VarChar(50)
+  exemptionScope   String?   @map("exemption_scope") @db.Text
+  status           String    @default("pending") @db.VarChar(20)
+  appliedAt        DateTime  @map("applied_at")
+  reviewStartedAt  DateTime? @map("review_started_at")
+  reviewedAt       DateTime? @map("reviewed_at")
+  reviewedBy       String?   @map("reviewed_by") @db.VarChar(36)
+  expireDate       DateTime? @map("expire_date") @db.Date
+  reviewNote       String?   @map("review_note") @db.Text
+  conditions       Json?
+  applicantName    String?   @map("applicant_name") @db.VarChar(100)
+  applicantEmail   String?   @map("applicant_email") @db.VarChar(200)
+  contactPhone     String?   @map("contact_phone") @db.VarChar(50)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  tenant           Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([status, appliedAt])
+  @@map("regulatory_sandbox")
+}
+
+// ────────────────────────────────────────────────────────────────
+// 탄소 시장 가격 이력 (carbon_market_price)
+// - K-ETS / EU-ETS / VCM 등 시장별 가격 히스토리
+// - 위험 시뮬레이션, 가격 분석, 포트폴리오 평가에 활용
+// - env KETS_MARKET_PRICE 대체 (DB 기반 가격 관리)
+// ────────────────────────────────────────────────────────────────
+
+model CarbonMarketPrice {
+  id         String   @id @default(uuid())
+  market     String   @db.VarChar(20)   // KETS | EU_ETS | VCM | GOLD_STANDARD
+  priceDate  DateTime @map("price_date") @db.Date
+  price      Decimal  @db.Decimal(15, 4)
+  currency   String   @default("KRW") @db.VarChar(10)
+  unit       String   @default("tCO2") @db.VarChar(20)
+  source     String?  @db.VarChar(200)  // KAU | KCU | CBL | 수기입력 등
+  changeRate Decimal? @map("change_rate") @db.Decimal(10, 4)  // 전일 대비 등락률(%)
+  volume     Int?                                              // 거래량 (선택)
+  notes      String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([market, priceDate], name: "uq_market_date")
+  @@index([market, priceDate(sort: Desc)])
+  @@map("carbon_market_price")
 }

@@ -42,10 +42,11 @@ const registerSchema = z.object({
   password: z
     .string()
     .min(8, '비밀번호는 8자 이상이어야 합니다')
-    .max(100, '비밀번호가 너무 깁니다')
+    .max(72, '비밀번호는 72자 이하여야 합니다')
     .regex(/[A-Z]/, '비밀번호에 대문자를 포함해야 합니다')
     .regex(/[a-z]/, '비밀번호에 소문자를 포함해야 합니다')
-    .regex(/[0-9]/, '비밀번호에 숫자를 포함해야 합니다'),
+    .regex(/[0-9]/, '비밀번호에 숫자를 포함해야 합니다')
+    .regex(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/, '비밀번호에 특수문자를 포함해야 합니다'),
   name: z
     .string()
     .min(1, '이름을 입력해주세요')
@@ -192,6 +193,23 @@ export async function POST(request: NextRequest) {
           isActive: true,
         },
       });
+
+      // 5. Trial 구독 자동 생성 (plan_trial이 DB에 존재하는 경우)
+      const trialPlan = await tx.plan.findUnique({ where: { id: 'plan_trial' }, select: { id: true } });
+      if (trialPlan) {
+        const trialEnd = new Date();
+        trialEnd.setDate(trialEnd.getDate() + 30); // 30일 체험
+        await tx.subscription.create({
+          data: {
+            tenantId: tenant.id,
+            planId: 'plan_trial',
+            status: 'ACTIVE',
+            billingCycle: 'monthly',
+            startDate: new Date(),
+            endDate: trialEnd,
+          },
+        });
+      }
 
       return { user, tenant };
     });

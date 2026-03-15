@@ -71,9 +71,14 @@ export const metadata: Metadata = {
     canonical: SITE_URL,
   },
   verification: {
-    // Google Search Console / Naver 웹마스터 등록 후 값 입력
-    // google: 'your-google-verification-code',
-    // other: { 'naver-site-verification': 'your-naver-code' },
+    // Google Search Console: 등록 후 NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION 환경변수에 값 입력
+    ...(process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+      ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
+      : {}),
+    // Naver 웹마스터: NEXT_PUBLIC_NAVER_SITE_VERIFICATION 환경변수에 값 입력
+    ...(process.env.NEXT_PUBLIC_NAVER_SITE_VERIFICATION
+      ? { other: { 'naver-site-verification': process.env.NEXT_PUBLIC_NAVER_SITE_VERIFICATION } }
+      : {}),
   },
 };
 
@@ -88,7 +93,8 @@ export default async function RootLayout({
   // → 새로고침 직후에도 status가 즉시 'authenticated'로 시작 (로딩 상태 없음)
   const session = await getServerSession(authOptions);
 
-  const jsonLd = {
+  // SoftwareApplication 구조화 데이터
+  const jsonLdApp = {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
     name: '탄소이음',
@@ -111,6 +117,46 @@ export default async function RootLayout({
     },
   };
 
+  // 법인 Organization 구조화 데이터
+  const jsonLdOrg = {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: '탄소이음',
+    alternateName: 'Carboneum',
+    url: SITE_URL,
+    logo: `${SITE_URL}/icon.png`,
+    description: '에너지 데이터로 세상을 잇다 — 탄소중립 SaaS 에너지 관리 전문기업',
+    foundingDate: '2024',
+    areaServed: 'KR',
+    sameAs: [
+      // 공식 SNS 채널 등록 후 추가
+      // 'https://www.linkedin.com/company/carboneum',
+      // 'https://github.com/carboneum',
+    ],
+    contactPoint: {
+      '@type': 'ContactPoint',
+      contactType: 'customer support',
+      email: process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? 'support@carboneum.kr',
+      availableLanguage: 'Korean',
+    },
+  };
+
+  // WebSite 구조화 데이터 (Google Sitelinks Search Box)
+  const jsonLdWebsite = {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: '탄소이음',
+    url: SITE_URL,
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: {
+        '@type': 'EntryPoint',
+        urlTemplate: `${SITE_URL}/docs?q={search_term_string}`,
+      },
+      'query-input': 'required name=search_term_string',
+    },
+  };
+
   return (
     <html lang="ko" className="dark">
       <head>
@@ -118,7 +164,15 @@ export default async function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdApp) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdOrg) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdWebsite) }}
         />
         {/* PWA 서비스워커 등록 */}
         <script

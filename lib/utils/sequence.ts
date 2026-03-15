@@ -34,7 +34,9 @@ export const MENU_PREFIX: Record<string, string> = {
   CARBON_INVOICE:   'CI',
   CARBON_TRADING:   'CG',  // Carbon Goods/거래
   CARBON_RETIRE:    'CR',
-  CARBON_ROADMAP:   'CM',  // Carbon Map
+  CARBON_ROADMAP:   'CM',  // Carbon Map (마일스톤)
+  EMISSIONS_DATA:   'ED',  // 배출량 수동 등록 (scope1/3)
+  EMISSIONS_RECORD: 'ER',  // 배출량 계산 레코드 (v2)
 
   // 수요반응 (DR)
   DR_EVENT: 'DR',
@@ -44,11 +46,32 @@ export const MENU_PREFIX: Record<string, string> = {
   DATA_DOWNLOAD: 'DL',
 
   // 알림
-  ALERT_RULE: 'AL',
+  ALERT_RULE:        'AL',
+  NOTIFICATION_RULE: 'NR',
+
+  // 제어 스케줄
+  CONTROL_SCHEDULE: 'CS',
+
+  // 배출계수
+  EMISSION_FACTOR: 'EF',
+
+  // 자원 관리 (장비 출하)
+  EQUIPMENT_PRODUCT: 'EP',
+  EQUIPMENT_LOT:     'EL',
+
+  // 지원/문의
+  SUPPORT_INQUIRY: 'SI',
 
   // 결제 / 구독
   PAYMENT:      'PM',
   SUBSCRIPTION: 'SB',
+
+  // 파트너
+  PARTNER: 'PT',
+
+  // 사용자 / 테넌트
+  USER:   'US',
+  TENANT: 'TN',
 
   // 시스템
   ADMIN: 'AD',

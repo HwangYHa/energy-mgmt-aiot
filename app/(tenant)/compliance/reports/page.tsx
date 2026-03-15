@@ -80,7 +80,7 @@ export default function ComplianceReportsPage() {
   const totalEmissions = reports.reduce((sum, r) => sum + parseFloat(r.totalEmissions || '0'), 0);
 
   return (
-    <div className="min-h-screen bg-slate-950 p-4 md:p-6">
+    <div className="h-full bg-slate-950 p-4 md:p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">

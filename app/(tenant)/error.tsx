@@ -16,7 +16,7 @@ export default function TenantError({
   }, [error]);
 
   return (
-    <div className="min-h-screen bg-[#051225] flex items-center justify-center p-4">
+    <div className="h-full bg-[#051225] flex items-center justify-center p-4">
       <div className="text-center space-y-6 max-w-md">
         <div className="p-4 bg-red-500/10 rounded-full w-20 h-20 mx-auto flex items-center justify-center">
           <AlertTriangle className="w-10 h-10 text-red-400" />

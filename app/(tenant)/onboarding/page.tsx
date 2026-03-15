@@ -11,6 +11,7 @@ import {
   CheckCircle, Upload, Wifi, AlertCircle, ArrowRight,
   BarChart3, Plug, Link2, PenLine, Zap, Loader2,
 } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import { apiPost, apiPut, ApiError, getCsrfToken } from '@/lib/api/client';
 import { toast } from '@/lib/toast';
 
@@ -562,6 +563,7 @@ function Step3Complete({ dataMethod, onFinish }: { dataMethod: DataMethod; onFin
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { update: updateSession } = useSession();
   const [currentStep, setCurrentStep] = useState(1);
   const [siteId, setSiteId] = useState('');
   const [dataMethod, setDataMethod] = useState<DataMethod>(null);
@@ -575,8 +577,10 @@ export default function OnboardingPage() {
   const handleFinish = async (href = '/dashboard') => {
     try {
       await apiPut('/api/onboarding', { complete: true, dataMethod });
+      // JWT의 onboardingCompleted를 즉시 갱신 — 미들웨어 리다이렉트 루프 방지
+      await updateSession();
     } catch {
-      // 완료 기록 실패해도 이동은 허용 (미들웨어 리다이렉트 방지를 위해 항상 complete 처리)
+      // 완료 기록 실패해도 이동은 허용
     }
     router.push(href);
   };
@@ -584,12 +588,14 @@ export default function OnboardingPage() {
   const handleSkip = async () => {
     try {
       await apiPut('/api/onboarding', { complete: true });
+      // JWT의 onboardingCompleted를 즉시 갱신
+      await updateSession();
     } catch { /* 무시 */ }
     router.push('/dashboard');
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#040e1c] via-[#051225] to-[#040e1c] flex items-center justify-center px-4 py-12">
+    <div className="h-full bg-gradient-to-b from-[#040e1c] via-[#051225] to-[#040e1c] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-xl">
 
         {/* 헤더 브랜드 */}

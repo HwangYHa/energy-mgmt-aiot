@@ -19,7 +19,9 @@ import { prisma } from '@/lib/db/prisma';
 import {
   notifySubscriptionExpiring,
   notifyGatewayOffline,
+  notifyByRole,
 } from '@/lib/services/notification.service';
+import { getSystemSettings } from '@/lib/services/system-settings.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +29,7 @@ export const dynamic = 'force-dynamic';
 const SUBSCRIPTION_NOTIFY_INTERVAL_MS = 23 * 60 * 60 * 1000; // 23시간
 const GATEWAY_NOTIFY_INTERVAL_MS      =  2 * 60 * 60 * 1000; // 2시간
 const GATEWAY_OFFLINE_THRESHOLD_MS    = 30 * 60 * 1000;       // 30분
+const POWER_NOTIFY_INTERVAL_MS        =  1 * 60 * 60 * 1000; // 1시간
 
 function isAuthorized(request: NextRequest): boolean {
   const secret  = process.env.CRON_SECRET;
@@ -132,6 +135,63 @@ export async function GET(request: NextRequest) {
     }
   } catch (err) {
     console.error('[Cron] 게이트웨이 오프라인 체크 오류:', err);
+    results.errors++;
+  }
+
+  // ── 3. 테넌트별 전력 임계값 초과 체크 ──────────────────────────
+  try {
+    // 테넌트 목록 조회 (active Measurement가 있는 테넌트만)
+    const tenants = await prisma.tenant.findMany({
+      select: { id: true },
+    });
+
+    for (const { id: tenantId } of tenants) {
+      try {
+        const settings = await getSystemSettings(tenantId);
+        const { powerThresholdWarning, powerThresholdCritical } = settings.alerts;
+
+        // 최근 15분간 최대 전력 사용률(%) 조회 — measurement 테이블 기준
+        const since15m = new Date(Date.now() - 15 * 60 * 1000);
+        const rows = await prisma.$queryRaw<{ maxRatio: number | null }[]>`
+          SELECT MAX(value) as maxRatio
+          FROM measurement
+          WHERE tenant_id = ${tenantId}
+            AND category = 'power_ratio'
+            AND time >= ${since15m}
+        `.catch(() => [{ maxRatio: null }]);
+
+        const ratio = rows[0]?.maxRatio;
+        if (ratio == null || ratio < powerThresholdWarning) continue;
+
+        const level = ratio >= powerThresholdCritical ? 'critical' : 'warning';
+
+        // 재알림 방지
+        const recentLog = await prisma.notificationLog.findFirst({
+          where: {
+            createdAt: { gte: new Date(Date.now() - POWER_NOTIFY_INTERVAL_MS) },
+            subject:   { contains: '전력 사용률' },
+            rule:      { tenantId },
+          },
+        });
+        if (recentLog) continue;
+
+        await notifyByRole({
+          tenantId,
+          category: 'energy',
+          ruleName: `전력 사용률 ${level === 'critical' ? '위험' : '경고'} 알림`,
+          message:  `현재 전력 사용률이 ${ratio.toFixed(1)}%로 ${level === 'critical' ? `위험 임계값(${powerThresholdCritical}%)` : `경고 임계값(${powerThresholdWarning}%)`}을 초과했습니다.`,
+          severity: level === 'critical' ? 'critical' : 'warning',
+          minRole:  'operator',
+        });
+
+        results.subscriptions; // 별도 카운터 없음 — 로그로만 확인
+        console.info(`[Cron] 전력 임계값 초과 알림: tenantId=${tenantId} ratio=${ratio}% level=${level}`);
+      } catch {
+        // 개별 테넌트 오류는 전체 중단 없이 계속
+      }
+    }
+  } catch (err) {
+    console.error('[Cron] 전력 임계값 체크 오류:', err);
     results.errors++;
   }
 

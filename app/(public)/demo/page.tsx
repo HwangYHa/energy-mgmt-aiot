@@ -106,7 +106,7 @@ export default function DemoPage() {
                     <div className="flex items-center gap-2">
                       <span className="text-slate-400">이메일:</span>
                       <code className="text-emerald-400 bg-slate-800 px-2 py-1 rounded">
-                        demo@탄소이음.com
+                        demo@carbonieum.com
                       </code>
                     </div>
                     <div className="flex items-center gap-2">

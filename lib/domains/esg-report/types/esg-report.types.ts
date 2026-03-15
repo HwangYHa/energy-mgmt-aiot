@@ -16,7 +16,21 @@ export type ESGStandard =
   | 'CDP'            // CDP Climate Disclosure
   | 'ISSB'           // ISSB IFRS S2 (기후 공시)
   | 'ISO_14064'      // KS I ISO 14064-1
-  | 'K_ETS';         // 한국 배출권 거래제 (K-ETS)
+  | 'K_ETS'          // 한국 배출권 거래제 (K-ETS)
+  | 'TCFD'           // TCFD (Task Force on Climate-related Financial Disclosures) 11개 권고공시
+  | 'CSRD'           // EU CSRD / ESRS E1 (European Sustainability Reporting Standards)
+  | 'US_SEC';        // US SEC Climate Disclosure Rules (2024 Final Rules)
+
+// 8대 표준 섹션 ID (모든 템플릿 공통 구조)
+export type StandardSectionId =
+  | 'company_profile'           // 1. 기업 프로필
+  | 'organizational_boundary'   // 2. 조직 경계
+  | 'operational_boundary'      // 3. 운영 경계
+  | 'emission_summary'          // 4. 배출량 요약
+  | 'emission_factors'          // 5. 배출계수
+  | 'activity_data_source'      // 6. 활동 데이터 출처
+  | 'calculation_methodology'   // 7. 계산 방법론
+  | 'reduction_target';         // 8. 감축 목표
 
 // 보고 기간 유형
 export type PeriodType = 'annual' | 'quarterly' | 'monthly';

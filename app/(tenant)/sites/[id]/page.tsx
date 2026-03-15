@@ -157,7 +157,7 @@ export default function SiteDetailPage() {
   // Loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#051225] flex items-center justify-center">
+      <div className="h-full bg-[#051225] flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-10 h-10 text-cyan-400 animate-spin mx-auto mb-4" />
           <p className="text-slate-400">사이트 정보를 불러오는 중...</p>
@@ -169,7 +169,7 @@ export default function SiteDetailPage() {
   // Error state
   if (error || !site) {
     return (
-      <div className="min-h-screen bg-[#051225] flex items-center justify-center p-4">
+      <div className="h-full bg-[#051225] flex items-center justify-center p-4">
         <div className="text-center">
           <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-white mb-2">오류가 발생했습니다</h2>
@@ -204,7 +204,7 @@ export default function SiteDetailPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#051225] p-4 md:p-6">
+    <div className="h-full bg-[#051225] p-4 md:p-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-slate-400 mb-6">
         <Link href="/sites" className="hover:text-white transition-colors">

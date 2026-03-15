@@ -6,9 +6,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { verifyAuth } from '@/lib/auth/verify';
 import { requireFeature } from '@/lib/auth/subscription';
+import { generateSeqNo } from '@/lib/utils/sequence';
 
-// K-ETS 참고 시장 가격 (환경변수 미설정 시 기본값)
-const MARKET_PRICE = Number(process.env.KETS_MARKET_PRICE ?? 8500);
+const db = prisma as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+/** DB에서 최신 K-ETS 시장 가격 조회 (폴백: env → 8500) */
+async function getKetsPrice(): Promise<number> {
+  try {
+    const row = await db.carbonMarketPrice.findFirst({
+      where: { market: 'KETS' },
+      orderBy: { priceDate: 'desc' },
+      select: { price: true },
+    });
+    if (row) return Number(row.price);
+  } catch {
+    // DB 미마이그레이션 환경 폴백
+  }
+  return Number(process.env.KETS_MARKET_PRICE ?? 8500);
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,7 +35,7 @@ export async function GET(request: NextRequest) {
     const [, subErr] = await requireFeature(auth.tenantId, 'analytics_carbon_trading');
     if (subErr) return subErr;
 
-    const [credits, recentTrades] = await Promise.all([
+    const [credits, recentTrades, marketPrice] = await Promise.all([
       // quantity > 0 인 크레딧만 반환 (전량 소각된 크레딧 제외)
       prisma.carbonCredit.findMany({
         where: { tenantId: auth.tenantId, quantity: { gt: 0 } },
@@ -32,11 +47,12 @@ export async function GET(request: NextRequest) {
         take: 20,
         include: { credit: { select: { type: true, vintage: true } } },
       }),
+      getKetsPrice(),
     ]);
 
     // 포트폴리오 집계
     const totalQuantity = credits.reduce((sum: number, c: { quantity: number; avgCost: number }) => sum + c.quantity, 0);
-    const totalValue = credits.reduce((sum: number, c: { quantity: number }) => sum + c.quantity * MARKET_PRICE, 0);
+    const totalValue = credits.reduce((sum: number, c: { quantity: number }) => sum + c.quantity * marketPrice, 0);
     const totalCost = credits.reduce((sum: number, c: { quantity: number; avgCost: number }) => sum + c.quantity * c.avgCost, 0);
     const unrealizedPnl = totalValue - totalCost;
 
@@ -47,11 +63,11 @@ export async function GET(request: NextRequest) {
         totalCost,
         unrealizedPnl,
         avgCost: totalQuantity > 0 ? totalCost / totalQuantity : 0,
-        marketPrice: MARKET_PRICE,
+        marketPrice,
       },
       credits,
       recentTrades,
-      marketPrice: MARKET_PRICE,
+      marketPrice,
     });
   } catch (error) {
     console.error('[carbon/trading GET]', error);
@@ -114,8 +130,11 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // 탄소 거래 코드 자동 채번: CG-YYYYMMDD-NNNN
+    const code = await generateSeqNo('CARBON_TRADING');
+
     // 거래 기록
-    const trade = await prisma.carbonTrade.create({
+    const trade = await (prisma as any).carbonTrade.create({
       data: {
         tenantId: auth.tenantId,
         creditId: credit.id,
@@ -124,6 +143,7 @@ export async function POST(request: NextRequest) {
         price,
         totalAmount: quantity * price,
         memo: memo ?? null,
+        code,
       },
     });
 

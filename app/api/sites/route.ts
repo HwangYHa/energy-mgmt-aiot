@@ -24,6 +24,8 @@ import {
 } from '@/lib/api/response';
 import { checkPlanLimit } from '@/lib/middleware/plan-limit';
 import { logActivity, MENU_CODES, ACTION_TYPES } from '@/lib/services/activity-log.service';
+import { generateSeqNo } from '@/lib/utils/sequence';
+import { getAllowedSiteIds } from '@/lib/auth/site-access';
 
 export async function GET(request: NextRequest) {
   let auth: Awaited<ReturnType<typeof verifyAuth>> | undefined;
@@ -40,10 +42,12 @@ export async function GET(request: NextRequest) {
     const skip = Number(searchParams.get('skip') || 0);
     const siteType = searchParams.get('siteType');
 
-    // ✅ 사이트 조회 (tenantId 필터 자동 포함)
+    // ✅ 사이트 조회 (tenantId 필터 + 사용자별 사이트 접근 권한)
+    const allowedSiteIds = await getAllowedSiteIds(auth);
     const where: Record<string, unknown> = {
       tenantId: auth.tenantId,
       deletedAt: null,
+      ...(allowedSiteIds !== null ? { id: { in: allowedSiteIds } } : {}),
     };
 
     if (siteType) {
@@ -116,16 +120,12 @@ export async function POST(request: NextRequest) {
       throw error;
     }
 
+    // 사이트 코드 자동 채번: ST-YYYYMMDD-NNNN (원자적, race-condition 없음)
+    const autoCode = validated.code || await generateSeqNo('SITE_MGMT');
+
     // ✅ 트랜잭션으로 원자성 보장
     const result = await prisma.$transaction(async (tx) => {
-      // 1. 사이트 코드 자동 채번: ST-YYYYMMDD-NNNN
-      const siteSeq = await tx.site.count({
-        where: { tenantId: auth!.tenantId },
-      });
-      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      const autoCode = validated.code || `ST-${today}-${String(siteSeq + 1).padStart(4, '0')}`;
-
-      // 2. 사이트 생성
+      // 사이트 생성
       const site = await tx.site.create({
         data: {
           ...validated,

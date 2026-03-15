@@ -113,7 +113,7 @@ export default function PipelinePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#051225] text-white p-4 md:p-6 space-y-6">
+    <div className="h-full bg-[#051225] text-white p-4 md:p-6 space-y-6">
       {/* 헤더 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>

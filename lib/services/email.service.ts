@@ -353,7 +353,7 @@ export async function sendNotificationEmail(opts: {
 
   const style = SEVERITY_STYLES[opts.severity] || { bg: '#1e293b', color: '#94a3b8', label: opts.severity.toUpperCase() };
   const testBadge = opts.isTest ? ' [테스트]' : '';
-  const monitoringUrl = `${SITE_URL}/monitoring/realtime`;
+  const monitoringUrl = `${SITE_URL}/dashboard/realtime`;
 
   const content = `
     <h2 style="margin:0 0 20px;color:#f1f5f9;font-size:20px;font-weight:700;">
