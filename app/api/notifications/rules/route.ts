@@ -12,7 +12,7 @@ import { verifyAuth } from '@/lib/auth/verify';
 import { prisma } from '@/lib/db/prisma';
 import { z } from 'zod';
 import { sendNotificationEmail } from '@/lib/services/email.service';
-import { sendKakao } from '@/lib/services/kakao.service';
+// [SMS_DISABLED] import { sendKakao } from '@/lib/services/kakao.service';
 import {
   successResponse,
   unauthorizedResponse,
@@ -166,8 +166,10 @@ export async function PATCH(request: NextRequest) {
         });
       }
 
-      // 카카오 알림톡/SMS 테스트
-      let kakaoSent = false;
+      // [SMS_DISABLED] 카카오 알림톡/SMS 테스트 발송 일시 비활성화
+      // 재활성화: 아래 주석 블록을 해제하고 위 let kakaoSent = false; 도 주석 해제
+      const kakaoSent = false;
+      /*
       if (existing.smsEnabled && user?.phone) {
         let kakaoStatus: 'sent' | 'failed' = 'sent';
         let kakaoError: string | null = null;
@@ -186,6 +188,7 @@ export async function PATCH(request: NextRequest) {
           sentAt: kakaoStatus === 'sent' ? new Date() : null,
         });
       }
+      */
 
       if (logs.length > 0) {
         await prisma.notificationLog.createMany({ data: logs });

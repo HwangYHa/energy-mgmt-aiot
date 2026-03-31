@@ -1351,7 +1351,7 @@ function NewLotModal({
             </div>
             {items.length === 0 && (
               <div className="text-xs text-slate-600 text-center py-4 border border-dashed border-slate-700 rounded-lg">
-                品목을 추가하여 납품 제품과 수량을 기록하세요
+                품목을 추가하여 납품 제품과 수량을 기록하세요
               </div>
             )}
             <div className="space-y-2">

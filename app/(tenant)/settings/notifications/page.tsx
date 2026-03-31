@@ -8,7 +8,7 @@ import { getServerAuth } from '@/lib/auth/server-auth';
 import { prisma } from '@/lib/db/prisma';
 import { NotificationSettings } from '@/components/notifications/NotificationSettings';
 import { Bell } from 'lucide-react';
-import { isKakaoEnabled } from '@/lib/services/kakao.service';
+// [SMS_DISABLED] import { isKakaoEnabled } from '@/lib/services/kakao.service';
 
 export default async function NotificationsPage() {
   const auth = await getServerAuth();
@@ -56,7 +56,7 @@ export default async function NotificationsPage() {
         initialRules={serializedRules}
         userPhone={user?.phone ?? null}
         userEmail={user?.email ?? ''}
-        smsServiceEnabled={isKakaoEnabled()}
+        smsServiceEnabled={false} /* [SMS_DISABLED] 원래: isKakaoEnabled() */
       />
     </div>
   );

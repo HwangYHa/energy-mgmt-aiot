@@ -25,7 +25,9 @@
 
 import { prisma } from '@/lib/db/prisma';
 import { sendNotificationEmail, SUPPORT_EMAIL } from '@/lib/services/email.service';
-import { sendKakao, sendLoginAlert, type KakaoEventType } from '@/lib/services/kakao.service';
+// [SMS_DISABLED] SMS 서비스 전체 비활성화 — 재활성화 시 아래 주석 해제
+// import { sendKakao, sendLoginAlert, type KakaoEventType } from '@/lib/services/kakao.service';
+import type { KakaoEventType } from '@/lib/services/kakao.service'; // type만 유지 (notifyByRole 옵션 타입용)
 
 // ─── 역할 계층 ──────────────────────────────────────────────────
 
@@ -98,20 +100,20 @@ interface NotifyRoleOpts {
   kakaoEventType?: KakaoEventType;
 }
 
-/** 카테고리 → 카카오 이벤트 타입 기본 매핑 */
-const KAKAO_EVENT_MAP: Record<string, KakaoEventType> = {
-  anomaly:         'anomaly',
-  energy:          'power_warning',
-  dr_event:        'dr_event',
-  dr:              'dr_event',
-  gateway:         'gateway',
-  device:          'gateway',
-  subscription:    'subscription',
-  system:          'general',
-  security:        'security',
-  carbon:          'general',
-  cost:            'general',
-};
+// [SMS_DISABLED] 카테고리 → 카카오 이벤트 타입 기본 매핑 (SMS 재활성화 시 주석 해제)
+// const KAKAO_EVENT_MAP: Record<string, KakaoEventType> = {
+//   anomaly:         'anomaly',
+//   energy:          'power_warning',
+//   dr_event:        'dr_event',
+//   dr:              'dr_event',
+//   gateway:         'gateway',
+//   device:          'gateway',
+//   subscription:    'subscription',
+//   system:          'general',
+//   security:        'security',
+//   carbon:          'general',
+//   cost:            'general',
+// };
 
 interface LogEntry {
   ruleId: string;
@@ -239,7 +241,10 @@ export async function notifyByRole(opts: NotifyRoleOpts): Promise<void> {
           });
         }
 
-        // ── 카카오 알림톡/SMS 발송 (전화번호 + smsEnabled) ──────
+        // ── [SMS_DISABLED] 카카오 알림톡/SMS 발송 일시 비활성화 ──────
+        // 카카오 비즈니스 채널 미개설로 SMS 기능을 일시 중단합니다.
+        // 재활성화: 아래 주석 블록을 해제하세요.
+        /*
         if (rule.smsEnabled && user.phone) {
           let status: 'sent' | 'failed' = 'sent';
           let errorMsg: string | null = null;
@@ -274,6 +279,7 @@ export async function notifyByRole(opts: NotifyRoleOpts): Promise<void> {
             sentAt:    status === 'sent' ? new Date() : null,
           });
         }
+        */
 
         // ── NotificationLog 일괄 저장 ─────────────────────────────
         if (logs.length > 0) {
@@ -452,21 +458,23 @@ export async function notifyAnomalyDetected(opts: {
  *
  * session.ts signIn 콜백에서 fire-and-forget으로 호출.
  */
-export async function notifyUserLogin(opts: {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function notifyUserLogin(_opts: {
   userId: string;
   userName: string;
   loginTime: Date;
   ipAddress?: string;
   provider?: string;
-}): Promise<void> {
+}): Promise<void> { const opts = _opts; void opts; // [SMS_DISABLED]
   try {
-    const user = await prisma.user.findUnique({
-      where:  { id: opts.userId },
-      select: { phone: true },
-    });
-
-    if (!user?.phone) return; // 전화번호 미등록 시 발송 생략
-
+    // [SMS_DISABLED] 로그인 알림톡 일시 비활성화 — 재활성화 시 return 제거 + 아래 블록 해제
+    return;
+    // const user = await prisma.user.findUnique({
+    //   where:  { id: opts.userId },
+    //   select: { phone: true },
+    // });
+    /*
+    if (!user?.phone) return;
     await sendLoginAlert({
       to:         user.phone,
       userName:   opts.userName,
@@ -474,8 +482,8 @@ export async function notifyUserLogin(opts: {
       ipAddress:  opts.ipAddress,
       provider:   opts.provider,
     });
+    */
   } catch (err) {
-    // 로그인 알림 실패가 로그인 자체를 막지 않도록 처리
     console.warn('[알림] 로그인 알림톡 발송 실패 (비크리티컬):', err instanceof Error ? err.message : err);
   }
 }
@@ -499,9 +507,10 @@ export async function notifySecurityEvent(opts: {
 
     if (!user) return;
 
+    // [SMS_DISABLED] 보안 이벤트 알림톡 일시 비활성화
+    // 재활성화: 아래 주석 블록 해제
+    /*
     const { sendSecurityAlert } = await import('@/lib/services/kakao.service');
-
-    // 카카오 알림 (전화번호 있을 때)
     if (user.phone) {
       await sendSecurityAlert({
         to:               user.phone,
@@ -512,6 +521,7 @@ export async function notifySecurityEvent(opts: {
         console.warn('[알림] 보안 이벤트 알림톡 발송 실패:', err instanceof Error ? err.message : err)
       );
     }
+    */
 
     // 보안 알림은 역할 제한 없이 해당 사용자에게만 발송
     await notifyByRole({

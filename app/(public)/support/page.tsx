@@ -5,7 +5,6 @@ import {
   Headphones,
   Mail,
   MessageCircle,
-  Phone,
   Clock,
   CheckCircle,
   ArrowRight,
@@ -44,16 +43,17 @@ export default function SupportPage() {
       color: 'text-blue-400',
       bgColor: 'bg-blue-500/10',
     },
-    {
-      icon: Phone,
-      title: '전화 상담',
-      description: '긴급한 문제가 있으신가요?',
-      detail: '1588-1234 (평일 09:00-18:00)',
-      action: '전화하기',
-      href: 'tel:1588-1234',
-      color: 'text-purple-400',
-      bgColor: 'bg-purple-500/10',
-    },
+    // 사업자 등록 완료 후 전화번호 기재 예정
+    // {
+    //   icon: Phone,
+    //   title: '전화 상담',
+    //   description: '긴급한 문제가 있으신가요?',
+    //   detail: '000-0000-0000 (평일 09:00-18:00)',
+    //   action: '전화하기',
+    //   href: 'tel:000-0000-0000',
+    //   color: 'text-purple-400',
+    //   bgColor: 'bg-purple-500/10',
+    // },
   ];
 
   const faqCategories = [

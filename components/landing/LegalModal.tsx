@@ -146,9 +146,11 @@ function PrivacyContent() {
         <h3 className="text-lg font-bold text-white mb-3">7. 문의</h3>
         <p>개인정보 관련 문의사항이 있으시면 아래로 연락주세요:</p>
         <ul className="mt-2 space-y-1 text-sm">
-          <li>이메일: privacy@carboneum.kr</li>
-          <li>전화: 1588-1234</li>
-          <li>주소: 서울특별시 강남구 테헤란로 123</li>
+          <li>이메일: carbonieum.official@gmail.com</li>
+          {/* 사업자 등록 완료 후 기재 예정
+          <li>전화: 000-0000-0000</li>
+          <li>주소: (사업자 등록 주소 기재 예정)</li>
+          */}
         </ul>
       </section>
     </div>
@@ -243,8 +245,10 @@ function TermsContent() {
         <h3 className="text-lg font-bold text-white mb-3">9. 문의</h3>
         <p>약관 관련 문의사항:</p>
         <ul className="mt-2 space-y-1 text-sm">
-          <li>이메일: legal@carboneum.kr</li>
-          <li>전화: 1588-1234</li>
+          <li>이메일: carbonieum.official@gmail.com</li>
+          {/* 사업자 등록 완료 후 기재 예정
+          <li>전화: 000-0000-0000</li>
+          */}
         </ul>
       </section>
     </div>

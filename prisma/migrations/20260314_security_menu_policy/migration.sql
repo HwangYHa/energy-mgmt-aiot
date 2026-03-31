@@ -21,10 +21,21 @@ INSERT IGNORE INTO `menu_item` (
 );
 
 -- ──────────────────────────────────────────────────
--- 2. audit_log: security 이벤트 인덱스 최적화
+-- 2. audit_log: security 이벤트 인덱스 최적화 (없을 때만 생성)
 -- ──────────────────────────────────────────────────
-CREATE INDEX IF NOT EXISTS `idx_audit_log_security`
-  ON `audit_log` (`action`(30), `ip_address`(45), `created_at`);
+SET @idx_exists = (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'audit_log'
+    AND INDEX_NAME = 'idx_audit_log_security'
+);
+SET @idx_sql = IF(@idx_exists = 0,
+  'CREATE INDEX `idx_audit_log_security` ON `audit_log` (`action`(30), `ip_address`(45), `created_at`)',
+  'SELECT 1'
+);
+PREPARE idx_stmt FROM @idx_sql;
+EXECUTE idx_stmt;
+DEALLOCATE PREPARE idx_stmt;
 
 -- ──────────────────────────────────────────────────
 -- 3. 패스워드 정책: 기존 사용자 password_changed_at 컬럼 (선택)

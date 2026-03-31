@@ -143,8 +143,8 @@ export async function middleware(request: NextRequest) {
     }
 
     return securityHeadersMiddleware(NextResponse.next(), {
-      scriptSrcDomains: ['https://js.tosspayments.com'],
-      frameSrcDomains: ['https://payment-gateway-sandbox.tosspayments.com'],
+      scriptSrcDomains: ['https://js.tosspayments.com', 'https://js.stripe.com'],
+      frameSrcDomains: ['https://payment-gateway-sandbox.tosspayments.com', 'https://js.stripe.com'],
     });
   }
 
@@ -229,13 +229,15 @@ export async function middleware(request: NextRequest) {
 
     // 남은 요청 수를 헤더로 전달
     const response = securityHeadersMiddleware(NextResponse.next(), {
-      scriptSrcDomains: ['https://js.tosspayments.com'],
-      frameSrcDomains: ['https://payment-gateway-sandbox.tosspayments.com'],
+      scriptSrcDomains: ['https://js.tosspayments.com', 'https://js.stripe.com'],
+      frameSrcDomains: ['https://payment-gateway-sandbox.tosspayments.com', 'https://js.stripe.com'],
     });
     withRateLimitHeaders(response, limit, result.remaining, result.resetAt);
     // CSRF 검증 (POST/PUT/DELETE/PATCH)
+    // 웹훅은 외부 서버(Stripe, Toss)에서 오므로 CSRF 제외
+    const isWebhookPath = pathname.startsWith('/api/webhook/');
     if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
-      if (pathname !== '/api/security/csrf') {
+      if (pathname !== '/api/security/csrf' && !isWebhookPath) {
         const csrfHeader = request.headers.get('x-csrf-token');
         const csrfCookie = request.cookies.get('csrf-token')?.value;
 

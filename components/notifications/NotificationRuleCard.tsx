@@ -71,7 +71,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   cost: '비용',
 };
 
-export function NotificationRuleCard({ rule, hasPhone, onUpdate }: Props) {
+export function NotificationRuleCard({ rule, hasPhone: _hasPhone, onUpdate }: Props) { // [SMS_DISABLED] hasPhone 일시 미사용
   const [expanded, setExpanded] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -269,13 +269,15 @@ export function NotificationRuleCard({ rule, hasPhone, onUpdate }: Props) {
                 disabled={updating}
                 onClick={() => toggleChannel('emailEnabled')}
               />
+              {/* [SMS_DISABLED] 카카오톡 채널 버튼 일시 비활성화
+                  재활성화: 아래 주석을 해제하고 위 주석을 제거하세요
               <ChannelButton
                 icon={MessageCircle}
                 label="카카오톡"
                 active={rule.smsEnabled}
                 disabled={updating}
                 onClick={() => toggleChannel('smsEnabled')}
-              />
+              /> */}
               <ChannelButton
                 icon={Smartphone}
                 label="푸시"
@@ -284,11 +286,13 @@ export function NotificationRuleCard({ rule, hasPhone, onUpdate }: Props) {
                 onClick={() => toggleChannel('pushEnabled')}
               />
             </div>
+            {/* [SMS_DISABLED] 전화번호 미등록 경고 일시 비활성화
             {rule.smsEnabled && !hasPhone && (
               <p className="text-xs text-amber-400 mt-1.5">
                 ⚠ 전화번호가 미등록되어 카카오 알림톡이 발송되지 않습니다. 상단에서 번호를 등록하세요.
               </p>
             )}
+            */}
           </div>
 
           {/* 심각도 선택 */}

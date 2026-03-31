@@ -106,8 +106,8 @@ export default function PrivacyPolicyPage() {
               <p>개인정보 관련 문의사항이 있으시면 아래로 연락주세요:</p>
               <ul className="mt-4 space-y-2">
                 <li>이메일: privacy@탄소이음.io</li>
-                <li>전화: 1588-1234</li>
-                <li>주소: 서울특별시 강남구 테헤란로 123</li>
+                {/* <li>전화: 1588-1234</li>
+                <li>주소: 서울특별시 강남구 테헤란로 123</li> */}
               </ul>
             </div>
           </section>

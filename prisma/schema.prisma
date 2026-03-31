@@ -2807,3 +2807,268 @@ model CarbonMarketPrice {
   @@index([market, priceDate(sort: Desc)])
   @@map("carbon_market_price")
 }
+
+// ========================================
+// SECURITY: Ransomware Alert
+// ========================================
+
+model RansomwareAlert {
+  id          String    @id @default(uuid())
+  tenantId    String?   @map("tenant_id")
+  userId      String?   @map("user_id")
+  sourceIp    String?   @map("source_ip") @db.VarChar(45)
+  alertType   String    @map("alert_type") @db.VarChar(50)
+  severity    String    @db.VarChar(20)
+  description String    @db.Text
+  metadata    Json?
+  status      String    @default("open") @db.VarChar(30)
+  resolvedBy  String?   @map("resolved_by")
+  resolvedAt  DateTime? @map("resolved_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([tenantId, status, createdAt])
+  @@index([alertType, severity])
+  @@map("ransomware_alert")
+}
+
+// ========================================
+// SECURITY: Backup Record
+// ========================================
+
+model BackupRecord {
+  id           String    @id @default(uuid())
+  backupType   String    @map("backup_type") @db.VarChar(20)
+  status       String    @db.VarChar(20)
+  sizeBytes    BigInt?   @map("size_bytes")
+  storagePath  String    @map("storage_path") @db.VarChar(500)
+  checksum     String?   @db.VarChar(64)
+  isImmutable  Boolean   @default(true) @map("is_immutable")
+  expiresAt    DateTime? @map("expires_at")
+  startedAt    DateTime  @default(now()) @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  metadata     Json?
+
+  @@index([backupType, status])
+  @@map("backup_record")
+}
+
+// ========================================
+// ERP: Invoice
+// ========================================
+
+model Invoice {
+  id             String    @id @default(uuid())
+  invoiceNo      String    @unique @map("invoice_no") @db.VarChar(30)
+  tenantId       String    @map("tenant_id")
+  subscriptionId String?   @map("subscription_id")
+  periodStart    String    @map("period_start") @db.VarChar(10)
+  periodEnd      String    @map("period_end") @db.VarChar(10)
+  subtotal       Decimal   @db.Decimal(12, 2)
+  taxRate        Decimal   @default(0.1000) @map("tax_rate") @db.Decimal(5, 4)
+  taxAmount      Decimal   @map("tax_amount") @db.Decimal(12, 2)
+  total          Decimal   @db.Decimal(12, 2)
+  currency       String    @default("KRW") @db.VarChar(3)
+  status         String    @default("draft") @db.VarChar(20)
+  dueDate        DateTime  @map("due_date")
+  paidAt         DateTime? @map("paid_at")
+  notes          String?   @db.Text
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  lineItems InvoiceLineItem[]
+
+  @@index([tenantId, status])
+  @@index([periodStart, status])
+  @@map("invoice")
+}
+
+model InvoiceLineItem {
+  id          String   @id @default(uuid())
+  invoiceId   String   @map("invoice_id")
+  description String   @db.VarChar(500)
+  quantity    Int      @default(1)
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(12, 2)
+  amount      Decimal  @db.Decimal(12, 2)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_line_item")
+}
+
+// ========================================
+// ERP: KPI Snapshot (에너지 + 재무 KPI 월별 스냅샷)
+// ========================================
+
+model KpiSnapshot {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  period         String   @db.VarChar(7)
+  totalKwh       Decimal  @map("total_kwh") @db.Decimal(15, 3)
+  peakKw         Decimal  @map("peak_kw") @db.Decimal(10, 3)
+  baselineKwh    Decimal? @map("baseline_kwh") @db.Decimal(15, 3)
+  savedKwh       Decimal? @map("saved_kwh") @db.Decimal(15, 3)
+  totalCo2Kg     Decimal  @map("total_co2_kg") @db.Decimal(15, 3)
+  savedCo2Kg     Decimal? @map("saved_co2_kg") @db.Decimal(15, 3)
+  energyCostKrw  Decimal? @map("energy_cost_krw") @db.Decimal(15, 2)
+  savedCostKrw   Decimal? @map("saved_cost_krw") @db.Decimal(15, 2)
+  investmentKrw  Decimal? @map("investment_krw") @db.Decimal(15, 2)
+  roiPercent     Decimal? @map("roi_percent") @db.Decimal(8, 2)
+  paybackMonths  Decimal? @map("payback_months") @db.Decimal(6, 1)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, period], name: "kpi_snapshot_tenant_id_period_key")
+  @@index([period])
+  @@map("kpi_snapshot")
+}
+
+// ========================================
+// RETENTION: Churn Score (일별 이탈 예측 점수)
+// 0점 = 완전히 건강, 100점 = 즉시 이탈 위험
+// ========================================
+
+model TenantChurnScore {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  period   String @db.VarChar(10) // YYYY-MM-DD
+
+  // 총점 (0~100, 높을수록 이탈 위험)
+  churnScore Int    @default(0) @map("churn_score")
+  riskLevel  String @default("normal") @map("risk_level") @db.VarChar(20) // normal|warning|critical
+
+  // 세부 점수 요소 (각 항목 0~100 환산 후 가중치 적용)
+  onboardingScore   Int @default(0) @map("onboarding_score")   // 가중치 20%
+  engagementScore   Int @default(0) @map("engagement_score")   // 가중치 25%
+  organizationScore Int @default(0) @map("organization_score") // 가중치 15%
+  roiScore          Int @default(0) @map("roi_score")          // 가중치 20%
+  supportScore      Int @default(0) @map("support_score")      // 가중치 10%
+  paymentScore      Int @default(0) @map("payment_score")      // 가중치 10%
+
+  // 점수 계산 근거 (JSON: {reasons: string[], signals: object})
+  scoreReasons Json? @map("score_reasons")
+
+  // 리텐션 액션 연동
+  actionTaken   Boolean   @default(false) @map("action_taken")
+  actionTakenAt DateTime? @map("action_taken_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, period])
+  @@index([churnScore(sort: Desc), createdAt(sort: Desc)])
+  @@index([riskLevel, createdAt(sort: Desc)])
+  @@map("tenant_churn_score")
+}
+
+// ========================================
+// RETENTION: 행동 이벤트 트래킹
+// ========================================
+
+model RetentionEvent {
+  id       String  @id @default(uuid())
+  tenantId String  @map("tenant_id")
+  userId   String? @map("user_id")
+
+  // 이벤트 유형
+  // login | device_connected | iot_data_received | ai_analysis_run
+  // report_generated | alert_triggered | alert_clicked
+  // feature_used | payment_succeeded | payment_failed
+  // support_ticket_opened | support_ticket_resolved | plan_changed
+  eventType  String @map("event_type") @db.VarChar(80)
+  properties Json? // 이벤트별 추가 데이터 (deviceId, featureName 등)
+
+  occurredAt DateTime @default(now()) @map("occurred_at")
+
+  @@index([tenantId, eventType, occurredAt(sort: Desc)])
+  @@index([userId, occurredAt(sort: Desc)])
+  @@index([eventType, occurredAt(sort: Desc)])
+  @@map("retention_event")
+}
+
+// ========================================
+// RETENTION: 온보딩 마일스톤 (TTFV 추적)
+// ========================================
+
+model OnboardingMilestone {
+  id       String @id @default(uuid())
+  tenantId String @unique @map("tenant_id")
+
+  // 마일스톤 달성 시각 (null = 미완료)
+  iotConnectedAt    DateTime? @map("iot_connected_at")
+  firstDataAt       DateTime? @map("first_data_at")
+  firstAiAnalysisAt DateTime? @map("first_ai_analysis_at")
+  firstReportAt     DateTime? @map("first_report_at")
+  firstAlertAt      DateTime? @map("first_alert_at")
+
+  // Time To First Value (초, IoT 최초 연결 → 첫 데이터 수집까지)
+  ttfvSeconds Int? @map("ttfv_seconds")
+
+  // 완료율 (0~100)
+  completionPct Int @default(0) @map("completion_pct")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("onboarding_milestone")
+}
+
+// ========================================
+// RETENTION: 자동 리텐션 액션 이력
+// ========================================
+
+model RetentionAction {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+
+  // 트리거 조건
+  trigger    String @map("trigger_type") @db.VarChar(80) // churn_critical | no_login_7d | onboarding_stuck | payment_failed_3 | roi_negative
+  churnScore Int    @default(0) @map("churn_score") // 발송 시점 점수
+
+  // 발송 채널
+  channel    String @db.VarChar(30) // email | sms | kakao | slack
+  templateId String @map("template_id") @db.VarChar(80)
+
+  // 수신 정보
+  recipientId    String? @map("recipient_id")    // userId
+  recipientPhone String? @map("recipient_phone") @db.VarChar(20)
+  recipientEmail String? @map("recipient_email") @db.VarChar(200)
+
+  // 발송 결과
+  status    String    @default("sent") @db.VarChar(20) // sent|delivered|read|failed
+  sentAt    DateTime  @default(now()) @map("sent_at")
+  readAt    DateTime? @map("read_at")
+
+  // 응답 전환 여부
+  responded   Boolean   @default(false)
+  respondedAt DateTime? @map("responded_at")
+
+  metadata Json?
+
+  @@index([tenantId, sentAt(sort: Desc)])
+  @@index([trigger, sentAt(sort: Desc)])
+  @@index([status])
+  @@map("retention_action")
+}
+
+// ========================================
+// KAKAO: 알림톡 발송 이력 (Solapi 연동)
+// ========================================
+
+model KakaoAlimtalkLog {
+  id         String  @id @default(uuid())
+  tenantId   String? @map("tenant_id")
+  userId     String? @map("user_id")
+  phone      String  @db.VarChar(20)
+  templateId String  @map("template_id") @db.VarChar(80)
+  variables  Json? // 템플릿 변수
+
+  // Solapi 발송 결과
+  status     String  @default("pending") @db.VarChar(20) // pending|sent|delivered|failed
+  msgKey     String? @map("msg_key") @db.VarChar(100) // Solapi 메시지 키
+  failReason String? @map("fail_reason") @db.Text
+
+  sentAt DateTime @default(now()) @map("sent_at")
+
+  @@index([tenantId, sentAt(sort: Desc)])
+  @@index([status, sentAt(sort: Desc)])
+  @@map("kakao_alimtalk_log")
+}

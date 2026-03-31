@@ -23,15 +23,15 @@ export async function register() {
       const isConnected = await checkDatabaseConnection();
 
       if (!isConnected) {
-        serverLogger.error('Database connection failed during startup');
+        serverLogger.error('시작 중에 데이터베이스 연결에 실패했습니다.');
         // 운영 환경에서는 서버 시작 실패 처리 가능
         if (process.env.NODE_ENV === 'production') {
-          serverLogger.error('CRITICAL: Cannot start server without database connection');
+          serverLogger.error('심각: 데이터베이스 연결 없이는 서버를 시작할 수 없습니다.');
           // process.exit(1); // 선택: 운영 환경에서 DB 없이 시작 방지
         }
       }
     } catch (error) {
-      serverLogger.error('Error checking database connection', error);
+      serverLogger.error('데이터베이스 연결 확인 중 오류 발생', error);
     }
 
     serverLogger.info('서버 측정 완료');

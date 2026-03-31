@@ -181,7 +181,10 @@
       "Bash(\"C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe\" -u root -p0000 energy -e \"SHOW TABLES;\")",
       "Bash(\"C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe\" -u root -p0000 energy -e \"SELECT id, email, role, is_active, login_attempts, locked_until FROM user WHERE email=''''demo@carbonieum.com'''' LIMIT 1;\")",
       "Bash(\"C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe\" -u root -p0000 energy -e \"SELECT u.id, u.email, u.password_hash IS NOT NULL as has_password, t.id as tenant_id, t.name as tenant_name, t.status as tenant_status FROM user u JOIN tenant t ON u.tenant_id = t.id WHERE u.email=''''demo@carbonieum.com'''';\")",
-      "Bash(\"C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe\" -u root -p0000 energy --default-character-set=utf8mb4 -e \"UPDATE menu_item SET name=''''보안 모니터링'''' WHERE path=''''/admin/security''''; SELECT id, name, path FROM menu_item WHERE path=''''/admin/security'''';\")"
+      "Bash(\"C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe\" -u root -p0000 energy --default-character-set=utf8mb4 -e \"UPDATE menu_item SET name=''''보안 모니터링'''' WHERE path=''''/admin/security''''; SELECT id, name, path FROM menu_item WHERE path=''''/admin/security'''';\")",
+      "Bash(mysql -u root -p0000 energy --default-character-set=utf8mb4 -e \"SELECT mg.code as grp, mi.code, mi.name, mi.path, mi.display_order, mi.is_active, mi.is_visible FROM menu_item mi LEFT JOIN menu_group mg ON mi.menu_group_id = mg.id ORDER BY mg.display_order, mi.display_order;\")",
+      "Bash(\"C:\\\\Program Files\\\\MySQL\\\\MySQL Server 8.0\\\\bin\\\\mysql.exe\" -u root -p0000 energy --default-character-set=utf8mb4 -e \"SELECT mg.code as grp, mi.code, mi.name, mi.path, mi.display_order, mi.is_active, mi.is_visible FROM menu_item mi LEFT JOIN menu_group mg ON mi.menu_group_id = mg.id ORDER BY mg.display_order, mi.display_order;\")",
+      "Bash(\"/c/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe\" -u root -p0000 energy --default-character-set=utf8mb4 -e \"SELECT mg.code as grp, mi.code, mi.name, mi.path, mi.display_order, mi.is_active, mi.is_visible FROM menu_item mi LEFT JOIN menu_group mg ON mi.menu_group_id = mg.id ORDER BY mg.display_order, mi.display_order;\")"
     ],
     "deny": [
       "Bash(sudo:*)",

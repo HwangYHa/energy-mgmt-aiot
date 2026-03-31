@@ -44,6 +44,9 @@ import {
   Wrench,
 } from 'lucide-react';
 
+// 결제 수단 타입
+type PaymentProvider = 'toss' | 'stripe';
+
 interface PlanComparisonProps {
   currentTier: string | null;
 }
@@ -98,6 +101,7 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [paymentProvider, setPaymentProvider] = useState<PaymentProvider>('toss');
 
   const formatPrice = (price: number | null) => {
     if (price === null) return '문의';
@@ -110,12 +114,6 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
     if (tier === 'enterprise') { router.push('/support'); return; }
     if (tier === 'trial') return;
 
-    const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY;
-    if (!clientKey) {
-      setCheckoutError('결제 설정이 완료되지 않았습니다. 관리자에게 문의해주세요.');
-      return;
-    }
-
     const display = PLAN_DISPLAY[tier];
     if (!display) return;
     const price = billingCycle === 'monthly' ? display.monthlyPrice : display.yearlyPrice;
@@ -124,7 +122,29 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
     setLoadingTier(tier);
 
     try {
-      // 클릭 시점에 SDK 로드 (이미 로드됐으면 즉시 resolve)
+      if (paymentProvider === 'stripe') {
+        // ── Stripe Checkout ─────────────────────────────
+        const res = await fetch('/api/payment/stripe/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tier, billingCycle }),
+        });
+        const data = await res.json();
+        if (!data.success || !data.url) {
+          throw new Error(data.error || 'Stripe 결제 세션 생성 실패');
+        }
+        window.location.href = data.url; // Stripe 호스팅 결제 페이지로 이동
+        return;
+      }
+
+      // ── 토스페이먼츠 Checkout ────────────────────────
+      const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY;
+      if (!clientKey) {
+        setCheckoutError('결제 설정이 완료되지 않았습니다. 관리자에게 문의해주세요.');
+        setLoadingTier(null);
+        return;
+      }
+
       await loadTossSDK();
 
       const orderId   = `TOSS-${tier.toUpperCase()}-${billingCycle === 'monthly' ? 'M' : 'Y'}-${Date.now()}`;
@@ -164,12 +184,41 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
           <h2 className="text-lg font-semibold text-white">플랜 비교</h2>
           <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
             <Info className="w-3 h-3" />
-            표시 금액에 부가세(VAT 10%)가 별도 부과됩니다. 토스페이먼츠 결제창에서 최종 금액 확인.
+            {paymentProvider === 'toss'
+              ? '표시 금액에 부가세(VAT 10%)가 별도 부과됩니다. 토스페이먼츠 결제창에서 최종 금액 확인.'
+              : '해외 결제(Stripe) — USD 기준 결제. 환율에 따라 실제 청구 금액이 달라질 수 있습니다.'}
           </p>
         </div>
 
-        {/* 결제 주기 토글 */}
-        <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1">
+        <div className="flex items-center gap-3">
+          {/* 결제 수단 선택 */}
+          <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1 border border-slate-700">
+            <button
+              onClick={() => setPaymentProvider('toss')}
+              className={cn(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition',
+                paymentProvider === 'toss'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-400 hover:text-white'
+              )}
+            >
+              🇰🇷 토스페이
+            </button>
+            <button
+              onClick={() => setPaymentProvider('stripe')}
+              className={cn(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition',
+                paymentProvider === 'stripe'
+                  ? 'bg-purple-600 text-white'
+                  : 'text-slate-400 hover:text-white'
+              )}
+            >
+              🌍 Stripe
+            </button>
+          </div>
+
+          {/* 결제 주기 토글 */}
+          <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1">
           <button
             onClick={() => setBillingCycle('monthly')}
             className={cn(
@@ -193,6 +242,7 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
             연간
             <span className="ml-1 text-xs text-emerald-400">-17%</span>
           </button>
+        </div>
         </div>
       </div>
 

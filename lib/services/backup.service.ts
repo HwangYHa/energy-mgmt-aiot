@@ -10,8 +10,9 @@
  */
 
 import { spawn } from 'child_process';
-import { createWriteStream, mkdirSync, statSync } from 'fs';
+import { createWriteStream, mkdirSync, statSync, existsSync, writeFileSync, unlinkSync } from 'fs';
 import { createGzip } from 'zlib';
+import { tmpdir } from 'os';
 import path from 'path';
 
 // ─── 타입 ─────────────────────────────────────────────────────────
@@ -56,6 +57,40 @@ export function resolveBackupPath(
 ): string {
   const base = storagePath?.trim() || getDefaultBackupDir();
   return path.join(base, `${backupId}.sql.gz`);
+}
+
+// ─── mysqldump 실행 파일 경로 자동 감지 ──────────────────────────
+
+/**
+ * mysqldump 실행 파일 경로 결정 우선순위:
+ *  1. MYSQLDUMP_PATH 환경변수 (명시 지정)
+ *  2. Windows 표준 MySQL 설치 경로 탐색
+ *  3. 'mysqldump' (PATH에 있는 경우 — Linux/Mac/Docker)
+ */
+export function resolveMysqldumpPath(): string {
+  // 1. 환경변수 우선
+  if (process.env.MYSQLDUMP_PATH) return process.env.MYSQLDUMP_PATH;
+
+  // 2. Windows 표준 설치 경로 탐색
+  if (process.platform === 'win32') {
+    const candidates = [
+      'C:\\Program Files\\MySQL\\MySQL Server 8.4\\bin\\mysqldump.exe',
+      'C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump.exe',
+      'C:\\Program Files\\MySQL\\MySQL Server 8.3\\bin\\mysqldump.exe',
+      'C:\\Program Files\\MySQL\\MySQL Server 8.2\\bin\\mysqldump.exe',
+      'C:\\Program Files\\MySQL\\MySQL Server 8.1\\bin\\mysqldump.exe',
+      'C:\\Program Files\\MySQL\\MySQL Server 5.7\\bin\\mysqldump.exe',
+      'C:\\Program Files (x86)\\MySQL\\MySQL Server 8.0\\bin\\mysqldump.exe',
+      'C:\\xampp\\mysql\\bin\\mysqldump.exe',
+      'C:\\wamp64\\bin\\mysql\\mysql8.0.31\\bin\\mysqldump.exe',
+    ];
+    for (const p of candidates) {
+      if (existsSync(p)) return p;
+    }
+  }
+
+  // 3. PATH에서 찾기 (Linux / Docker / 환경 설정된 경우)
+  return 'mysqldump';
 }
 
 // ─── DATABASE_URL 파싱 ────────────────────────────────────────────
@@ -133,27 +168,45 @@ export async function runLocalBackup(backupPath: string): Promise<BackupResult> 
   // mysqldump 실행
   return new Promise((resolve) => {
     let settled = false;
+    let cnfPath: string | null = null;
+
     const done = (result: BackupResult) => {
-      if (!settled) { settled = true; resolve(result); }
+      if (!settled) {
+        settled = true;
+        // 임시 옵션 파일 정리
+        if (cnfPath) { try { unlinkSync(cnfPath); } catch { /* ignore */ } }
+        resolve(result);
+      }
     };
 
-    const mysqldump = spawn(
-      'mysqldump',
-      [
-        `--host=${db.host}`,
-        `--port=${db.port}`,
-        `--user=${db.user}`,
-        '--single-transaction',   // InnoDB 무중단 스냅샷
-        '--routines',             // 스토어드 프로시저 포함
-        '--triggers',             // 트리거 포함
-        '--default-character-set=utf8mb4',
-        db.database,
-      ],
-      {
-        // MYSQL_PWD: 명령행 인수로 비밀번호 전달 시 ps 노출 방지
-        env: { ...process.env, MYSQL_PWD: db.password },
-      },
-    );
+    const mysqldumpExe = resolveMysqldumpPath();
+
+    // 비밀번호 전달: 임시 .cnf 파일 사용 (ps 노출 방지 + Windows 호환)
+    cnfPath = path.join(tmpdir(), `mysql_backup_${Date.now()}.cnf`);
+    try {
+      writeFileSync(cnfPath,
+        `[client]\npassword=${db.password}\n`,
+        { mode: 0o600 }
+      );
+    } catch {
+      cnfPath = null; // 실패 시 MYSQL_PWD 폴백
+    }
+
+    const args = [
+      ...(cnfPath ? [`--defaults-extra-file=${cnfPath}`] : []),
+      `--host=${db.host}`,
+      `--port=${db.port}`,
+      `--user=${db.user}`,
+      '--single-transaction',   // InnoDB 무중단 스냅샷
+      '--routines',             // 스토어드 프로시저 포함
+      '--triggers',             // 트리거 포함
+      '--default-character-set=utf8mb4',
+      db.database,
+    ];
+
+    const mysqldump = spawn(mysqldumpExe, args, {
+      env: { ...process.env, ...(cnfPath ? {} : { MYSQL_PWD: db.password }) },
+    });
 
     const gzip   = createGzip({ level: 6 });
     const output = createWriteStream(backupPath);
@@ -171,7 +224,7 @@ export async function runLocalBackup(backupPath: string): Promise<BackupResult> 
         status: 'failed', backupPath,
         durationMs: Date.now() - startedAt,
         error: isNotFound
-          ? 'mysqldump 명령을 찾을 수 없습니다. MySQL 클라이언트 도구(mysql-client)가 서버 PATH에 설치되어 있는지 확인하세요.'
+          ? `mysqldump 실행 파일을 찾을 수 없습니다 (탐색 경로: ${mysqldumpExe}). .env 파일에 MYSQLDUMP_PATH="C:\\Program Files\\MySQL\\MySQL Server 8.4\\bin\\mysqldump.exe" 를 추가하세요.`
           : `mysqldump 실행 오류: ${err.message}`,
       });
     });

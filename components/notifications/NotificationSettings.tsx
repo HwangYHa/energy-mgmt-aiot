@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Plus, Loader2, Phone, Mail, CheckCircle, AlertCircle, Pencil, X, MessageCircle } from 'lucide-react';
+import { Plus, Loader2, Mail, CheckCircle, AlertCircle, MessageCircle } from 'lucide-react';
+// [SMS_DISABLED] Phone, Pencil, X 아이콘 일시 미사용
 import { NotificationRuleCard } from './NotificationRuleCard';
 import { NotificationLogList } from './NotificationLogList';
-import { apiPost, apiPatch } from '@/lib/api/client';
+import { apiPost } from '@/lib/api/client';
+// [SMS_DISABLED] apiPatch 일시 미사용
 import { toast } from '@/lib/toast';
 
 interface NotificationRule {
@@ -43,42 +45,20 @@ const CATEGORIES = [
 // ─── 전화번호 관리 섹션 ──────────────────────────────────────────
 
 function PhoneSection({
-  phone,
+  phone: _phone,         // [SMS_DISABLED]
   email,
-  smsServiceEnabled,
-  onPhoneUpdated,
+  smsServiceEnabled: _smsServiceEnabled,    // [SMS_DISABLED]
+  onPhoneUpdated: _onPhoneUpdated,          // [SMS_DISABLED]
 }: {
   phone: string | null;
   email: string;
   smsServiceEnabled: boolean;
   onPhoneUpdated: (phone: string | null) => void;
 }) {
-  const [editing, setEditing]   = useState(false);
-  const [input, setInput]       = useState(phone ?? '');
-  const [saving, setSaving]     = useState(false);
-
-  async function save() {
-    setSaving(true);
-    try {
-      const res = await apiPatch('/api/users/me', { phone: input.trim() || null });
-      if (res.success) {
-        onPhoneUpdated((res.data as { phone: string | null })?.phone ?? null);
-        setEditing(false);
-        toast.success('전화번호가 저장되었습니다.');
-      } else {
-        toast.error(res.error ?? '저장에 실패했습니다.');
-      }
-    } catch {
-      toast.error('저장 중 오류가 발생했습니다.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function cancel() {
-    setInput(phone ?? '');
-    setEditing(false);
-  }
+  // [SMS_DISABLED] 전화번호 편집 state 일시 미사용
+  // const [editing, setEditing] = useState(false);
+  // const [input, setInput] = useState(phone ?? '');
+  // const [saving, setSaving] = useState(false);
 
   return (
     <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-5 space-y-4">
@@ -99,79 +79,28 @@ function PhoneSection({
         </div>
       </div>
 
-      {/* 카카오 알림톡 수신 번호 */}
+      {/* [SMS_DISABLED] 카카오 알림톡 수신 번호 — 일시 비활성화
+          재활성화: 아래 주석 블록을 해제하고 위 disabled 배너 제거 */}
+
+      {/* SMS 서비스 준비 중 안내 배너 */}
+      <div className="flex items-center gap-2 py-2.5 px-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+        <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+        <div>
+          <p className="text-xs text-amber-300 font-medium">카카오 알림톡 서비스 준비 중</p>
+          <p className="text-xs text-amber-400/70 mt-0.5">비즈니스 채널 개설 후 활성화됩니다. 현재 이메일 알림만 사용 가능합니다.</p>
+        </div>
+      </div>
+
+      {/*
+      [SMS_DISABLED] 전화번호 입력 섹션 — 아래 주석 해제 시 재활성화
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Phone className="w-4 h-4 text-cyan-400" />
           <span className="text-sm text-slate-300">카카오 알림톡 수신 번호</span>
         </div>
-
-        {editing ? (
-          <div className="flex items-center gap-2">
-            <input
-              type="tel"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="010-0000-0000"
-              className="w-40 bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
-            />
-            <button
-              onClick={save}
-              disabled={saving}
-              className="px-3 py-1.5 text-xs bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors disabled:opacity-50"
-            >
-              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '저장'}
-            </button>
-            <button
-              onClick={cancel}
-              className="p-1.5 text-slate-400 hover:text-white transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            {phone ? (
-              <>
-                <span className="text-sm text-slate-300 font-mono">{phone}</span>
-                <CheckCircle className="w-4 h-4 text-emerald-400" />
-              </>
-            ) : (
-              <>
-                <span className="text-sm text-slate-500">미등록</span>
-                <AlertCircle className="w-4 h-4 text-amber-500" />
-              </>
-            )}
-            <button
-              onClick={() => setEditing(true)}
-              className="p-1.5 text-slate-400 hover:text-cyan-400 transition-colors"
-              title="전화번호 수정"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
+        ...전화번호 입력 UI...
       </div>
-
-      {/* 안내 메시지 */}
-      <div className="space-y-1.5 pt-1">
-        {!smsServiceEnabled && (
-          <p className="text-xs text-amber-400/80 flex items-center gap-1.5">
-            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-            알림톡 서비스가 서버에 미설정 상태입니다. (SOLAPI 환경변수 필요)
-          </p>
-        )}
-        {!phone && (
-          <p className="text-xs text-slate-500">
-            ※ 카카오 알림톡을 받으려면 전화번호를 등록하고 알림 규칙에서 카카오톡 채널을 활성화하세요.
-          </p>
-        )}
-        {phone && (
-          <p className="text-xs text-slate-500">
-            ※ 알림 규칙에서 카카오톡 채널을 켜야 실제로 알림톡이 발송됩니다.
-          </p>
-        )}
-      </div>
+      */}
     </div>
   );
 }

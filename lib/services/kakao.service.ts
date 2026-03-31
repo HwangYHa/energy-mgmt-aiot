@@ -95,18 +95,25 @@ function normalizeKoPhone(phone: string): string {
 
 // ─── 서비스 활성화 여부 ──────────────────────────────────────────
 
+// ─── [SMS_DISABLED] 일시 비활성화 ────────────────────────────────
+// 카카오 비즈니스 채널 미개설로 Solapi SMS/알림톡 기능을 일시 중단합니다.
+// 재활성화: 아래 두 함수의 return false → 원래 로직으로 되돌리세요.
+// ─────────────────────────────────────────────────────────────────
+
 /** 카카오 알림톡 채널 설정 여부 (알림톡 ATA 전용) */
 export function isAlimtalkEnabled(): boolean {
-  return isKakaoEnabled() && !!process.env.SOLAPI_KAKAO_CHANNEL_ID;
+  return false; // [SMS_DISABLED]
+  // return isKakaoEnabled() && !!process.env.SOLAPI_KAKAO_CHANNEL_ID;
 }
 
 /** Solapi 기본 설정 여부 (API 키 + Secret + 발신번호) */
 export function isKakaoEnabled(): boolean {
-  return !!(
-    process.env.SOLAPI_API_KEY &&
-    process.env.SOLAPI_API_SECRET &&
-    process.env.SOLAPI_SENDER_PHONE
-  );
+  return false; // [SMS_DISABLED]
+  // return !!(
+  //   process.env.SOLAPI_API_KEY &&
+  //   process.env.SOLAPI_API_SECRET &&
+  //   process.env.SOLAPI_SENDER_PHONE
+  // );
 }
 
 // ─── 발송 옵션 인터페이스 ────────────────────────────────────────
@@ -141,7 +148,15 @@ export interface SendKakaoOpts {
  * - SOLAPI_KAKAO_CHANNEL_ID 미설정: SMS/LMS 직접 발송
  * - 환경변수 미설정: dev 모드 콘솔 출력
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function sendKakao(opts: SendKakaoOpts): Promise<void> {
+  // [SMS_DISABLED] Solapi 일시 비활성화 — 재활성화 시 이 블록 제거
+  console.info(`[SMS_DISABLED] sendKakao 비활성화됨 → ${opts.to.substring(0, 7)}*** : ${opts.message.substring(0, 50)}`);
+  return;
+}
+// [SMS_DISABLED] 원래 sendKakao 구현체 — 비활성화됨. 재활성화 시 이 함수 내용을 sendKakao로 이동
+// @ts-ignore unused — SMS 재활성화 전까지 보관
+async function _sendKakaoImpl(_opts: SendKakaoOpts): Promise<void> { const opts = _opts;
   const apiKey    = process.env.SOLAPI_API_KEY;
   const apiSecret = process.env.SOLAPI_API_SECRET;
   const from      = process.env.SOLAPI_SENDER_PHONE;
