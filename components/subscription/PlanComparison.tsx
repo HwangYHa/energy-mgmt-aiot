@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { apiPost } from '@/lib/api/client';
 import {
   PLAN_FEATURES,
   PLAN_DISPLAY,
@@ -42,9 +43,11 @@ import {
   ExternalLink,
   Info,
   Wrench,
+  CreditCard,
+  Receipt,
+  Monitor,
 } from 'lucide-react';
 
-// 결제 수단 타입
 type PaymentProvider = 'toss' | 'stripe';
 
 interface PlanComparisonProps {
@@ -122,18 +125,16 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
     setLoadingTier(tier);
 
     try {
+      // ── Stripe Checkout ────────────────────────────────
       if (paymentProvider === 'stripe') {
-        // ── Stripe Checkout ─────────────────────────────
-        const res = await fetch('/api/payment/stripe/checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tier, billingCycle }),
-        });
-        const data = await res.json();
-        if (!data.success || !data.url) {
-          throw new Error(data.error || 'Stripe 결제 세션 생성 실패');
+        const res = await apiPost<{ url: string }>(
+          '/api/payment/stripe/checkout',
+          { tier, billingCycle }
+        );
+        if (!res.success || !res.data?.url) {
+          throw new Error(res.error || 'Stripe 결제 세션 생성 실패');
         }
-        window.location.href = data.url; // Stripe 호스팅 결제 페이지로 이동
+        window.location.href = res.data.url;
         return;
       }
 
@@ -185,20 +186,20 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
           <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
             <Info className="w-3 h-3" />
             {paymentProvider === 'toss'
-              ? '표시 금액에 부가세(VAT 10%)가 별도 부과됩니다. 토스페이먼츠 결제창에서 최종 금액 확인.'
-              : '해외 결제(Stripe) — USD 기준 결제. 환율에 따라 실제 청구 금액이 달라질 수 있습니다.'}
+              ? '부가세(VAT 10%) 별도 · 토스페이먼츠 결제창에서 최종 금액 확인.'
+              : '부가세(VAT 10%) 별도 · Stripe 해외 카드 결제 · KRW 청구.'}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* 결제 수단 선택 */}
-          <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1 border border-slate-700">
+          {/* 결제 수단 선택 토글 */}
+          <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1 border border-slate-700/50">
             <button
               onClick={() => setPaymentProvider('toss')}
               className={cn(
-                'px-3 py-1.5 rounded-md text-xs font-medium transition',
+                'px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1',
                 paymentProvider === 'toss'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-cyan-600 text-white'
                   : 'text-slate-400 hover:text-white'
               )}
             >
@@ -207,13 +208,13 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
             <button
               onClick={() => setPaymentProvider('stripe')}
               className={cn(
-                'px-3 py-1.5 rounded-md text-xs font-medium transition',
+                'px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1',
                 paymentProvider === 'stripe'
-                  ? 'bg-purple-600 text-white'
+                  ? 'bg-indigo-600 text-white'
                   : 'text-slate-400 hover:text-white'
               )}
             >
-              🌍 Stripe
+              <CreditCard className="w-3 h-3" /> Stripe
             </button>
           </div>
 
@@ -313,25 +314,41 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
                   <Wrench className="w-3.5 h-3.5 text-amber-400" />
                   <span className="text-[11px] font-medium text-amber-400">초기 설치(공사)비</span>
                 </div>
-                <div className="text-sm font-bold text-white mb-1.5">
+                <div className="text-sm font-bold text-white mb-0.5">
                   {display.installationFee === null
                     ? '별도 견적'
                     : display.installationFee === 0
                     ? '없음'
                     : `₩${display.installationFee.toLocaleString('ko-KR')}`}
                   {display.installationFee !== null && display.installationFee > 0 && (
-                    <span className="text-[10px] text-slate-500 font-normal ml-1">1회 (VAT 별도)</span>
+                    <span className="text-[10px] text-slate-500 font-normal ml-1">1회 · VAT 별도</span>
                   )}
                 </div>
+                {display.installationFee !== null && display.installationFee > 0 && (
+                  <div className="flex items-center gap-1 mb-1.5">
+                    <Receipt className="w-3 h-3 text-blue-400" />
+                    <span className="text-[10px] text-blue-400">세금계산서 발행 · 계좌이체</span>
+                  </div>
+                )}
                 <ul className="space-y-0.5">
                   {display.installationIncludes.map((item, i) => (
-                    <li key={i} className="flex items-start gap-1 text-[10px] text-slate-400">
-                      <span className="text-amber-500 mt-0.5">•</span>
+                    <li key={i} className={`flex items-start gap-1 text-[10px] ${item.startsWith('※') ? 'text-amber-600/80 font-medium' : 'text-slate-400'}`}>
+                      <span className={`mt-0.5 ${item.startsWith('※') ? 'text-amber-600' : 'text-amber-500'}`}>
+                        {item.startsWith('※') ? '!' : '•'}
+                      </span>
                       {item}
                     </li>
                   ))}
                 </ul>
               </div>
+
+              {/* Starter: 소프트웨어 전용 배지 */}
+              {tier === 'trial' && (
+                <div className="mb-4 flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-700/50 border border-slate-600/50 rounded-lg">
+                  <Monitor className="w-3 h-3 text-slate-400" />
+                  <span className="text-[10px] text-slate-400">소프트웨어 전용 — IoT 하드웨어 미지원</span>
+                </div>
+              )}
 
               {/* 리소스 제한 */}
               <div className="space-y-2 mb-4 pb-4 border-b border-slate-700/50">
@@ -363,8 +380,10 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
                     <><ExternalLink className="w-3.5 h-3.5" /> 영업팀 문의</>
                   ) : tier === 'trial' ? (
                     '무료로 시작'
+                  ) : paymentProvider === 'stripe' ? (
+                    <><CreditCard className="w-3.5 h-3.5" /> Stripe로 결제</>
                   ) : (
-                    '플랜 선택 →'
+                    '🇰🇷 토스페이로 결제 →'
                   )}
                 </button>
               ) : (
@@ -375,6 +394,45 @@ export function PlanComparison({ currentTier }: PlanComparisonProps) {
             </div>
           );
         })}
+      </div>
+
+      {/* 설치비 결제 안내 */}
+      <div className="mb-6 p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl">
+        <div className="flex items-start gap-3">
+          <Receipt className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+          <div className="space-y-1.5">
+            <p className="text-sm font-semibold text-blue-300">초기 설치(공사)비 결제 안내</p>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              구독료는 토스페이먼츠 또는 Stripe로 즉시 결제됩니다.
+              <br />
+              설치(공사)비는 <span className="text-white font-medium">현장 방문 일정 확정 후 세금계산서 발행 → 계좌이체</span>로 별도 청구됩니다.
+            </p>
+            <div className="flex flex-wrap gap-3 pt-0.5">
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                <span className="w-4 h-4 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-300">1</span>
+                구독 결제 (온라인 즉시)
+              </div>
+              <span className="text-slate-600 text-xs">→</span>
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                <span className="w-4 h-4 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-300">2</span>
+                설치 일정 조율 (담당자 연락)
+              </div>
+              <span className="text-slate-600 text-xs">→</span>
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                <span className="w-4 h-4 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-300">3</span>
+                설치비 세금계산서 → 계좌이체
+              </div>
+              <span className="text-slate-600 text-xs">→</span>
+              <div className="flex items-center gap-1.5 text-[11px] text-emerald-400">
+                <span className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px] font-bold">✓</span>
+                현장 설치 완료 → 서비스 개시
+              </div>
+            </div>
+            <p className="text-[11px] text-amber-500/80 pt-0.5">
+              ※ 게이트웨이·센서 등 하드웨어 구매 비용은 설치비와 별개로 추가됩니다.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* 상세 기능 비교 테이블 */}

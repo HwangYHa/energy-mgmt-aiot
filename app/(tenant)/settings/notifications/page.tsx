@@ -48,7 +48,7 @@ export default async function NotificationsPage() {
         <Bell className="w-6 h-6 text-cyan-400" />
         <div>
           <h1 className="text-xl font-bold text-white">알림 설정</h1>
-          <p className="text-xs text-slate-400 mt-0.5">이메일 · SMS 알림 채널 및 규칙을 관리합니다</p>
+          <p className="text-xs text-slate-400 mt-0.5">이메일 알림 채널 및 규칙을 관리합니다</p>
         </div>
       </div>
 

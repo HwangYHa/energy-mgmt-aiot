@@ -195,7 +195,7 @@ export default function SecurityPage() {
               보안 취약점을 발견하셨다면 책임감 있는 공개(Responsible Disclosure) 정책에 따라 신고해주세요:
             </p>
             <ul className="list-disc list-inside space-y-2 ml-4">
-              <li>이메일: security@탄소이음.io</li>
+              <li>이메일: carbonieum.official@gmail.com</li>
               <li>PGP 키: 제공 가능</li>
               <li>응답 시간: 24시간 이내</li>
               <li>해결 시간: 심각도에 따라 7-30일</li>
@@ -213,7 +213,7 @@ export default function SecurityPage() {
         <div className="text-center mt-16">
           <p className="text-slate-400 mb-4">보안 관련 문의사항이 있으신가요?</p>
           <a
-            href="mailto:security@탄소이음.io"
+            href="mailto:carbonieum.official@gmail.com"
             className="inline-flex items-center gap-2 px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
           >
             <Shield className="w-5 h-5" />

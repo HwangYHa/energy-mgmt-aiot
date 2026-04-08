@@ -15,7 +15,7 @@ import {
   History,
 } from 'lucide-react';
 import { toast } from '@/lib/toast';
-import { apiPost, ApiError } from '@/lib/api/client';
+import { apiPost, apiGet, ApiError } from '@/lib/api/client';
 
 interface InquiryHistory {
   id: string;
@@ -77,14 +77,14 @@ export default function SupportPage() {
 
   // 사용자 프로필 자동 채우기 (세션)
   useEffect(() => {
-    fetch('/api/auth/session')
-      .then((r) => r.json())
-      .then((data) => {
-        if (data?.user) {
+    apiGet<{ user?: { name?: string; email?: string } }>('/api/auth/session')
+      .then((res) => {
+        const user = res.data?.user;
+        if (user) {
           setForm((prev) => ({
             ...prev,
-            name: data.user.name ?? prev.name,
-            email: data.user.email ?? prev.email,
+            name:  user.name  ?? prev.name,
+            email: user.email ?? prev.email,
           }));
         }
       })
@@ -94,13 +94,11 @@ export default function SupportPage() {
   const fetchHistory = async () => {
     setHistoryLoading(true);
     try {
-      const res = await fetch('/api/support?limit=10');
-      const data = await res.json();
-      if (data?.success) {
-        setHistory(data.data?.inquiries ?? []);
-      }
+      const res = await apiGet<{ inquiries: InquiryHistory[] }>('/api/support?limit=20');
+      setHistory(res.data?.inquiries ?? []);
     } catch {
-      // 조회 실패 무시
+      // 권한 없거나 조회 실패 → 내역 없음 표시
+      setHistory([]);
     } finally {
       setHistoryLoading(false);
     }
@@ -124,7 +122,10 @@ export default function SupportPage() {
 
     setSubmitting(true);
     try {
-      const data = await apiPost<{ id?: string }>('/api/support', form);
+      // priority는 DB 스키마에 없으므로 제외하고 전송
+      const { priority: _priority, ...submitData } = form;
+      void _priority;
+      const data = await apiPost<{ id?: string }>('/api/support', submitData);
       setSubmitted(true);
       setSubmittedId(data.data?.id ?? null);
     } catch (e) {

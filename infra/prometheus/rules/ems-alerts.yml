@@ -1,0 +1,165 @@
+# ============================================================
+# Prometheus 알람 규칙 — 탄소이음 EMS AIoT
+# ============================================================
+
+groups:
+  # ── 서비스 가용성 ────────────────────────────────────────
+  - name: ems.availability
+    rules:
+      - alert: AppDown
+        expr: up{job="nextjs"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Next.js 앱 다운 {{ $labels.instance }}"
+          description: "{{ $labels.instance }} 가 1분 이상 응답 없음"
+
+      - alert: AIEngineDown
+        expr: up{job="ai-engine"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "AI Engine 응답 없음"
+          description: "AI Engine이 2분 이상 응답하지 않습니다. 로컬 폴백 동작 중."
+
+      - alert: DatabaseDown
+        expr: up{job="mysql"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "MySQL 연결 실패"
+          description: "MySQL Exporter가 30초 이상 연결 실패"
+
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Redis 연결 실패"
+          description: "Redis Exporter가 1분 이상 연결 실패"
+
+  # ── 리소스 사용량 ────────────────────────────────────────
+  - name: ems.resources
+    rules:
+      - alert: HighCPU
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU 사용률 높음 ({{ $value | printf \"%.1f\" }}%)"
+          description: "5분간 CPU 사용률 85% 초과"
+
+      - alert: CriticalCPU
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CPU 임계치 초과 ({{ $value | printf \"%.1f\" }}%)"
+
+      - alert: HighMemory
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "메모리 사용률 높음 ({{ $value | printf \"%.1f\" }}%)"
+
+      - alert: DiskUsageHigh
+        expr: (1 - (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "디스크 사용률 높음 {{ $labels.mountpoint }} ({{ $value | printf \"%.1f\" }}%)"
+
+      - alert: DiskUsageCritical
+        expr: (1 - (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100 > 92
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "디스크 임계치 초과 — 즉시 조치 필요"
+
+  # ── MySQL ────────────────────────────────────────────────
+  - name: ems.mysql
+    rules:
+      - alert: MySQLTooManyConnections
+        expr: mysql_global_status_threads_connected / mysql_global_variables_max_connections * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MySQL 연결 수 높음 ({{ $value | printf \"%.1f\" }}%)"
+
+      - alert: MySQLSlowQueries
+        expr: rate(mysql_global_status_slow_queries[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MySQL 슬로우 쿼리 다수 발생 ({{ $value | printf \"%.1f\" }}/s)"
+          description: "슬로우 쿼리 로그 확인: docker exec ems_mysql tail -100 /var/lib/mysql/slow.log"
+
+      - alert: MySQLReplicationLag
+        expr: mysql_slave_status_seconds_behind_master > 30
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MySQL 복제 지연 {{ $value }}초"
+
+  # ── Redis ────────────────────────────────────────────────
+  - name: ems.redis
+    rules:
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis 메모리 사용률 높음 ({{ $value | printf \"%.1f\" }}%)"
+
+      - alert: RedisConnectionsHigh
+        expr: redis_connected_clients > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis 연결 수 높음 ({{ $value }})"
+
+  # ── 애플리케이션 ─────────────────────────────────────────
+  - name: ems.application
+    rules:
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP 5xx 에러율 높음 ({{ $value | printf \"%.1f\" }}%)"
+
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API P95 응답시간 높음 ({{ $value | printf \"%.2f\" }}s)"
+
+      - alert: NodeJSHeapHigh
+        expr: nodejs_heap_used_bytes / nodejs_heap_size_total_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node.js 힙 메모리 높음 ({{ $value | printf \"%.1f\" }}%)"

@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/session';
 import { createStripeCheckoutSession, isStripeConfigured } from '@/lib/services/stripe.service';
+import { successResponse, errorResponse } from '@/lib/api/response';
 import { z } from 'zod';
 
 const bodySchema = z.object({
@@ -51,15 +52,12 @@ export async function POST(request: NextRequest) {
       cancelUrl:  `${origin}/payment/stripe/cancel`,
     });
 
-    return NextResponse.json({ success: true, url: checkoutUrl });
+    return successResponse({ url: checkoutUrl });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ success: false, error: '잘못된 요청입니다.', details: error.errors }, { status: 400 });
+      return errorResponse('VALIDATION_ERROR', { status: 400 });
     }
     console.error('[Stripe Checkout]', error);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : '결제 세션 생성 중 오류가 발생했습니다.' },
-      { status: 500 }
-    );
+    return errorResponse('EXTERNAL_SERVICE_ERROR', { status: 500 });
   }
 }

@@ -23,13 +23,13 @@ info:
   contact:
     name: 탄소이음 기술지원
     email: carbonieum.official@gmail.com
-    url: https://carboneum.kr/support
+    url: https://carbonieum.com/support
   license:
     name: 상업용 라이선스
-    url: https://carboneum.kr/legal/terms
+    url: https://carbonieum.com/legal/terms
 
 servers:
-  - url: https://carboneum.kr/api
+  - url: https://carbonieum.com/api
     description: 프로덕션 서버
   - url: http://localhost:3000/api
     description: 로컬 개발 서버

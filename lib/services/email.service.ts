@@ -25,7 +25,7 @@ const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD || '';
 const EMAIL_FROM = `탄소이음 <${GMAIL_USER || 'carbonieum.official@gmail.com'}>`;
 export const SUPPORT_EMAIL =
   process.env.SUPPORT_EMAIL || 'carbonieum.official@gmail.com';
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://carboneum.kr';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://carbonieum.com';
 
 // ─── 카테고리 라벨 ──────────────────────────────────────────────
 
@@ -404,4 +404,113 @@ export async function sendNotificationEmail(opts: {
   });
 
   console.info(`[Email] 알림 이메일 발송 완료 → ${opts.to.substring(0, 3)}*** (${opts.ruleName})`);
+}
+
+// ────────────────────────────────────────────────────────────────
+// 5. 설치 예약 접수 알림 (관리자 + 고객 확인)
+// ────────────────────────────────────────────────────────────────
+
+export interface InstallationRequest {
+  contactName: string;
+  phone: string;
+  email?: string;
+  preferredDate: string;
+  address?: string;
+  planTier?: string;
+  tenantName?: string;
+  notes?: string;
+}
+
+const PLAN_NAME_MAP: Record<string, string> = {
+  basic: 'Basic (₩149,000/월)',
+  pro: 'Professional (₩399,000/월)',
+  enterprise: 'Enterprise (맞춤 견적)',
+};
+
+export async function sendInstallationRequestEmail(req: InstallationRequest): Promise<void> {
+  const transport = getTransport();
+  const planLabel = PLAN_NAME_MAP[req.planTier ?? ''] ?? req.planTier ?? '미지정';
+  const dateLabel = req.preferredDate
+    ? new Date(req.preferredDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })
+    : req.preferredDate;
+
+  // ── 관리자 알림 ──────────────────────────────────────────────
+  const adminContent = `
+    <h2 style="margin:0 0 20px;color:#ffffff;font-size:20px;font-weight:700;">
+      📋 설치 예약 접수
+    </h2>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+      ${[
+        ['담당자', req.contactName],
+        ['연락처', req.phone],
+        ['이메일', req.email || '미입력'],
+        ['희망 방문일', dateLabel],
+        ['사업장 주소', req.address || '미입력'],
+        ['선택 플랜', planLabel],
+        ['테넌트', req.tenantName || '미확인'],
+        ['추가 요청사항', req.notes || '없음'],
+      ].map(([label, value]) => `
+        <tr>
+          <td style="padding:10px 14px;background:#1e293b;border:1px solid #334155;width:120px;color:#94a3b8;font-size:13px;font-weight:600;">${label}</td>
+          <td style="padding:10px 14px;background:#0f172a;border:1px solid #334155;color:#e2e8f0;font-size:13px;">${value}</td>
+        </tr>
+      `).join('')}
+    </table>
+    <div style="padding:14px 16px;background:#0c4a6e;border-radius:8px;border-left:3px solid #0ea5e9;">
+      <p style="margin:0;color:#7dd3fc;font-size:13px;line-height:1.6;">
+        <strong>처리 안내:</strong><br>
+        1. 위 연락처로 고객에게 연락하여 최종 방문 일정 확정<br>
+        2. 현장 실측 후 설치비 최종 확정 (Basic ₩500,000 / Pro ₩1,800,000 기준)<br>
+        3. 세금계산서 발행 후 계좌이체 안내<br>
+        4. 설치 완료 후 게이트웨이 등록 지원
+      </p>
+    </div>
+  `;
+
+  if (transport) {
+    await transport.sendMail({
+      from: EMAIL_FROM,
+      to: SUPPORT_EMAIL,
+      subject: `[설치예약] ${req.contactName} — ${planLabel} — ${req.preferredDate}`,
+      html: wrapTemplate('설치 예약 접수', adminContent),
+    }).catch(e => console.error('[Email] 설치예약 관리자 알림 실패:', e));
+  }
+
+  // ── 고객 확인 메일 (이메일 있을 때만) ───────────────────────
+  if (!req.email || !transport) return;
+
+  const customerContent = `
+    <h2 style="margin:0 0 8px;color:#ffffff;font-size:20px;font-weight:700;">설치 예약이 접수되었습니다</h2>
+    <p style="margin:0 0 24px;color:#94a3b8;font-size:14px;">
+      안녕하세요, ${req.contactName}님. 탄소이음 설치 예약이 정상적으로 접수되었습니다.
+    </p>
+    <div style="padding:16px;background:#0f172a;border-radius:8px;border:1px solid #334155;margin-bottom:24px;">
+      <p style="margin:0 0 8px;color:#e2e8f0;font-size:14px;font-weight:600;">접수 내용</p>
+      <p style="margin:0;color:#94a3b8;font-size:13px;line-height:1.8;">
+        • 희망 방문일: <strong style="color:#e2e8f0;">${dateLabel}</strong><br>
+        • 선택 플랜: <strong style="color:#e2e8f0;">${planLabel}</strong><br>
+        • 연락처: <strong style="color:#e2e8f0;">${req.phone}</strong>
+      </p>
+    </div>
+    <div style="padding:14px 16px;background:#1c1917;border-radius:8px;border-left:3px solid #f59e0b;margin-bottom:24px;">
+      <p style="margin:0;color:#fbbf24;font-size:13px;line-height:1.6;">
+        <strong>다음 단계 안내</strong><br>
+        영업일 1~2일 내 담당자가 연락드려 최종 방문 일정을 확정합니다.<br>
+        현장 실측 후 설치비가 확정되며, <strong>세금계산서 발행 → 계좌이체</strong> 방식으로 청구됩니다.<br>
+        설치 당일 게이트웨이 등록 및 센서 연결을 지원해 드립니다.
+      </p>
+    </div>
+    <p style="margin:0;color:#64748b;font-size:12px;">
+      문의: <a href="mailto:${SUPPORT_EMAIL}" style="color:#06b6d4;">${SUPPORT_EMAIL}</a>
+    </p>
+  `;
+
+  await transport.sendMail({
+    from: EMAIL_FROM,
+    to: req.email,
+    subject: '[탄소이음] 설치 예약이 접수되었습니다',
+    html: wrapTemplate('설치 예약 확인', customerContent),
+  }).catch(e => console.error('[Email] 설치예약 고객 확인 메일 실패:', e));
+
+  console.info(`[Email] 설치예약 이메일 발송 → admin + ${req.email?.substring(0, 3)}***`);
 }

@@ -68,9 +68,10 @@
 ### 구매 계획
 - **등록처**: [hosting.kr](https://www.hosting.kr)
 - **우선순위 도메인 후보**:
-  1. `carbonieum.co.kr` (영문, B2B 인지도 용이)
-  2. `carbonieum.kr`
-  3. `탄소이음.kr` (한글 도메인)
+  1. `carbonieum.com` (영문, B2B 인지도 용이)
+  2. `carbonieum.co.kr`
+  3. `carbonieum.kr`
+  4. `탄소이음.kr` (한글 도메인)
 
 ### 도메인 구매 후 설정 단계
 
@@ -87,11 +88,11 @@
 4. SSL 인증서 자동 발급 (Let's Encrypt)
 
 5. 환경변수 업데이트:
-   NEXTAUTH_URL=https://carbonieum.co.kr
+   NEXTAUTH_URL=https://carbonieum.com
 
 6. Google OAuth 설정 업데이트:
    Google Cloud Console → OAuth 2.0 클라이언트 → 승인된 리디렉션 URI 추가
-   → https://carbonieum.co.kr/api/auth/callback/google
+   → https://carbonieum.com/api/auth/callback/google
 ```
 
 ### DNS 레코드 설정 예시 (Cloudflare)
@@ -112,10 +113,10 @@ TXT  @      v=spf1 include:...   (이메일 인증)
 
 ```
 승인된 JavaScript 원본:
-  https://carbonieum.co.kr
+  https://carbonieum.com
 
 승인된 리디렉션 URI:
-  https://carbonieum.co.kr/api/auth/callback/google
+  https://carbonieum.com/api/auth/callback/google
   http://localhost:3000/api/auth/callback/google  ← 개발용
 ```
 

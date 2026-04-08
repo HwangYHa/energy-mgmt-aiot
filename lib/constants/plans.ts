@@ -43,13 +43,13 @@ export interface PlanFeatureSet {
 }
 
 export const PLAN_FEATURES: Record<string, PlanFeatureSet> = {
-  // Starter (무료/체험)
+  // Starter (무료/체험) — 소프트웨어 전용. IoT 하드웨어 미지원
   trial: {
     maxSites: 1,
-    maxDevices: 10,
+    maxDevices: 0,   // IoT 디바이스 미지원 (고지서·수동 입력만 가능)
     maxUsers: 2,
     dataRetentionDays: 30,
-    apiRateLimit: 100,
+    apiRateLimit: 60,
     features: {
       realtimeMonitoring: true,
       historicalAnalytics: true,
@@ -79,12 +79,12 @@ export const PLAN_FEATURES: Record<string, PlanFeatureSet> = {
     },
   },
 
-  // Basic (Starter 유료)
+  // Basic — 소규모 공장/건물 (월 전기요금 ₩2-5M 타겟, 10% 절감 시 ROI 2~3x)
   basic: {
     maxSites: 3,
-    maxDevices: 50,
+    maxDevices: 30,
     maxUsers: 10,
-    dataRetentionDays: 90,
+    dataRetentionDays: 365,
     apiRateLimit: 500,
     features: {
       realtimeMonitoring: true,
@@ -115,12 +115,12 @@ export const PLAN_FEATURES: Record<string, PlanFeatureSet> = {
     },
   },
 
-  // Professional
+  // Professional — 중견 공장/복합시설 (월 전기요금 ₩5-30M 타겟, ROI 1.5~7x)
   pro: {
     maxSites: 10,
-    maxDevices: 200,
-    maxUsers: 30,
-    dataRetentionDays: 365,
+    maxDevices: 150,
+    maxUsers: 50,
+    dataRetentionDays: 730,
     apiRateLimit: 2000,
     features: {
       realtimeMonitoring: true,
@@ -232,48 +232,64 @@ export const PLAN_DISPLAY: Record<string, {
 }> = {
   trial: {
     name: 'Starter',
-    description: '소규모 사업장을 위한 기본 에너지 관리',
+    description: '소프트웨어 무료 체험 — 고지서 업로드·수동 입력 전용',
     monthlyPrice: 0,
     yearlyPrice: 0,
     installationFee: 0,
-    installationIncludes: ['소프트웨어 전용 (하드웨어 미포함)'],
+    installationIncludes: [
+      '소프트웨어 전용 (IoT 하드웨어 미지원)',
+      '고지서 업로드 · 수동 입력 가능',
+      '30일 무료 체험',
+    ],
     color: 'slate',
   },
   basic: {
     name: 'Basic',
-    description: '성장하는 기업을 위한 확장된 기능',
-    monthlyPrice: 99000,
-    yearlyPrice: 990000,
+    // 근거: 월 전기요금 ₩3M 사업장 → 10% 절감 시 ₩300K/월 효과 → ROI 2배
+    // 경쟁사 대비: 한전KDN 기본 모니터링 ₩100K대 / 스마트팩토리 패키지 ₩200K대
+    description: '소규모 공장·건물을 위한 IoT 에너지 관리',
+    monthlyPrice: 149000,
+    yearlyPrice: 1490000,    // 월 ₩124,167 — 17% 절감
     installationFee: 500000,
     installationIncludes: [
       '원격 설치 지원 (4시간)',
-      '게이트웨이 1대 설정',
-      '센서 최대 5개 등록',
+      '게이트웨이 최대 2대 설정',
+      '센서 최대 10개 등록',
+      '※ 하드웨어(게이트웨이·센서) 별도 구매',
     ],
     color: 'blue',
   },
   pro: {
     name: 'Professional',
-    description: 'AI 기반 고급 에너지 최적화',
-    monthlyPrice: 299000,
-    yearlyPrice: 2990000,
-    installationFee: 1500000,
+    // 근거: 월 전기요금 ₩10M 사업장 → 10% 절감 시 ₩1M/월 효과 → ROI 2.5배
+    // AI 이상감지·DR·컴플라이언스·ESG 보고 포함으로 Premium 포지셔닝
+    description: 'AI 기반 고급 최적화 · 탄소중립 대응',
+    monthlyPrice: 399000,
+    yearlyPrice: 3990000,    // 월 ₩332,500 — 17% 절감
+    installationFee: 1800000,
     installationIncludes: [
       '현장 방문 설치 (1일)',
-      '게이트웨이 + 센서 커미셔닝',
+      '게이트웨이 + 센서 전체 커미셔닝',
       'EMS 대시보드 커스터마이징',
       '사용자 교육 (2시간)',
+      '※ 하드웨어(게이트웨이·센서·PLC) 별도 구매',
     ],
     badge: '인기',
     color: 'cyan',
   },
   enterprise: {
     name: 'Enterprise',
-    description: '대규모 조직을 위한 맞춤형 솔루션',
+    description: '대규모 조직·멀티사이트를 위한 맞춤형 솔루션',
     monthlyPrice: null,
     yearlyPrice: null,
     installationFee: null,
-    installationIncludes: ['전담 PM 배정', '멀티 사이트 통합 설치', '맞춤형 시스템 연동 (PLC/SCADA)', '운영자 교육 프로그램'],
+    installationIncludes: [
+      '전담 PM 배정',
+      '멀티 사이트 통합 설치',
+      '맞춤형 시스템 연동 (PLC/SCADA)',
+      '운영자 교육 프로그램',
+      '※ 하드웨어·공사비 별도 견적',
+    ],
     color: 'purple',
   },
 };
