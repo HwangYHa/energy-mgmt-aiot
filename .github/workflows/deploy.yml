@@ -69,7 +69,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          dockerfile: Dockerfile
+          file: Dockerfile
           push: true
           tags: |
             ${{ env.NCP_REGISTRY }}/ems-app:${{ steps.version.outputs.sha }}
@@ -86,7 +86,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./ai-engine
-          dockerfile: Dockerfile
+          file: Dockerfile
           push: true
           tags: |
             ${{ env.NCP_REGISTRY }}/ems-ai:${{ steps.version.outputs.sha }}
