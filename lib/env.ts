@@ -128,12 +128,24 @@ function getEnv(): Env {
     );
   }
 
+  // Next.js 빌드 타임에는 필수 환경변수가 없어도 더미값으로 통과
+  // 실제 값은 컨테이너 런타임에 .env.production 에서 주입됨
+  const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
+
   try {
     // 빈 문자열('')을 undefined로 변환 — 빈값으로 설정된 optional 필드가 URL 검증 오류를 내지 않도록
-    const normalized = Object.fromEntries(
+    const raw = Object.fromEntries(
       Object.entries(process.env).map(([k, v]) => [k, v === '' ? undefined : v])
     );
-    env = envSchema.parse(normalized);
+
+    // 빌드 타임: 필수 필드 누락 시 더미값으로 대체 (이미지에 실제 시크릿 포함 안 됨)
+    if (isBuildPhase) {
+      raw.DATABASE_URL     ??= 'mysql://build:build@localhost:3306/build';
+      raw.NEXTAUTH_SECRET  ??= 'build-time-placeholder-secret-minimum-32chars!';
+      raw.JWT_SECRET       ??= 'build-time-placeholder-jwt-secret-32chars!!!!!';
+    }
+
+    env = envSchema.parse(raw);
     return env;
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -143,7 +155,7 @@ function getEnv(): Env {
       });
       console.error('\n💡 Tip: Copy .env.example to .env.local and fill in required values');
 
-      if (process.env.NODE_ENV === 'production') {
+      if (process.env.NODE_ENV === 'production' && !isBuildPhase) {
         process.exit(1);
       }
       throw new Error('Environment variable validation failed. See console for details.');
