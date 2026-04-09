@@ -8,7 +8,7 @@
 #   - NCP Container Registry 로그인: docker login ${NCP_REGISTRY}
 #
 # 이미지 출처: NCP Container Registry
-#   NCP_REGISTRY=ncr.kr-standard.ncr.gov-ncloud.com/ems-aiot
+#   NCP_REGISTRY=carbonieum-ems-aiot.kr.ncr.ntruss.com
 #   APP_VERSION=<git short SHA>
 # ============================================================
 

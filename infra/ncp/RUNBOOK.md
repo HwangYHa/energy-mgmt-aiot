@@ -86,7 +86,7 @@ GitHub → Settings → Secrets and variables → Actions
 |--------|-----|------|
 | `NCP_ACCESS_KEY` | NCP API Access Key | NCR 로그인 |
 | `NCP_SECRET_KEY` | NCP API Secret Key | NCR 로그인 |
-| `NCP_REGISTRY` | `ncr.kr-standard.ncr.gov-ncloud.com/ems-aiot` | NCR 엔드포인트 |
+| `NCP_REGISTRY` | `carbonieum-ems-aiot.kr.ncr.ntruss.com` | NCR 엔드포인트 |
 | `DEPLOY_HOST` | `xxx.xxx.xxx.xxx` | 서버 공인 IP |
 | `DEPLOY_USER` | `ems-deploy` | SSH 사용자 |
 | `DEPLOY_SSH_KEY` | ED25519 PEM 전체 | 서버 접속 키 |
