@@ -5,7 +5,7 @@
 # 필수 GitHub Secrets:
 #   NCP_ACCESS_KEY        NCP API Access Key
 #   NCP_SECRET_KEY        NCP API Secret Key
-#   NCP_REGISTRY          ncr.kr-standard.ncr.gov-ncloud.com/ems-aiot
+#   NCP_REGISTRY          carbonieum-ems-aiot.kr.ncr.ntruss.com
 #   DEPLOY_HOST           서버 공인 IP
 #   DEPLOY_USER           배포 SSH 사용자 (예: ems-deploy)
 #   DEPLOY_SSH_KEY        ED25519 개인키 (PEM 전체)
@@ -258,7 +258,7 @@ jobs:
 
       # ── 배포 결과 Slack 알림 ─────────────────────────────
       - name: Slack 배포 알림
-        if: always() && secrets.SLACK_WEBHOOK_URL != ''
+        if: always()
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
