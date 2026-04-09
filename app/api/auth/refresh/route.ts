@@ -28,7 +28,7 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-export function isTokenRevoked(jti: string): boolean {
+function isTokenRevoked(jti: string): boolean {
   return revokedJtis.has(jti);
 }
 
