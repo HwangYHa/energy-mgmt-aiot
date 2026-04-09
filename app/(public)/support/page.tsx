@@ -24,24 +24,24 @@ export const metadata = {
 export default function SupportPage() {
   const contactMethods = [
     {
-      icon: MessageCircle,
-      title: '실시간 채팅',
-      description: '즉시 답변받고 싶으신가요?',
-      detail: '평일 09:00-18:00 운영',
-      action: '채팅 시작',
-      href: '#chat',
-      color: 'text-emerald-400',
-      bgColor: 'bg-emerald-500/10',
-    },
-    {
       icon: Mail,
       title: '이메일 문의',
       description: '자세한 내용을 전달하고 싶으신가요?',
-      detail: 'support@탄소이음.io',
+      detail: 'carbonieum.official@gmail.com',
       action: '이메일 보내기',
-      href: 'mailto:support@탄소이음.io',
+      href: 'mailto:carbonieum.official@gmail.com',
       color: 'text-blue-400',
       bgColor: 'bg-blue-500/10',
+    },
+    {
+      icon: MessageCircle,
+      title: '문의 양식',
+      description: '아래 양식으로 문의하시면 24시간 이내 답변드립니다',
+      detail: '평일 09:00-18:00 처리',
+      action: '문의하기',
+      href: '#chat',
+      color: 'text-emerald-400',
+      bgColor: 'bg-emerald-500/10',
     },
     // 사업자 등록 완료 후 전화번호 기재 예정
     // {

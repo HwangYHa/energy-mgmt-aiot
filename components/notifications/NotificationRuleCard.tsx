@@ -4,7 +4,7 @@ import { useState } from 'react';
 import {
   Bell,
   Mail,
-  MessageCircle,
+  // MessageCircle, // [SMS_DISABLED] 카카오 알림톡 채널 비활성화 중
   Smartphone,
   Globe,
   ChevronDown,
@@ -242,9 +242,11 @@ export function NotificationRuleCard({ rule, hasPhone: _hasPhone, onUpdate }: Pr
           <Mail
             className={`w-3.5 h-3.5 ${rule.emailEnabled ? 'text-cyan-400' : 'text-slate-600'}`}
           />
+          {/* [SMS_DISABLED] 카카오 알림톡 아이콘 비활성화 — 재활성화 시 주석 해제
           <MessageCircle
             className={`w-3.5 h-3.5 ${rule.smsEnabled ? 'text-cyan-400' : 'text-slate-600'}`}
           />
+          */}
           <Smartphone
             className={`w-3.5 h-3.5 ${rule.pushEnabled ? 'text-cyan-400' : 'text-slate-600'}`}
           />

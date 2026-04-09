@@ -274,7 +274,7 @@ curl -fsSL https://cdn.coollabs.io/coolify/install.sh | bash
 ### 도메인 구매 (hosting.kr)
 
 1. [hosting.kr](https://www.hosting.kr) → 도메인 검색
-2. 추천 도메인: `carbonieum.co.kr` 또는 `탄소이음.kr`
+2. 추천 도메인: `carbonieum.com` 또는 `탄소이음.kr`
 3. 구매 후 **네임서버 변경**:
    - Vercel 사용 시: Vercel DNS로 변경 (Dashboard > Domains)
    - Hetzner 사용 시: Cloudflare DNS로 변경 (무료 CDN + SSL)
@@ -297,7 +297,7 @@ DATABASE_URL=mysql://user:password@host:3306/dbname
 
 # 인증
 NEXTAUTH_SECRET=랜덤32자이상
-NEXTAUTH_URL=https://carbonieum.co.kr
+NEXTAUTH_URL=https://carbonieum.com
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 

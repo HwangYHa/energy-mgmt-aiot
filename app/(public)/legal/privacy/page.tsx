@@ -84,7 +84,7 @@ export default function PrivacyPolicyPage() {
                 <li>개인정보 삭제 요구</li>
                 <li>개인정보 처리 정지 요구</li>
               </ul>
-              <p className="mt-4">권리 행사는 설정 페이지 또는 support@탄소이음.io로 요청 가능합니다.</p>
+              <p className="mt-4">권리 행사는 설정 페이지 또는 carbonieum.official@gmail.com으로 요청 가능합니다.</p>
             </div>
           </section>
 
@@ -105,7 +105,7 @@ export default function PrivacyPolicyPage() {
             <div className="text-slate-300">
               <p>개인정보 관련 문의사항이 있으시면 아래로 연락주세요:</p>
               <ul className="mt-4 space-y-2">
-                <li>이메일: privacy@탄소이음.io</li>
+                <li>이메일: carbonieum.official@gmail.com</li>
                 {/* <li>전화: 1588-1234</li>
                 <li>주소: 서울특별시 강남구 테헤란로 123</li> */}
               </ul>

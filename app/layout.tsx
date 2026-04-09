@@ -4,6 +4,7 @@ import type { Metadata, Viewport } from 'next';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/session';
 import { SessionProvider } from '@/components/providers/SessionProvider';
+import { Analytics } from '@/components/analytics/Analytics';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://carboneum.kr';
 const SITE_NAME = '탄소이음';
@@ -162,6 +163,21 @@ export default async function RootLayout({
       <head>
         {/* Favicon은 app/icon.tsx에서 자동 생성 */}
         <link rel="manifest" href="/manifest.json" />
+
+        {/* ── SEO: RSS 피드 자동 발견 ── */}
+        <link
+          rel="alternate"
+          type="application/rss+xml"
+          title="탄소이음 에너지 인사이트"
+          href={`${SITE_URL}/feed.xml`}
+        />
+
+        {/* ── 성능: 외부 도메인 사전 연결 (LCP 최적화) ── */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+        <link rel="dns-prefetch" href="https://wcs.naver.net" />
+        <link rel="dns-prefetch" href="https://api.solapi.com" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdApp) }}
@@ -202,6 +218,7 @@ if ('serviceWorker' in navigator) {
         />
       </head>
       <body className="bg-dark-bg text-white antialiased">
+        <Analytics />
         <SessionProvider session={session}>
           {children}
           {/* Lightweight client-side upgrade modal via DOM to avoid client-component SSR issues */}

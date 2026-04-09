@@ -1,8 +1,8 @@
 /**
  * /api/support - 고객 문의 접수 / 관리자 목록 조회
  *
- * POST (공개)        → 문의 접수 (비로그인 가능)
- * GET  (tenant_admin+) → 문의 목록 조회 (페이지네이션, 필터)
+ * POST (공개)           → 문의 접수 (비로그인 가능)
+ * GET  (tenant_admin+)  → 문의 목록 조회 (페이지네이션, 필터)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -20,10 +20,9 @@ import {
   sendSupportNotificationToAdmin,
   sendSupportConfirmationToUser,
 } from '@/lib/services/email.service';
-import { generateSeqNo } from '@/lib/utils/sequence';
 
 const VALID_CATEGORIES = ['general', 'technical', 'billing', 'account', 'feature', 'bug'];
-const VALID_STATUSES = ['pending', 'in_progress', 'resolved', 'closed'];
+const VALID_STATUSES   = ['pending', 'in_progress', 'resolved', 'closed'];
 
 // ──────────────────────────────────────────────────────────────
 // GET — 관리자 문의 목록 조회
@@ -38,12 +37,12 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'));
-    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') ?? '20')));
-    const skip = (page - 1) * limit;
-    const status = searchParams.get('status');
+    const page     = Math.max(1, parseInt(searchParams.get('page')  ?? '1'));
+    const limit    = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') ?? '20')));
+    const skip     = (page - 1) * limit;
+    const status   = searchParams.get('status');
     const category = searchParams.get('category');
-    const search = searchParams.get('search');
+    const search   = searchParams.get('search');
     const isSuperAdmin = requireRoleOrHigher(auth, 'super_admin' as UserRole);
 
     const where: Record<string, unknown> = {};
@@ -53,17 +52,13 @@ export async function GET(request: NextRequest) {
       where.tenantId = auth.tenantId;
     }
 
-    if (status && VALID_STATUSES.includes(status)) {
-      where.status = status;
-    }
-    if (category && VALID_CATEGORIES.includes(category)) {
-      where.category = category;
-    }
+    if (status   && VALID_STATUSES.includes(status))     where.status   = status;
+    if (category && VALID_CATEGORIES.includes(category)) where.category = category;
     if (search) {
       where.OR = [
         { subject: { contains: search } },
-        { name: { contains: search } },
-        { email: { contains: search } },
+        { name:    { contains: search } },
+        { email:   { contains: search } },
       ];
     }
 
@@ -72,13 +67,13 @@ export async function GET(request: NextRequest) {
       prisma.supportInquiry.findMany({
         where: where as never,
         select: {
-          id: true,
-          name: true,
-          email: true,
-          category: true,
-          subject: true,
-          status: true,
-          tenantId: true,
+          id:        true,
+          name:      true,
+          email:     true,
+          category:  true,
+          subject:   true,
+          status:    true,
+          tenantId:  true,
           createdAt: true,
           updatedAt: true,
         },
@@ -110,76 +105,56 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, email, category, subject, message } = body;
 
-    // 입력 검증
-    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    // ── 입력 검증 ─────────────────────────────────────────────
+    if (!name || typeof name !== 'string' || !name.trim()) {
       return NextResponse.json({ success: false, error: '이름을 입력해주세요.' }, { status: 400 });
     }
     if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json(
-        { success: false, error: '올바른 이메일 주소를 입력해주세요.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: '올바른 이메일 주소를 입력해주세요.' }, { status: 400 });
     }
     if (!category || !VALID_CATEGORIES.includes(category)) {
-      return NextResponse.json(
-        { success: false, error: '올바른 문의 유형을 선택해주세요.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: '올바른 문의 유형을 선택해주세요.' }, { status: 400 });
     }
-    if (!subject || typeof subject !== 'string' || subject.trim().length === 0) {
+    if (!subject || typeof subject !== 'string' || !subject.trim()) {
       return NextResponse.json({ success: false, error: '제목을 입력해주세요.' }, { status: 400 });
     }
     if (subject.length > 500) {
-      return NextResponse.json(
-        { success: false, error: '제목은 500자 이내로 입력해주세요.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: '제목은 500자 이내로 입력해주세요.' }, { status: 400 });
     }
-    if (!message || typeof message !== 'string' || message.trim().length === 0) {
-      return NextResponse.json(
-        { success: false, error: '문의 내용을 입력해주세요.' },
-        { status: 400 }
-      );
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return NextResponse.json({ success: false, error: '문의 내용을 입력해주세요.' }, { status: 400 });
     }
     if (message.length > 5000) {
-      return NextResponse.json(
-        { success: false, error: '문의 내용은 5000자 이내로 입력해주세요.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: '문의 내용은 5000자 이내로 입력해주세요.' }, { status: 400 });
     }
 
-    // 로그인 사용자인 경우 연결
+    // ── 로그인 사용자 연결 (선택) ──────────────────────────────
     let tenantId: string | null = null;
-    let userId: string | null = null;
+    let userId:   string | null = null;
     try {
       const auth = await verifyAuth(request);
       if (auth) {
         tenantId = auth.tenantId;
-        userId = auth.userId;
+        userId   = auth.userId;
       }
-    } catch {
-      // 비로그인 사용자 → 무시
-    }
+    } catch { /* 비로그인 → 무시 */ }
 
-    // 문의 코드 자동 채번: SI-YYYYMMDD-NNNN
-    const code = await generateSeqNo('SUPPORT_INQUIRY');
-
-    const inquiry = await (prisma as any).supportInquiry.create({
+    // ── DB 저장 ────────────────────────────────────────────────
+    const inquiry = await prisma.supportInquiry.create({
       data: {
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
+        name:    name.trim(),
+        email:   email.trim().toLowerCase(),
         category,
         subject: subject.trim(),
         message: message.trim(),
         tenantId,
         userId,
-        code,
       },
       select: {
-        id: true,
-        category: true,
-        subject: true,
-        status: true,
+        id:        true,
+        category:  true,
+        subject:   true,
+        status:    true,
         createdAt: true,
       },
     });
@@ -190,21 +165,22 @@ export async function POST(request: NextRequest) {
       email: email.substring(0, 3) + '***',
     });
 
-    // 이메일 발송 (비동기 — 발송 실패가 API 응답을 막지 않음)
+    // ── 이메일 발송 (fire-and-forget) ─────────────────────────
     const inquiryForEmail = {
-      id: inquiry.id,
-      name: name.trim(),
-      email: email.trim().toLowerCase(),
+      id:       inquiry.id,
+      name:     name.trim(),
+      email:    email.trim().toLowerCase(),
       category,
-      subject: subject.trim(),
-      message: message.trim(),
+      subject:  subject.trim(),
+      message:  message.trim(),
     };
+
     Promise.all([
       sendSupportNotificationToAdmin(inquiryForEmail),
       sendSupportConfirmationToUser(inquiryForEmail),
     ]).catch((err) => {
       logger.error('Support email send error', {
-        error: err instanceof Error ? err.message : String(err),
+        error:     err instanceof Error ? err.message : String(err),
         inquiryId: inquiry.id,
       });
     });
@@ -213,7 +189,7 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         data: {
-          id: inquiry.id,
+          id:      inquiry.id,
           message: '문의가 접수되었습니다. 24시간 이내에 답변 드리겠습니다.',
         },
       },

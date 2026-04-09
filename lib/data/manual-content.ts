@@ -26,31 +26,32 @@ export type Block =
 export interface Article {
   id: string;
   title: string;
-  description: string; // 목록·검색용 한 줄 요약
+  description: string;
   body: Block[];
 }
 
 export interface Chapter {
   id: string;
   title: string;
-  icon: string;         // lucide-react 아이콘 이름
-  color: string;        // tailwind text-* 클래스
+  icon: string;
+  color: string;
   articles: Article[];
 }
 
 export interface ManualData {
   version: string;
-  updatedAt: string;    // ISO date string
+  updatedAt: string;
   chapters: Chapter[];
 }
 
 export const MANUAL_DATA: ManualData = {
-  version: '2.1',
-  updatedAt: '2026-03-09',
+  version: '3.0',
+  updatedAt: '2026-04-08',
   chapters: [
-    // ──────────────────────────────────────────────
+
+    // ══════════════════════════════════════════════
     // 1. 시작하기
-    // ──────────────────────────────────────────────
+    // ══════════════════════════════════════════════
     {
       id: 'getting-started',
       title: '시작하기',
@@ -69,13 +70,13 @@ export const MANUAL_DATA: ManualData = {
             {
               type: 'list',
               items: [
-                '실시간 에너지 모니터링 — MQTT/HTTP 수집 → 초 단위 갱신',
+                '실시간 에너지 모니터링 — Modbus/BACnet/OPC-UA/MQTT 수집 → 초 단위 갱신',
                 'AI 부하 예측 — 24h/7d/30d 수요 예측',
                 '이상 탐지 — 정상 패턴 이탈 자동 감지',
                 '설비 자동 제어 — 스케줄·DR·AI 최적 제어',
-                '탄소 배출 관리 — Scope 1/2/3 자동 계산',
-                'K-ETS 배출권 거래소 — KAU/KCU/OFFSET 포트폴리오',
+                '탄소 배출 관리 — Scope 1/2/3 자동 계산 및 K-ETS 배출권 거래소',
                 '수요반응(DR) 참여 — 한전 이벤트 자동 대응',
+                'ESG 보고서 — TCFD·EU CSRD·ISSB·CDP·K-MRV 다중 기준 자동 생성',
               ],
             },
             {
@@ -85,24 +86,53 @@ export const MANUAL_DATA: ManualData = {
           ],
         },
         {
-          id: 'initial-setup',
-          title: '초기 설정 가이드',
-          description: '사이트 등록, 디바이스 연결, 센서 설정 방법을 안내합니다.',
+          id: 'plans',
+          title: '구독 플랜 안내',
+          description: 'Starter·Basic·Pro·Enterprise 플랜 차이와 선택 기준을 설명합니다.',
           body: [
-            { type: 'p', text: '처음 플랫폼에 접속하면 아래 순서로 초기 설정을 진행합니다.' },
+            {
+              type: 'p',
+              text: '탄소이음은 네 가지 구독 플랜을 제공합니다. 사업장 규모와 IoT 연동 필요 여부에 따라 선택하세요.',
+            },
+            {
+              type: 'roles',
+              items: [
+                { role: 'Starter (무료)', desc: '소프트웨어 전용 체험 플랜. IoT 하드웨어 미지원. 고지서 업로드·수동 입력으로 에너지 데이터를 관리합니다. 사이트 1개, 사용자 3명.' },
+                { role: 'Basic (₩149,000/월)', desc: '소규모 사업장 IoT 연동. IoT 디바이스 최대 30개, 사이트 3개, 사용자 10명, 1년 데이터 보존. 초기 설치비 별도(₩500,000~).' },
+                { role: 'Pro (₩399,000/월)', desc: '중견 기업 이상. IoT 디바이스 최대 150개, 사이트 10개, 사용자 50명, 2년 데이터 보존, 탄소 분석·이상 탐지·AI 제어 포함. 초기 설치비 별도(₩1,800,000~).' },
+                { role: 'Enterprise (별도 협의)', desc: '디바이스·사용자 무제한, 무제한 데이터 보존, 전담 기술지원, SLA 보장, API 무제한, 맞춤형 ESG 보고서.' },
+              ],
+            },
+            {
+              type: 'warn',
+              text: 'Starter 플랜은 IoT 하드웨어(게이트웨이·CT센서)가 지원되지 않습니다. IoT 연동이 필요하면 Basic 이상으로 업그레이드하세요.',
+            },
+            {
+              type: 'tip',
+              text: '연간 결제 시 약 2개월분 할인이 적용됩니다. Basic 연간 ₩1,490,000 / Pro 연간 ₩3,990,000.',
+            },
+          ],
+        },
+        {
+          id: 'onboarding',
+          title: '온보딩 및 초기 설정',
+          description: '가입 후 첫 사용을 위한 단계별 설정 절차를 안내합니다.',
+          body: [
+            { type: 'p', text: '가입 완료 후 좌측 메뉴 하단의 "온보딩" 또는 대시보드 안내 배너를 통해 초기 설정을 진행합니다.' },
             {
               type: 'steps',
               items: [
-                '테넌트 계정 생성 후 설정 > 시스템에서 회사명·업종·사업장 정보를 입력합니다.',
-                '운영 관리 > 사이트 관리에서 사업장(Site)을 1개 이상 등록합니다.',
-                '운영 관리 > 디바이스 관리에서 각 사이트에 계측기·센서를 연결합니다.',
-                'MQTT 브로커(mqtt://host:1883) 또는 REST API로 실시간 데이터 수집을 설정합니다.',
-                '설정 > 알림에서 피크 초과·설비 고장 알림 규칙을 설정합니다.',
+                '계정 설정: 회사명·업종·담당자 이름·연락처를 입력합니다.',
+                '사이트 등록: 관리 > 사이트 관리에서 실제 사업장(공장·건물)을 1개 이상 등록합니다.',
+                '데이터 연동 방법 선택: IoT 하드웨어 연결(Basic 이상) 또는 고지서·수동 입력(Starter)을 선택합니다.',
+                'IoT 연동 시 — 설치 일정 예약: 담당자 연락처·주소·희망 날짜를 입력하면 기술팀이 방문하여 게이트웨이와 CT센서를 설치합니다.',
+                '설치 완료 후 관리 > 게이트웨이 관리에서 장치가 온라인인지 확인합니다.',
+                '알림 설정: 설정 > 알림에서 피크 초과·설비 오류 알림 규칙을 설정합니다.',
               ],
             },
             {
               type: 'tip',
-              text: '디바이스가 없을 경우 분석 > 절감 시뮬레이터에서 가상 데이터로 기능을 체험할 수 있습니다.',
+              text: '설치 일정 예약 후 담당자 이메일로 예약 확인서가 발송됩니다. 설치 전까지는 데모 모드로 플랫폼 기능을 체험할 수 있습니다.',
             },
           ],
         },
@@ -117,9 +147,9 @@ export const MANUAL_DATA: ManualData = {
               items: [
                 { role: '뷰어 (Viewer)', desc: '대시보드·분석·리포트 조회만 가능. 제어·설정 변경 불가.' },
                 { role: '운영자 (Operator)', desc: '뷰어 권한 + 수동 제어·스케줄 관리·알림 설정 가능.' },
-                { role: '사이트 관리자 (Site Manager)', desc: '운영자 권한 + 사이트·디바이스·센서 관리.' },
+                { role: '사이트 관리자 (Site Manager)', desc: '운영자 권한 + 사이트·설비·센서 관리.' },
                 { role: '테넌트 관리자 (Tenant Admin)', desc: '사이트 관리자 권한 + 사용자 초대·구독·결제 관리.' },
-                { role: '슈퍼 관리자 (Super Admin)', desc: '전체 테넌트 생성·정지, 플랫폼 설정 관리.' },
+                { role: '슈퍼 관리자 (Super Admin)', desc: '전체 테넌트 생성·정지, 플랫폼 전반 설정 관리.' },
               ],
             },
             {
@@ -159,9 +189,9 @@ export const MANUAL_DATA: ManualData = {
       ],
     },
 
-    // ──────────────────────────────────────────────
+    // ══════════════════════════════════════════════
     // 2. 모니터링
-    // ──────────────────────────────────────────────
+    // ══════════════════════════════════════════════
     {
       id: 'monitoring',
       title: '모니터링',
@@ -220,7 +250,7 @@ export const MANUAL_DATA: ManualData = {
             {
               type: 'list',
               items: [
-                'MQTT / HTTP 연결 상태 (온라인 / 오프라인 / 오류)',
+                'MQTT / HTTP / Modbus / BACnet 연결 상태 (온라인 / 오프라인 / 오류)',
                 '데이터 지연(Latency ms) 및 누락 비율(%)',
                 '최근 1시간 수신 레코드 수',
                 '품질 등급별 분포 (good / uncertain / bad)',
@@ -228,33 +258,16 @@ export const MANUAL_DATA: ManualData = {
             },
             {
               type: 'tip',
-              text: '특정 디바이스가 오프라인이면 설비 관리 페이지에서 연결 설정을 확인하세요.',
-            },
-          ],
-        },
-        {
-          id: 'equipment',
-          title: '설비 모니터링',
-          description: '개별 설비의 가동 상태와 에너지 소비를 확인합니다.',
-          body: [
-            { type: 'p', text: '운영 관리 > 디바이스 관리에서 설비 단위 모니터링을 수행합니다.' },
-            {
-              type: 'list',
-              items: [
-                '설비 목록: 이름·종류·상태 (운전/정지/오류/유지보수)',
-                '실시간 소비 전력 및 누적 에너지',
-                '이상 감지 시 빨간 경고 뱃지 표시',
-                '설비 클릭 → 상세 측정값·제어 이력 확인',
-              ],
+              text: '특정 디바이스가 오프라인이면 관리 > 설비 관리에서 프로토콜 연결 설정을 확인하세요.',
             },
           ],
         },
       ],
     },
 
-    // ──────────────────────────────────────────────
+    // ══════════════════════════════════════════════
     // 3. 분석 & 예측
-    // ──────────────────────────────────────────────
+    // ══════════════════════════════════════════════
     {
       id: 'analytics',
       title: '분석 & 예측',
@@ -297,7 +310,7 @@ export const MANUAL_DATA: ManualData = {
         },
         {
           id: 'anomaly',
-          title: '이상 탐지',
+          title: '이상 탐지 (Pro 이상)',
           description: 'AI 기반 에너지 사용 이상 패턴 탐지 기능을 설명합니다.',
           body: [
             { type: 'p', text: 'AI 모델이 정상 소비 패턴을 학습하여 이상 징후를 자동으로 감지합니다.' },
@@ -307,6 +320,7 @@ export const MANUAL_DATA: ManualData = {
                 '이상 탐지 목록: 날짜·심각도·대상 설비·편차율',
                 '원인 분석 힌트 제공 (예: 영업외 시간 가동, 급격한 소비 증가)',
                 '이상 항목 클릭 → 해당 시점 측정 데이터 상세 조회',
+                '감도 조절 (민감도 슬라이더): 낮은 감도→주요 이상만, 높은 감도→세밀한 탐지',
               ],
             },
             {
@@ -334,19 +348,16 @@ export const MANUAL_DATA: ManualData = {
         },
         {
           id: 'carbon',
-          title: '탄소 분석 & 배출권 거래소',
+          title: '탄소 분석 & 배출권 거래소 (Pro 이상)',
           description: 'Scope 1/2/3 탄소 배출 관리와 K-ETS 배출권 거래를 설명합니다.',
           body: [
-            {
-              type: 'p',
-              text: '분석 > 탄소 분석에서 온실가스 배출량을 Scope별로 관리합니다.',
-            },
+            { type: 'p', text: '분석 > 탄소 분석에서 온실가스 배출량을 Scope별로 관리합니다.' },
             {
               type: 'list',
               items: [
                 'Scope 1: 직접 연소 (경유·LNG·LPG 등)',
                 'Scope 2: 간접 배출 (구매 전력 소비)',
-                'Scope 3: 기타 간접 (운송·출장 등)',
+                'Scope 3: 기타 간접 (운송·출장·원자재 등 15개 카테고리)',
                 '월별 배출 추이, 전년 대비 감축률 자동 계산',
               ],
             },
@@ -388,9 +399,9 @@ export const MANUAL_DATA: ManualData = {
       ],
     },
 
-    // ──────────────────────────────────────────────
+    // ══════════════════════════════════════════════
     // 4. 설비 제어
-    // ──────────────────────────────────────────────
+    // ══════════════════════════════════════════════
     {
       id: 'control',
       title: '설비 제어',
@@ -414,7 +425,7 @@ export const MANUAL_DATA: ManualData = {
             },
             {
               type: 'warn',
-              text: '모든 제어 명령은 감사 추적 로그에 자동 기록됩니다. 승인이 필요한 제어는 관리자 확인 후 실행됩니다.',
+              text: '모든 제어 명령은 감사 추적 로그에 자동 기록됩니다. 제어 가능으로 등록된 설비만 목록에 표시됩니다.',
             },
           ],
         },
@@ -482,33 +493,175 @@ export const MANUAL_DATA: ManualData = {
       ],
     },
 
-    // ──────────────────────────────────────────────
-    // 5. 운영 관리
-    // ──────────────────────────────────────────────
+    // ══════════════════════════════════════════════
+    // 5. 관리
+    // ══════════════════════════════════════════════
     {
       id: 'management',
-      title: '운영 관리',
+      title: '관리',
       icon: 'Settings',
       color: 'text-purple-400',
       articles: [
         {
+          id: 'sites',
+          title: '사이트 관리',
+          description: '사업장(공장·건물·캠퍼스)을 등록하고 관리합니다.',
+          body: [
+            { type: 'p', text: '관리 > 사이트 관리에서 에너지를 관리할 사업장을 등록합니다.' },
+            {
+              type: 'steps',
+              items: [
+                '"새 사이트 추가" 버튼을 클릭합니다.',
+                '사이트명, 주소, 업종, 계약 전력(kW)을 입력합니다.',
+                '저장 후 해당 사이트에 게이트웨이와 설비를 연결합니다.',
+              ],
+            },
+            {
+              type: 'tip',
+              text: '플랜별 최대 사이트 수: Starter 1개 / Basic 3개 / Pro 10개 / Enterprise 무제한.',
+            },
+          ],
+        },
+        {
+          id: 'gateways',
+          title: '게이트웨이 관리',
+          description: '현장 IoT 게이트웨이를 등록하고 네트워크 연결을 관리합니다.',
+          body: [
+            {
+              type: 'p',
+              text: '관리 > 게이트웨이 관리에서 현장에 설치된 게이트웨이 장치를 등록하고 상태를 모니터링합니다. 게이트웨이는 Modbus·BACnet·OPC-UA 등 현장 프로토콜을 인터넷으로 변환하는 역할을 합니다.',
+            },
+            {
+              type: 'list',
+              items: [
+                '게이트웨이 정보: 시리얼 번호, 모델명, 펌웨어 버전, IP/MAC 주소, VPN 주소',
+                '연결 방식: Ethernet(기본) / LTE(폴백) / WiFi 선택 가능',
+                '상태 모니터링: 온라인/오프라인/오류, 마지막 Heartbeat 시각',
+                '버퍼: 네트워크 장애 시 로컬 저장 용량(기본 100MB) 및 현재 버퍼 레코드 수',
+                '소유권: 당사 제공(company) 또는 고객 자체 구매(customer)',
+              ],
+            },
+            {
+              type: 'steps',
+              items: [
+                '"게이트웨이 등록" 버튼을 클릭합니다.',
+                '시리얼 번호(필수), 사이트, 이름, 모델, IP 주소 등을 입력합니다.',
+                '설치일을 입력하고 저장합니다.',
+                '현장 게이트웨이가 플랫폼에 접속하면 상태가 "온라인"으로 변경됩니다.',
+              ],
+            },
+            {
+              type: 'warn',
+              text: '게이트웨이 삭제 시 연결된 설비의 게이트웨이 연결이 해제됩니다. 데이터 수집이 중단되므로 삭제 전 설비를 다른 게이트웨이에 연결하거나 직접 연결로 변경하세요.',
+            },
+          ],
+        },
+        {
+          id: 'devices',
+          title: '설비 관리 및 등록',
+          description: '계량기·DDC·PLC·HVAC 등 IoT 설비를 프로토콜별로 등록합니다.',
+          body: [
+            {
+              type: 'p',
+              text: '관리 > 설비 관리에서 에너지 측정·제어 대상 설비를 등록합니다. 설비 등록 시 통신 프로토콜을 선택하면 해당 프로토콜에 맞는 연결 설정 항목이 자동으로 표시됩니다.',
+            },
+            {
+              type: 'roles',
+              items: [
+                { role: 'Modbus TCP/IP', desc: 'IP 주소, Port(기본 502), Unit ID(슬레이브 주소 1-247), Timeout 설정. 가장 일반적인 산업용 전력계·인버터·ESS 통신.' },
+                { role: 'Modbus RTU', desc: 'COM 포트(예: COM1, /dev/ttyS0), Baud Rate(9600~115200), Parity(None/Even/Odd), Stop Bits, Unit ID. RS-232/485 직렬 통신.' },
+                { role: 'BACnet/IP', desc: 'IP 주소, UDP Port(기본 47808), Device Instance(고유 번호 0-4194303), Network Number. 건물 자동화 시스템(DDC·AHU·칠러) 표준.' },
+                { role: 'BACnet MS/TP', desc: 'COM 포트, Baud Rate(9600~76800), MAC Address(0-127), Max Masters, Network Number. RS-485 기반 DDC 직렬 네트워크.' },
+                { role: 'OPC-UA', desc: 'Endpoint URL(예: opc.tcp://192.168.1.100:4840), Security Policy, Namespace Index, 인증정보(선택). 고급 PLC·SCADA 시스템 연동.' },
+                { role: 'MQTT', desc: 'Topic Prefix(예: ems/site01/device001), QoS(0/1/2), Poll Interval. 브로커는 게이트웨이 또는 시스템 설정에서 구성.' },
+                { role: 'HTTP/REST', desc: 'Base URL, 인증 방식(없음/API Key/Basic/Bearer), Poll Interval. REST API를 제공하는 스마트 미터·IoT 기기 연동.' },
+                { role: 'Modbus TCP (GW경유)', desc: '게이트웨이의 IP:Port를 입력하고 Unit ID는 RS-485 슬레이브 주소 사용. TCP Wrapper를 통해 RTU 장치에 접근.' },
+              ],
+            },
+            {
+              type: 'steps',
+              items: [
+                '"설비 등록" 버튼을 클릭합니다.',
+                '[기본 정보] 탭: 설비명, 사이트, 게이트웨이(선택), 설비 유형, 제조사, 모델, 설치 위치를 입력합니다.',
+                '[연결 설정] 탭: 통신 프로토콜을 선택하고, 표시되는 접속 정보(IP/포트/COM포트 등)를 입력합니다.',
+                '[상세 정보] 탭: 폴링 주기(데이터 수집 간격), 설치일, 제어 가능 여부를 설정하고 등록 요약을 확인 후 "설비 등록"을 클릭합니다.',
+              ],
+            },
+            {
+              type: 'tip',
+              text: '제어 가능 설비로 등록해야 수동 제어·스케줄 제어에서 해당 설비를 사용할 수 있습니다. 폴링 주기는 5초(기본)를 권장하며, 너무 짧으면 네트워크 부하가 증가합니다.',
+            },
+          ],
+        },
+        {
+          id: 'sensors',
+          title: '센서 관리',
+          description: '설비에 부착된 물리 센서(전력계·온도·습도 등)를 등록합니다.',
+          body: [
+            {
+              type: 'p',
+              text: '관리 > 센서 관리에서 각 설비에 연결된 물리 센서를 등록합니다. 센서는 반드시 상위 설비(Device)에 속하며, IP/포트 설정 없이 측정 특성과 교정 정보만 등록합니다.',
+            },
+            {
+              type: 'list',
+              items: [
+                '센서 유형: 전력계·전력량계·온도·습도·압력·유량·진동·가스·CO₂·조도',
+                '측정 범위: 단위(kW, °C, % 등), 최소/최대 범위',
+                '교정 정보: 최근 교정일, 다음 교정 예정일',
+                '설치 위치: 예) 1층 전기실 2판넬',
+                '상태: 온라인/오프라인/오류/유지보수',
+              ],
+            },
+            {
+              type: 'steps',
+              items: [
+                '"센서 등록" 버튼을 클릭합니다.',
+                '연결할 상위 설비를 선택합니다.',
+                '센서명, 유형, 단위, 측정 범위를 입력합니다.',
+                '교정 일자와 설치 위치를 입력하고 저장합니다.',
+              ],
+            },
+          ],
+        },
+        {
+          id: 'users',
+          title: '사용자 관리',
+          description: '팀원 초대, 역할 변경, 계정 비활성화 방법을 안내합니다.',
+          body: [
+            { type: 'p', text: '관리 > 사용자 관리에서 조직 구성원의 플랫폼 접근을 관리합니다.' },
+            {
+              type: 'steps',
+              items: [
+                '"사용자 초대" 버튼을 클릭합니다.',
+                '이메일 주소와 역할(뷰어/운영자/사이트 관리자)을 선택합니다.',
+                '초대 메일이 발송되며, 수신자가 링크를 클릭하면 계정이 활성화됩니다.',
+                '이미 등록된 사용자의 역할은 목록에서 바로 변경 가능합니다.',
+              ],
+            },
+            {
+              type: 'warn',
+              text: '비활성화된 사용자는 로그인이 차단되지만 데이터는 보존됩니다. 완전 삭제는 슈퍼 관리자만 가능합니다.',
+            },
+          ],
+        },
+        {
           id: 'notifications',
           title: '알림 설정',
-          description: '이메일, SMS, 웹훅 알림 규칙 설정 방법입니다.',
+          description: '이메일, SMS, 카카오 알림 규칙 설정 방법입니다.',
           body: [
             { type: 'p', text: '설정 > 알림에서 이상 상황 발생 시 즉시 통보받을 규칙을 설정합니다.' },
             {
               type: 'list',
               items: [
-                '알림 채널: 이메일 / SMS / 웹훅(Webhook) / 푸시 알림',
+                '알림 채널: 이메일 / SMS / 카카오 알림톡(채널 개설 후 활성화)',
                 '카테고리: 에너지 / 설비 / 시스템 / 보안 / DR / 탄소 / 비용',
                 '심각도: 정보(info) / 경고(warning) / 위험(critical)',
-                '임계값 조건: 초과(>), 이상(≥), 미만(<), 이하(≤), 같음(=)',
+                '전화번호 등록: 설정 > 계정 > 전화번호 입력 후 SMS 수신 가능',
               ],
             },
             {
               type: 'tip',
-              text: '"테스트 발송" 버튼으로 규칙 저장 전 알림이 정상 수신되는지 확인하세요.',
+              text: '"테스트 발송" 버튼으로 규칙 저장 전 이메일·SMS가 정상 수신되는지 확인하세요. 전화번호가 등록되지 않으면 SMS 테스트 발송이 비활성화됩니다.',
             },
           ],
         },
@@ -535,31 +688,43 @@ export const MANUAL_DATA: ManualData = {
         },
         {
           id: 'subscription',
-          title: '구독 관리',
-          description: '플랜 변경, 결제 이력, 사용량 확인 방법입니다.',
+          title: '구독 및 결제 관리',
+          description: '플랜 변경, 결제(토스/Stripe), 설치비 청구 방법입니다.',
           body: [
-            { type: 'p', text: '설정 > 구독 관리에서 현재 플랜과 결제 상태를 확인합니다.' },
+            { type: 'p', text: '설정 > 구독 관리에서 현재 플랜과 결제 상태를 확인하고 업그레이드합니다.' },
             {
               type: 'list',
               items: [
-                '현재 플랜: Trial / Basic / Pro / Enterprise',
+                '현재 플랜: Starter(무료) / Basic(₩149,000) / Pro(₩399,000) / Enterprise',
+                '결제 수단: 토스페이먼츠(국내 카드) 또는 Stripe(해외 카드/VISA/MasterCard)',
+                '결제 주기: 월간 또는 연간(할인 적용) 선택 가능',
                 '사용 현황: 사이트 수 / 디바이스 수 / 사용자 수',
-                '결제 이력: 일자·금액·상태(완료/실패/환불)',
-                '플랜 변경: 상위 플랜 즉시 업그레이드, 하위 플랜은 만료 후 적용',
+              ],
+            },
+            {
+              type: 'p',
+              text: 'IoT 하드웨어 초기 설치비(Basic ₩500,000~, Pro ₩1,800,000~)는 구독과 별도로 청구됩니다.',
+            },
+            {
+              type: 'list',
+              items: [
+                '설치비 청구 방식: 현장 방문 후 세금계산서 발행 → 계좌이체',
+                '하드웨어(게이트웨이·CT센서) 비용은 별도 견적',
+                '설치 일정은 온보딩 > IoT 연동 탭에서 예약',
               ],
             },
             {
               type: 'tip',
-              text: '부가가치세(VAT) 10%는 표시 금액에 별도 부과됩니다. 사업자 등록번호 입력 시 세금계산서가 발행됩니다.',
+              text: 'VAT(부가가치세) 10%는 표시 금액에 별도 부과됩니다. 사업자 등록번호 입력 시 세금계산서가 자동 발행됩니다.',
             },
           ],
         },
       ],
     },
 
-    // ──────────────────────────────────────────────
+    // ══════════════════════════════════════════════
     // 6. 규제 & 컴플라이언스
-    // ──────────────────────────────────────────────
+    // ══════════════════════════════════════════════
     {
       id: 'compliance',
       title: '규제 & 컴플라이언스',
@@ -578,7 +743,7 @@ export const MANUAL_DATA: ManualData = {
             {
               type: 'list',
               items: [
-                '기록 대상: 로그인/로그아웃, 제어 명령, 사용자 관리, 설정 변경',
+                '기록 대상: 로그인/로그아웃, 제어 명령, 사용자 관리, 설정 변경, 결제',
                 '필터: 기간·사용자·액션 유형·대상',
                 '엑셀 내보내기 지원',
               ],
@@ -601,6 +766,7 @@ export const MANUAL_DATA: ManualData = {
                 '기본 배출계수: 한국 전력(0.4593 tCO₂/MWh), 경유(2.68 tCO₂/kL) 등 시스템 기본값 제공',
                 '사용자 정의: 테넌트별 실측 배출계수 등록 가능',
                 '버전 관리: 연도·지역·유효 기간 추적',
+                '배출계수 이력은 SHA-256 해시 체인으로 무결성 보장 (Big4 감사 대응)',
               ],
             },
           ],
@@ -651,16 +817,6 @@ export const MANUAL_DATA: ManualData = {
                 '신청 가능 유형: P2P 전력 거래, 수요반응(DR) 자동화, RE100 PPA 중개, K-ETS 탄소 토큰화, 신규 EMS 서비스',
                 '신청 상태: 접수(Pending) → 검토중(Reviewing) → 승인(Approved) / 반려(Rejected)',
                 '승인 후 특례 만료일 관리 — 만료 30일 전 알림 자동 발송',
-                '심사 노트·조건·연락처 일괄 관리',
-              ],
-            },
-            {
-              type: 'steps',
-              items: [
-                '규제 샌드박스 > "신청하기" 버튼을 클릭합니다.',
-                '규제 유형, 서비스 제목, 특례 범위(관련 법령), 신청자 정보를 입력합니다.',
-                '제출 후 "접수" 상태로 등록됩니다.',
-                '슈퍼 관리자가 검토 후 승인/반려 및 조건을 설정합니다.',
               ],
             },
             {
@@ -705,23 +861,20 @@ export const MANUAL_DATA: ManualData = {
 // 유틸리티 함수
 // ──────────────────────────────────────────────
 
-/** 챕터 ID로 챕터 조회 */
 export function getChapter(chapterId: string): Chapter | undefined {
   return MANUAL_DATA.chapters.find((c) => c.id === chapterId);
 }
 
-/** 챕터 ID + 아티클 ID로 아티클 조회 */
 export function getArticle(
   chapterId: string,
-  articleId: string
+  articleId: string,
 ): Article | undefined {
   return getChapter(chapterId)?.articles.find((a) => a.id === articleId);
 }
 
-/** 이전 / 다음 아티클 (챕터 경계 넘어서 탐색) */
 export function getAdjacentArticles(
   chapterId: string,
-  articleId: string
+  articleId: string,
 ): { prev: { chapterId: string; article: Article } | null; next: { chapterId: string; article: Article } | null } {
   const flat: { chapterId: string; article: Article }[] = [];
   for (const chapter of MANUAL_DATA.chapters) {
@@ -730,7 +883,7 @@ export function getAdjacentArticles(
     }
   }
   const idx = flat.findIndex(
-    (f) => f.chapterId === chapterId && f.article.id === articleId
+    (f) => f.chapterId === chapterId && f.article.id === articleId,
   );
   return {
     prev: idx > 0 ? flat[idx - 1]! : null,
@@ -738,36 +891,29 @@ export function getAdjacentArticles(
   };
 }
 
-/** 전체 콘텐츠 검색 (챕터 제목 + 아티클 제목 + description + 본문 텍스트) */
-export interface SearchResult {
+export function searchManual(query: string): {
   chapterId: string;
   chapterTitle: string;
   article: Article;
-  matchIn: 'title' | 'description' | 'body';
-}
-
-export function searchManual(query: string): SearchResult[] {
+  matchIn: 'title' | 'body';
+}[] {
   if (!query.trim()) return [];
   const q = query.toLowerCase();
-  const results: SearchResult[] = [];
+  const results: { chapterId: string; chapterTitle: string; article: Article; matchIn: 'title' | 'body' }[] = [];
 
   for (const chapter of MANUAL_DATA.chapters) {
     for (const article of chapter.articles) {
-      if (article.title.toLowerCase().includes(q)) {
+      if (article.title.toLowerCase().includes(q) || article.description.toLowerCase().includes(q)) {
         results.push({ chapterId: chapter.id, chapterTitle: chapter.title, article, matchIn: 'title' });
         continue;
       }
-      if (article.description.toLowerCase().includes(q)) {
-        results.push({ chapterId: chapter.id, chapterTitle: chapter.title, article, matchIn: 'description' });
-        continue;
-      }
-      const bodyMatch = article.body.some((b) => {
-        if (b.type === 'p' || b.type === 'tip' || b.type === 'warn') return b.text.toLowerCase().includes(q);
-        if (b.type === 'steps' || b.type === 'list') return b.items.some((i) => i.toLowerCase().includes(q));
-        if (b.type === 'roles') return b.items.some((i) => i.role.toLowerCase().includes(q) || i.desc.toLowerCase().includes(q));
-        return false;
-      });
-      if (bodyMatch) {
+      const bodyText = article.body.map(b => {
+        if (b.type === 'p' || b.type === 'tip' || b.type === 'warn') return b.text;
+        if (b.type === 'steps' || b.type === 'list') return b.items.join(' ');
+        if (b.type === 'roles') return b.items.map(r => r.role + ' ' + r.desc).join(' ');
+        return '';
+      }).join(' ').toLowerCase();
+      if (bodyText.includes(q)) {
         results.push({ chapterId: chapter.id, chapterTitle: chapter.title, article, matchIn: 'body' });
       }
     }

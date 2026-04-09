@@ -7,8 +7,8 @@
  *   SOLAPI_API_KEY         Solapi API 키
  *   SOLAPI_API_SECRET      Solapi API 시크릿
  *   SOLAPI_SENDER_PHONE    발신 번호
- *   KAKAO_CHANNEL_ID       카카오 채널 ID (pfid)
- *   KAKAO_SENDER_KEY       카카오 발신 프로필 키
+ *   SOLAPI_KAKAO_CHANNEL_ID 카카오 채널 ID (pfid)
+ *   KAKAO_SENDER_KEY        카카오 발신 프로필 키
  *
  * ─ 미설정 시 ────────────────────────────────────────────────
  *   dev 모드로 동작 — console.info 출력, DB 로그만 저장
@@ -146,7 +146,7 @@ export async function sendAlimtalk(opts: SendAlimtalkOptions): Promise<boolean> 
         to:   phone,
         from: process.env.SOLAPI_SENDER_PHONE,
         kakaoOptions: {
-          pfId:      process.env.KAKAO_CHANNEL_ID,
+          pfId:      process.env.SOLAPI_KAKAO_CHANNEL_ID,
           templateId: template.id,
           variables,
         },

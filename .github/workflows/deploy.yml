@@ -1,9 +1,20 @@
 # ============================================================
-# CD — 프로덕션 배포
+# CD — NCP Container Registry + Blue-Green 무중단 배포 + 자동 롤백
 # main 브랜치 push 또는 수동 트리거 시 실행
+#
+# 필수 GitHub Secrets:
+#   NCP_ACCESS_KEY        NCP API Access Key
+#   NCP_SECRET_KEY        NCP API Secret Key
+#   NCP_REGISTRY          ncr.kr-standard.ncr.gov-ncloud.com/ems-aiot
+#   DEPLOY_HOST           서버 공인 IP
+#   DEPLOY_USER           배포 SSH 사용자 (예: ems-deploy)
+#   DEPLOY_SSH_KEY        ED25519 개인키 (PEM 전체)
+#   DEPLOY_PORT           SSH 포트 (기본 22)
+#   NEXT_PUBLIC_TOSS_CLIENT_KEY  빌드 시 필요한 공개 클라이언트 키
+#   SLACK_WEBHOOK_URL     (선택) 배포 알림
 # ============================================================
 
-name: Deploy
+name: Deploy to NCP
 
 on:
   push:
@@ -16,92 +27,80 @@ on:
         default: 'production'
         type: choice
         options: [production, staging]
+      rollback_version:
+        description: '롤백 버전 (SHA — 비우면 최신 배포)'
+        required: false
+        default: ''
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_APP: ghcr.io/${{ github.repository }}/app
-  IMAGE_AI: ghcr.io/${{ github.repository }}/ai-engine
+  NCP_REGISTRY: ${{ secrets.NCP_REGISTRY }}
 
 jobs:
-  # ── 이미지 빌드 & 푸시 ───────────────────────────────────
+  # ── 빌드 & NCP Container Registry 푸시 ───────────────────
   build-push:
-    name: Build & Push Images
+    name: Build & Push to NCP NCR
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    # 롤백 모드면 빌드 생략
+    if: github.event.inputs.rollback_version == '' || github.event.inputs.rollback_version == null
 
     outputs:
-      app-tag: ${{ steps.meta-app.outputs.tags }}
-      ai-tag: ${{ steps.meta-ai.outputs.tags }}
-      version: ${{ steps.version.outputs.value }}
+      version: ${{ steps.version.outputs.sha }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set version
+      - name: Set version (short SHA)
         id: version
-        run: echo "value=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GHCR
+      # NCP Container Registry는 docker login 표준 방식 지원
+      - name: Login to NCP Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ env.NCP_REGISTRY }}
+          username: ${{ secrets.NCP_ACCESS_KEY }}
+          password: ${{ secrets.NCP_SECRET_KEY }}
 
-      # Next.js 이미지 메타
-      - name: Extract metadata (Next.js)
-        id: meta-app
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_APP }}
-          tags: |
-            type=sha,prefix=,suffix=,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      # AI Engine 이미지 메타
-      - name: Extract metadata (AI Engine)
-        id: meta-ai
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_AI }}
-          tags: |
-            type=sha,prefix=,suffix=,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      # Next.js 빌드 & 푸시
-      - name: Build & push Next.js image
+      # ── Next.js 앱 이미지 ────────────────────────────────
+      - name: Build & Push Next.js App
         uses: docker/build-push-action@v5
         with:
           context: .
+          dockerfile: Dockerfile
           push: true
-          tags: ${{ steps.meta-app.outputs.tags }}
-          labels: ${{ steps.meta-app.outputs.labels }}
+          tags: |
+            ${{ env.NCP_REGISTRY }}/ems-app:${{ steps.version.outputs.sha }}
+            ${{ env.NCP_REGISTRY }}/ems-app:latest
           build-args: |
             NEXT_PUBLIC_TOSS_CLIENT_KEY=${{ secrets.NEXT_PUBLIC_TOSS_CLIENT_KEY }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            NEXT_PUBLIC_COMMIT_SHA=${{ steps.version.outputs.sha }}
+          cache-from: type=registry,ref=${{ env.NCP_REGISTRY }}/ems-app:cache
+          cache-to: type=registry,ref=${{ env.NCP_REGISTRY }}/ems-app:cache,mode=max
+          provenance: false
 
-      # AI Engine 빌드 & 푸시
-      - name: Build & push AI Engine image
+      # ── AI Engine 이미지 ─────────────────────────────────
+      - name: Build & Push AI Engine
         uses: docker/build-push-action@v5
         with:
           context: ./ai-engine
+          dockerfile: Dockerfile
           push: true
-          tags: ${{ steps.meta-ai.outputs.tags }}
-          labels: ${{ steps.meta-ai.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: |
+            ${{ env.NCP_REGISTRY }}/ems-ai:${{ steps.version.outputs.sha }}
+            ${{ env.NCP_REGISTRY }}/ems-ai:latest
+          cache-from: type=registry,ref=${{ env.NCP_REGISTRY }}/ems-ai:cache
+          cache-to: type=registry,ref=${{ env.NCP_REGISTRY }}/ems-ai:cache,mode=max
+          provenance: false
 
-  # ── 프로덕션 배포 ─────────────────────────────────────────
+  # ── 프로덕션 Blue-Green 배포 ──────────────────────────────
   deploy:
-    name: Deploy to Server
+    name: Blue-Green Deploy
     runs-on: ubuntu-latest
-    needs: build-push
+    needs: [build-push]
+    if: always() && (needs.build-push.result == 'success' || needs.build-push.result == 'skipped')
     environment: ${{ github.event.inputs.environment || 'production' }}
     concurrency:
       group: deploy-production
@@ -110,63 +109,164 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy via SSH
+      # 롤백 모드: 지정된 버전 사용 / 일반 모드: 빌드 출력 버전
+      - name: Resolve target version
+        id: target
+        run: |
+          if [ -n "${{ github.event.inputs.rollback_version }}" ]; then
+            echo "version=${{ github.event.inputs.rollback_version }}" >> $GITHUB_OUTPUT
+            echo "mode=rollback" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ needs.build-push.outputs.version }}" >> $GITHUB_OUTPUT
+            echo "mode=deploy" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy via SSH (Blue-Green + Auto Rollback)
         uses: appleboy/ssh-action@v1.0.3
         env:
-          APP_TAG: ${{ needs.build-push.outputs.version }}
+          APP_VERSION: ${{ steps.target.outputs.version }}
+          NCP_REGISTRY: ${{ secrets.NCP_REGISTRY }}
+          NCP_ACCESS_KEY: ${{ secrets.NCP_ACCESS_KEY }}
+          NCP_SECRET_KEY: ${{ secrets.NCP_SECRET_KEY }}
+          DEPLOY_MODE: ${{ steps.target.outputs.mode }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
-          envs: APP_TAG
+          envs: APP_VERSION,NCP_REGISTRY,NCP_ACCESS_KEY,NCP_SECRET_KEY,DEPLOY_MODE
+          command_timeout: 10m
           script: |
-            set -e
+            set -euo pipefail
             cd /opt/ems-aiot
 
-            # 최신 코드 pull (compose 파일 & infra 설정만)
-            git pull origin main
+            echo "=============================="
+            echo " EMS AIoT 배포 시작"
+            echo " 버전  : ${APP_VERSION}"
+            echo " 모드  : ${DEPLOY_MODE}"
+            echo " 시각  : $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "=============================="
 
-            # 이미지 pull
-            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            docker pull ${{ env.IMAGE_APP }}:$APP_TAG
-            docker pull ${{ env.IMAGE_AI }}:$APP_TAG
+            # ── NCP NCR 로그인 ───────────────────────────
+            echo "${NCP_SECRET_KEY}" | docker login "${NCP_REGISTRY}" \
+              -u "${NCP_ACCESS_KEY}" --password-stdin
 
-            # docker-compose.yml의 이미지 태그 업데이트
-            sed -i "s|image: .*ems-app:.*|image: ${{ env.IMAGE_APP }}:$APP_TAG|g" docker-compose.override.yml || true
-            sed -i "s|image: .*ems-ai:.*|image: ${{ env.IMAGE_AI }}:$APP_TAG|g" docker-compose.override.yml || true
+            # ── 현재 실행 버전 저장 (롤백용) ─────────────
+            CURRENT_VERSION=$(cat /opt/ems-aiot/.current_version 2>/dev/null || echo "unknown")
+            echo "${CURRENT_VERSION}" > /opt/ems-aiot/.prev_version
+            echo "${APP_VERSION}" > /opt/ems-aiot/.current_version
 
-            # DB 마이그레이션 (무중단)
-            docker compose run --rm --no-deps app1 npx prisma migrate deploy
+            # ── 이미지 Pull ──────────────────────────────
+            docker pull "${NCP_REGISTRY}/ems-app:${APP_VERSION}"
+            docker pull "${NCP_REGISTRY}/ems-ai:${APP_VERSION}"
 
-            # Rolling restart (무중단)
-            docker compose up -d --no-deps --scale app1=1 app1
-            sleep 15
-            docker compose up -d --no-deps --scale app2=1 app2
-            sleep 15
+            # ── DB 마이그레이션 (롤백 모드는 스킵) ───────
+            if [ "${DEPLOY_MODE}" = "deploy" ]; then
+              echo "▶ DB 마이그레이션..."
+              NCP_REGISTRY="${NCP_REGISTRY}" APP_VERSION="${APP_VERSION}" \
+                docker compose -f docker-compose.prod.yml \
+                --env-file .env.production \
+                run --rm --no-deps migrate
+            fi
 
-            # AI Engine 재시작
-            docker compose up -d --no-deps ai-engine
+            # ── Blue-Green Rolling Update ─────────────────
+            # app1 업데이트 → 헬스체크 → app2 업데이트
+            deploy_instance() {
+              local service=$1
+              echo "▶ ${service} 배포 중..."
+              NCP_REGISTRY="${NCP_REGISTRY}" APP_VERSION="${APP_VERSION}" \
+                docker compose -f docker-compose.prod.yml \
+                --env-file .env.production \
+                up -d --no-deps --pull never "${service}"
 
-            # 헬스 체크
+              # 헬스체크 (최대 2분 대기)
+              for i in $(seq 1 24); do
+                container=$(docker compose -f docker-compose.prod.yml ps -q "${service}" | head -1)
+                if [ -n "${container}" ]; then
+                  health=$(docker inspect --format='{{.State.Health.Status}}' "${container}" 2>/dev/null || echo "none")
+                  if [ "${health}" = "healthy" ]; then
+                    echo "✅ ${service} healthy"
+                    return 0
+                  fi
+                fi
+                echo "⏳ ${service} 헬스체크 대기 중... (${i}/24)"
+                sleep 5
+              done
+              echo "❌ ${service} 헬스체크 실패"
+              return 1
+            }
+
+            # app1 배포
+            if ! deploy_instance app1; then
+              echo "❌ app1 배포 실패 — 자동 롤백 시작"
+              PREV=$(cat /opt/ems-aiot/.prev_version)
+              NCP_REGISTRY="${NCP_REGISTRY}" APP_VERSION="${PREV}" \
+                docker compose -f docker-compose.prod.yml \
+                --env-file .env.production \
+                up -d --no-deps --pull never app1
+              echo "${PREV}" > /opt/ems-aiot/.current_version
+              exit 1
+            fi
+
+            sleep 5
+
+            # app2 배포
+            if ! deploy_instance app2; then
+              echo "❌ app2 배포 실패 — app2만 롤백, app1 유지"
+              PREV=$(cat /opt/ems-aiot/.prev_version)
+              NCP_REGISTRY="${NCP_REGISTRY}" APP_VERSION="${PREV}" \
+                docker compose -f docker-compose.prod.yml \
+                --env-file .env.production \
+                up -d --no-deps --pull never app2
+              # app1은 새 버전 유지 — 서비스 부분 복구
+            fi
+
+            # ── AI Engine 업데이트 ───────────────────────
+            echo "▶ AI Engine 배포 중..."
+            NCP_REGISTRY="${NCP_REGISTRY}" APP_VERSION="${APP_VERSION}" \
+              docker compose -f docker-compose.prod.yml \
+              --env-file .env.production \
+              up -d --no-deps --pull never ai-engine
+
+            # ── 전체 헬스 최종 확인 ──────────────────────
+            echo "▶ 최종 헬스 확인..."
             for i in $(seq 1 12); do
-              status=$(curl -sf http://localhost/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status',''))" 2>/dev/null || echo "")
-              if [ "$status" = "ok" ]; then
-                echo "✅ Health check passed"
+              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+                "http://localhost/api/health" || echo "000")
+              HEALTH_STATUS=$(curl -sf "http://localhost/api/health" \
+                | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','unknown'))" \
+                2>/dev/null || echo "unknown")
+
+              if [ "${HTTP_STATUS}" = "200" ] && [ "${HEALTH_STATUS}" = "ok" ]; then
+                echo "✅ 배포 완료 — version: ${APP_VERSION}"
+                # 오래된 이미지 정리 (최근 3개 보존)
+                docker image prune -f --filter "until=168h" || true
                 exit 0
               fi
-              echo "⏳ Waiting... ($i/12)"
+              echo "⏳ 헬스 확인 중... HTTP=${HTTP_STATUS} status=${HEALTH_STATUS} (${i}/12)"
               sleep 10
             done
-            echo "❌ Health check failed"
+
+            echo "❌ 최종 헬스 확인 실패 — 전체 롤백"
+            PREV=$(cat /opt/ems-aiot/.prev_version)
+            NCP_REGISTRY="${NCP_REGISTRY}" APP_VERSION="${PREV}" \
+              docker compose -f docker-compose.prod.yml \
+              --env-file .env.production \
+              up -d --no-deps --pull never app1 app2 ai-engine
+            echo "${PREV}" > /opt/ems-aiot/.current_version
             exit 1
 
-      - name: Notify deployment
-        if: always()
-        uses: actions/github-script@v7
+      # ── 배포 결과 Slack 알림 ─────────────────────────────
+      - name: Slack 배포 알림
+        if: always() && secrets.SLACK_WEBHOOK_URL != ''
+        uses: 8398a7/action-slack@v3
         with:
-          script: |
-            const status = '${{ job.status }}';
-            const emoji = status === 'success' ? '✅' : '❌';
-            const version = '${{ needs.build-push.outputs.version }}';
-            console.log(`${emoji} Deployment ${status} — version: ${version}`);
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,took
+          text: |
+            ${{ job.status == 'success' && '✅' || '❌' }} 탄소이음 EMS 배포 ${{ job.status }}
+            버전: `${{ steps.target.outputs.version }}`
+            모드: `${{ steps.target.outputs.mode }}`
+            환경: `${{ github.event.inputs.environment || 'production' }}`
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

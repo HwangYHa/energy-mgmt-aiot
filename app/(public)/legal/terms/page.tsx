@@ -121,8 +121,7 @@ export default function TermsPage() {
             <div className="text-slate-300">
               <p>약관 관련 문의사항:</p>
               <ul className="mt-4 space-y-2">
-                <li>이메일: legal@탄소이음.io</li>
-                <li>전화: 1588-1234</li>
+                <li>이메일: carbonieum.official@gmail.com</li>
               </ul>
             </div>
           </section>

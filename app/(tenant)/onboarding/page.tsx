@@ -10,6 +10,8 @@ import {
   Building2, FileText, ChevronRight, ChevronLeft,
   CheckCircle, Upload, Wifi, AlertCircle, ArrowRight,
   BarChart3, Plug, Link2, PenLine, Zap, Loader2,
+  Calendar, Phone, MapPin, MessageSquare, Wrench, Monitor,
+  Send, Lock,
 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { apiPost, apiPut, ApiError, getCsrfToken } from '@/lib/api/client';
@@ -155,9 +157,50 @@ function Step1Site({ onNext }: { onNext: (siteId: string) => void }) {
 // 단계 2: 데이터 연결 방식 선택 (탭 기반)
 // ─────────────────────────────────────────────
 
-function Step2DataMethod({ siteId, onNext, onBack }: { siteId: string; onNext: (method: DataMethod) => void; onBack: () => void }) {
+function Step2DataMethod({ siteId, onNext, onBack, planTier }: { siteId: string; onNext: (method: DataMethod) => void; onBack: () => void; planTier?: string }) {
   type Tab = 'invoice' | 'manual' | 'sensor';
   const [activeTab, setActiveTab] = useState<Tab>('invoice');
+
+  // IoT 탭: 하드웨어 상태 선택
+  type HardwareState = 'choose' | 'has_hardware' | 'schedule' | 'demo';
+  const [hwState, setHwState] = useState<HardwareState>('choose');
+
+  // 설치 예약 폼 상태
+  const [schedForm, setSchedForm] = useState({
+    contactName:   '',
+    phone:         '',
+    email:         '',
+    preferredDate: '',
+    address:       '',
+    notes:         '',
+  });
+  const [schedSubmitting, setSchedSubmitting] = useState(false);
+  const [schedDone, setSchedDone] = useState(false);
+
+  const isStarterPlan = !planTier || planTier === 'trial';
+
+  const handleScheduleSubmit = async () => {
+    if (!schedForm.contactName.trim()) { toast.error('담당자명을 입력해주세요.'); return; }
+    if (!schedForm.phone.trim()) { toast.error('연락처를 입력해주세요.'); return; }
+    if (!schedForm.preferredDate) { toast.error('희망 방문일을 선택해주세요.'); return; }
+    setSchedSubmitting(true);
+    try {
+      await apiPost('/api/onboarding/installation-request', {
+        ...schedForm,
+        planTier,
+      });
+      setSchedDone(true);
+      toast.success('설치 예약이 접수되었습니다! 영업일 1~2일 내 연락드립니다.');
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : '예약 접수 중 오류가 발생했습니다.');
+    } finally {
+      setSchedSubmitting(false);
+    }
+  };
+
+  const today = new Date();
+  today.setDate(today.getDate() + 1);
+  const minDate = today.toISOString().split('T')[0];
 
   // ── 고지서 업로드 탭 ──
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
@@ -404,42 +447,296 @@ function Step2DataMethod({ siteId, onNext, onBack }: { siteId: string; onNext: (
       {/* ─── IoT 연동 탭 ─── */}
       {activeTab === 'sensor' && (
         <div className="space-y-4">
-          <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
-            <p className="text-sm font-semibold text-purple-400 flex items-center gap-2 mb-2">
-              <Zap className="w-4 h-4" /> IoT 센서/PLC 자동 연동
-            </p>
-            <p className="text-xs text-slate-400 mb-3">
-              전력계, PLC, BMS 등 현장 장비와 직접 연동하면 데이터가 자동으로 수집됩니다.
-              AI 이상 탐지와 부하 예측이 활성화됩니다.
-            </p>
-            <ol className="text-xs text-slate-400 space-y-1.5 list-decimal list-inside">
-              <li>게이트웨이 장치 구매 / 현장 설치 (별도 문의)</li>
-              <li>설정 → 게이트웨이 관리에서 장치 등록</li>
-              <li>현장 장비와 Modbus/BACnet/OPC-UA 연결</li>
-              <li>데이터 수집 시작 → 자동 탄소 계산</li>
-            </ol>
-          </div>
 
-          <div className="grid grid-cols-3 gap-3 text-center">
-            {[
-              { label: '실시간 모니터링', icon: '📡', desc: '1분 주기' },
-              { label: 'AI 이상 탐지',   icon: '🤖', desc: '자동 알림' },
-              { label: '탄소 자동 계산', icon: '🌱', desc: '무인 운영' },
-            ].map(f => (
-              <div key={f.label} className="p-3 bg-slate-800/50 border border-slate-700/50 rounded-xl">
-                <div className="text-2xl mb-1">{f.icon}</div>
-                <p className="text-xs font-medium text-white">{f.label}</p>
-                <p className="text-[10px] text-slate-500">{f.desc}</p>
+          {/* Starter 플랜: IoT 미지원 안내 */}
+          {isStarterPlan ? (
+            <div className="space-y-4">
+              <div className="p-4 bg-slate-700/30 border border-slate-600/50 rounded-xl">
+                <div className="flex items-start gap-3">
+                  <Lock className="w-5 h-5 text-slate-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-300 mb-1">Starter 플랜은 IoT 하드웨어를 지원하지 않습니다</p>
+                    <p className="text-xs text-slate-500 mb-3 leading-relaxed">
+                      실시간 IoT 연동은 Basic 이상 플랜에서 이용 가능합니다.<br />
+                      지금은 고지서 업로드 또는 수동 입력으로 시작하시거나, 플랜을 업그레이드하세요.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setActiveTab('invoice')}
+                        className="text-xs px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 rounded-lg hover:bg-cyan-500/20 transition"
+                      >
+                        고지서 업로드로 시작 →
+                      </button>
+                      <button
+                        onClick={() => window.location.href = '/settings/subscription'}
+                        className="text-xs px-3 py-1.5 bg-purple-500/10 border border-purple-500/30 text-purple-400 rounded-lg hover:bg-purple-500/20 transition"
+                      >
+                        Basic으로 업그레이드
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
 
-          <a
-            href="mailto:carbonieum.official@gmail.com"
-            className="block w-full py-3 text-center border border-purple-500/30 text-purple-400 hover:bg-purple-500/10 font-medium text-sm rounded-xl transition"
-          >
-            전문가 설치 지원 문의 →
-          </a>
+              <div className="grid grid-cols-3 gap-3 text-center opacity-40 pointer-events-none">
+                {[
+                  { label: '실시간 모니터링', icon: '📡', desc: '1분 주기' },
+                  { label: 'AI 이상 탐지',   icon: '🤖', desc: '자동 알림' },
+                  { label: '탄소 자동 계산', icon: '🌱', desc: '무인 운영' },
+                ].map(f => (
+                  <div key={f.label} className="p-3 bg-slate-800/50 border border-slate-700/50 rounded-xl">
+                    <div className="text-2xl mb-1">{f.icon}</div>
+                    <p className="text-xs font-medium text-white">{f.label}</p>
+                    <p className="text-[10px] text-slate-500">{f.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            /* Basic/Pro 이상: 하드웨어 상태 선택 */
+            <div className="space-y-4">
+
+              {/* STEP A: 하드웨어 상태 선택 */}
+              {hwState === 'choose' && (
+                <>
+                  <p className="text-sm font-medium text-white">현재 하드웨어 준비 상태를 선택하세요</p>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => setHwState('has_hardware')}
+                      className="w-full p-4 bg-slate-800/50 border border-slate-700 hover:border-emerald-500/50 hover:bg-emerald-500/5 rounded-xl text-left transition group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 bg-emerald-500/20 rounded-lg flex items-center justify-center group-hover:bg-emerald-500/30 transition">
+                          <Plug className="w-5 h-5 text-emerald-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-white">게이트웨이·센서가 이미 있어요</p>
+                          <p className="text-xs text-slate-400">지금 바로 장치 등록 및 연결을 시작합니다</p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-slate-500 ml-auto" />
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => setHwState('schedule')}
+                      className="w-full p-4 bg-slate-800/50 border border-slate-700 hover:border-purple-500/50 hover:bg-purple-500/5 rounded-xl text-left transition group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 bg-purple-500/20 rounded-lg flex items-center justify-center group-hover:bg-purple-500/30 transition">
+                          <Calendar className="w-5 h-5 text-purple-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-white">설치 예약을 원해요</p>
+                          <p className="text-xs text-slate-400">전문가가 방문하여 설치합니다. 세금계산서 발행 · 계좌이체</p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-slate-500 ml-auto" />
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => setHwState('demo')}
+                      className="w-full p-4 bg-slate-800/50 border border-slate-700 hover:border-cyan-500/50 hover:bg-cyan-500/5 rounded-xl text-left transition group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 bg-cyan-500/20 rounded-lg flex items-center justify-center group-hover:bg-cyan-500/30 transition">
+                          <Monitor className="w-5 h-5 text-cyan-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-white">먼저 소프트웨어를 체험하고 싶어요</p>
+                          <p className="text-xs text-slate-400">고지서 업로드 또는 수동 입력으로 즉시 시작합니다</p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-slate-500 ml-auto" />
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* STEP B: 게이트웨이 이미 있음 */}
+              {hwState === 'has_hardware' && (
+                <div className="space-y-4">
+                  <button onClick={() => setHwState('choose')} className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-300 transition">
+                    <ChevronLeft className="w-3.5 h-3.5" /> 돌아가기
+                  </button>
+                  <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+                    <p className="text-sm font-semibold text-emerald-400 flex items-center gap-2 mb-2">
+                      <CheckCircle className="w-4 h-4" /> 게이트웨이 연결 방법
+                    </p>
+                    <ol className="text-xs text-slate-400 space-y-1.5 list-decimal list-inside">
+                      <li>설정 → 게이트웨이 관리 → 장치 등록 (MAC 주소 입력)</li>
+                      <li>게이트웨이와 현장 장비를 Modbus/BACnet/OPC-UA로 연결</li>
+                      <li>데이터 수집이 시작되면 대시보드에서 실시간 확인 가능</li>
+                    </ol>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    {[
+                      { label: '실시간 모니터링', icon: '📡', desc: '1분 주기' },
+                      { label: 'AI 이상 탐지',   icon: '🤖', desc: '자동 알림' },
+                      { label: '탄소 자동 계산', icon: '🌱', desc: '무인 운영' },
+                    ].map(f => (
+                      <div key={f.label} className="p-3 bg-slate-800/50 border border-slate-700/50 rounded-xl">
+                        <div className="text-2xl mb-1">{f.icon}</div>
+                        <p className="text-xs font-medium text-white">{f.label}</p>
+                        <p className="text-[10px] text-slate-500">{f.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* STEP C: 설치 예약 폼 */}
+              {hwState === 'schedule' && (
+                <div className="space-y-4">
+                  <button onClick={() => setHwState('choose')} className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-300 transition">
+                    <ChevronLeft className="w-3.5 h-3.5" /> 돌아가기
+                  </button>
+
+                  {schedDone ? (
+                    <div className="p-5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-center space-y-3">
+                      <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto" />
+                      <p className="text-base font-semibold text-white">설치 예약이 접수되었습니다!</p>
+                      <p className="text-sm text-slate-400">영업일 1~2일 내 담당자가 연락드려 최종 방문 일정을 확정합니다.</p>
+                      <div className="p-3 bg-slate-800/50 rounded-lg text-xs text-slate-400 text-left space-y-1">
+                        <p>• 현장 실측 후 설치비 최종 확정</p>
+                        <p>• 세금계산서 발행 → 계좌이체</p>
+                        <p>• 설치 완료 후 즉시 실시간 모니터링 시작</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                        <p className="text-xs text-purple-400 leading-relaxed">
+                          <Wrench className="w-3.5 h-3.5 inline mr-1" />
+                          전문가가 직접 방문하여 게이트웨이·CT센서를 설치합니다.<br />
+                          <span className="text-slate-400">설치비: Basic ₩500,000 / Pro ₩1,800,000 (VAT 별도 · 하드웨어 미포함)</span>
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs text-slate-400 mb-1 block">담당자명 <span className="text-red-400">*</span></label>
+                            <input
+                              type="text"
+                              value={schedForm.contactName}
+                              onChange={e => setSchedForm(s => ({ ...s, contactName: e.target.value }))}
+                              placeholder="홍길동"
+                              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none transition"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                              <Phone className="w-3 h-3" />연락처 <span className="text-red-400">*</span>
+                            </label>
+                            <input
+                              type="tel"
+                              value={schedForm.phone}
+                              onChange={e => setSchedForm(s => ({ ...s, phone: e.target.value }))}
+                              placeholder="010-0000-0000"
+                              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none transition"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />희망 방문일 <span className="text-red-400">*</span>
+                            </label>
+                            <input
+                              type="date"
+                              value={schedForm.preferredDate}
+                              min={minDate}
+                              onChange={e => setSchedForm(s => ({ ...s, preferredDate: e.target.value }))}
+                              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white focus:border-purple-500 focus:outline-none transition"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-slate-400 mb-1 block">이메일 (확인 메일 발송)</label>
+                            <input
+                              type="email"
+                              value={schedForm.email}
+                              onChange={e => setSchedForm(s => ({ ...s, email: e.target.value }))}
+                              placeholder="example@company.com"
+                              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none transition"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />사업장 주소
+                          </label>
+                          <input
+                            type="text"
+                            value={schedForm.address}
+                            onChange={e => setSchedForm(s => ({ ...s, address: e.target.value }))}
+                            placeholder="예: 경기도 화성시 향남읍 제1공단로 123"
+                            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none transition"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                            <MessageSquare className="w-3 h-3" />추가 요청사항
+                          </label>
+                          <textarea
+                            value={schedForm.notes}
+                            onChange={e => setSchedForm(s => ({ ...s, notes: e.target.value }))}
+                            placeholder="설치 희망 시간대, 주의 사항, 현장 특이점 등"
+                            rows={3}
+                            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none transition resize-none"
+                          />
+                        </div>
+
+                        <button
+                          onClick={handleScheduleSubmit}
+                          disabled={schedSubmitting}
+                          className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold rounded-xl transition flex items-center justify-center gap-2"
+                        >
+                          {schedSubmitting
+                            ? <><Loader2 className="w-4 h-4 animate-spin" />접수 중...</>
+                            : <><Send className="w-4 h-4" />설치 예약 접수하기</>}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* STEP D: 데모 모드 */}
+              {hwState === 'demo' && (
+                <div className="space-y-4">
+                  <button onClick={() => setHwState('choose')} className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-300 transition">
+                    <ChevronLeft className="w-3.5 h-3.5" /> 돌아가기
+                  </button>
+                  <div className="p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl">
+                    <p className="text-sm font-semibold text-cyan-400 flex items-center gap-2 mb-2">
+                      <Monitor className="w-4 h-4" /> 소프트웨어 먼저 체험하기
+                    </p>
+                    <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+                      하드웨어 없이도 고지서 업로드 또는 수동 입력으로 탄소 배출량 계산을 즉시 시작할 수 있습니다.
+                      IoT 설치는 언제든지 나중에 진행하실 수 있습니다.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setActiveTab('invoice')}
+                        className="flex-1 py-2 text-xs font-medium bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition"
+                      >
+                        고지서 업로드로 시작
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('manual')}
+                        className="flex-1 py-2 text-xs font-medium bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg hover:bg-blue-500/30 transition"
+                      >
+                        수동 입력으로 시작
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -563,7 +860,8 @@ function Step3Complete({ dataMethod, onFinish }: { dataMethod: DataMethod; onFin
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { update: updateSession } = useSession();
+  const { data: session, update: updateSession } = useSession();
+  const planTier = (session?.user as { planTier?: string } | undefined)?.planTier ?? 'trial';
   const [currentStep, setCurrentStep] = useState(1);
   const [siteId, setSiteId] = useState('');
   const [dataMethod, setDataMethod] = useState<DataMethod>(null);
@@ -648,6 +946,7 @@ export default function OnboardingPage() {
           {currentStep === 2 && (
             <Step2DataMethod
               siteId={siteId}
+              planTier={planTier}
               onNext={method => { setDataMethod(method); updateStep(3); }}
               onBack={() => updateStep(1)}
             />
