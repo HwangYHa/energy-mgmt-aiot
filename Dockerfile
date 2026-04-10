@@ -37,6 +37,13 @@ ENV NEXT_PUBLIC_COMMIT_SHA=$NEXT_PUBLIC_COMMIT_SHA
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
+# 빌드 타임 더미 시크릿 — next-auth 등 라이브러리가 process.env를 직접 읽는 경우 대비
+# 실제 값은 컨테이너 런타임에 .env.production 으로 덮어씀 (이미지에 실제 시크릿 없음)
+ENV DATABASE_URL="mysql://build:build@localhost:3306/build"
+ENV NEXTAUTH_SECRET="build-time-placeholder-secret-minimum-32-chars!"
+ENV JWT_SECRET="build-time-placeholder-jwt-secret-32-chars!!!!!"
+ENV NEXTAUTH_URL="http://localhost:3000"
+
 RUN pnpm build
 
 # ============================================================
