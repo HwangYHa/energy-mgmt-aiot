@@ -124,7 +124,7 @@ jobs:
       - name: Prepare SSH key file
         run: |
           echo "${{ secrets.DEPLOY_SSH_KEY }}" | base64 -d > "${{ runner.temp }}/ssh_key"
-          chmod 600 "${{ runner.temp }}/ssh_key"
+          chmod 644 "${{ runner.temp }}/ssh_key"
 
       - name: Deploy via SSH (Blue-Green + Auto Rollback)
         uses: appleboy/ssh-action@v1.0.3
