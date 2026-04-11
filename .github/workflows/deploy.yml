@@ -121,6 +121,11 @@ jobs:
             echo "mode=deploy" >> $GITHUB_OUTPUT
           fi
 
+      - name: Prepare SSH key file
+        run: |
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" | base64 -d > "${{ runner.temp }}/ssh_key"
+          chmod 600 "${{ runner.temp }}/ssh_key"
+
       - name: Deploy via SSH (Blue-Green + Auto Rollback)
         uses: appleboy/ssh-action@v1.0.3
         env:
@@ -132,7 +137,7 @@ jobs:
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          key_path: /github/runner_temp/ssh_key
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           envs: APP_VERSION,NCP_REGISTRY,NCP_ACCESS_KEY,NCP_SECRET_KEY,DEPLOY_MODE
           command_timeout: 10m
