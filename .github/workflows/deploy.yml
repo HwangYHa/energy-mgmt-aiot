@@ -185,7 +185,7 @@ jobs:
               NCP_REGISTRY="${NCP_REGISTRY}" APP_VERSION="${APP_VERSION}" \
                 docker compose -f docker-compose.prod.yml \
                 --env-file .env.production \
-                run --rm --no-deps migrate
+                run --rm migrate
             fi
 
             # ── Blue-Green Rolling Update ─────────────────
