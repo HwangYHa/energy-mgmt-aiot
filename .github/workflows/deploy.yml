@@ -139,6 +139,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key_path: /github/runner_temp/ssh_key
           port: ${{ secrets.DEPLOY_PORT || 22 }}
+          debug: true
           envs: APP_VERSION,NCP_REGISTRY,NCP_ACCESS_KEY,NCP_SECRET_KEY,DEPLOY_MODE
           command_timeout: 10m
           script: |
