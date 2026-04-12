@@ -124,11 +124,12 @@ jobs:
       - name: Prepare SSH key file
         run: |
           echo "${{ secrets.DEPLOY_SSH_KEY }}" | base64 -d > "${{ runner.temp }}/ssh_key"
-          chmod 644 "${{ runner.temp }}/ssh_key"
-          echo "=== Decoded key fingerprint ==="
+          chmod 600 "${{ runner.temp }}/ssh_key"
+          echo "=== KEY FINGERPRINT (from Secret) ==="
           ssh-keygen -l -f "${{ runner.temp }}/ssh_key"
-          echo "=== Key first line ==="
-          head -1 "${{ runner.temp }}/ssh_key"
+          echo "=== PUBLIC KEY (copy this to server authorized_keys) ==="
+          ssh-keygen -y -f "${{ runner.temp }}/ssh_key"
+          chmod 644 "${{ runner.temp }}/ssh_key"
 
       - name: Deploy via SSH (Blue-Green + Auto Rollback)
         uses: appleboy/ssh-action@v1.0.3
