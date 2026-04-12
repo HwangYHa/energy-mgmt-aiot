@@ -152,12 +152,19 @@ jobs:
             set -euo pipefail
             cd /opt/ems-aiot
 
-            # ── 최신 설정 파일 동기화 (배포 버전과 일치) ─────
-            curl -fsSL \
-              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-              "https://raw.githubusercontent.com/HwangYHa/energy-mgmt-aiot/${APP_VERSION}/docker-compose.prod.yml" \
-              -o /opt/ems-aiot/docker-compose.prod.yml \
-              || echo "⚠️ config sync 실패 — 기존 파일 사용"
+            # ── 레포지토리 설정 파일 동기화 (docker-compose + infra/) ─────
+            cd /opt/ems-aiot
+            if [ ! -d .git ]; then
+              git init -q
+              git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/HwangYHa/energy-mgmt-aiot.git"
+            else
+              git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/HwangYHa/energy-mgmt-aiot.git"
+            fi
+            git fetch origin "${APP_VERSION}" --depth=1 -q 2>/dev/null \
+              || git fetch origin master --depth=1 -q
+            git checkout FETCH_HEAD -- docker-compose.prod.yml infra/ 2>/dev/null \
+              || echo "⚠️ infra 동기화 실패 — 기존 파일 사용"
+            mkdir -p infra/nginx/logs infra/mysql/init
 
             echo "=============================="
             echo " EMS AIoT 배포 시작"
