@@ -139,17 +139,25 @@ jobs:
           NCP_ACCESS_KEY: ${{ secrets.NCP_ACCESS_KEY }}
           NCP_SECRET_KEY: ${{ secrets.NCP_SECRET_KEY }}
           DEPLOY_MODE: ${{ steps.target.outputs.mode }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key_path: /github/runner_temp/ssh_key
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           debug: true
-          envs: APP_VERSION,NCP_REGISTRY,NCP_ACCESS_KEY,NCP_SECRET_KEY,DEPLOY_MODE
+          envs: APP_VERSION,NCP_REGISTRY,NCP_ACCESS_KEY,NCP_SECRET_KEY,DEPLOY_MODE,GITHUB_TOKEN
           command_timeout: 10m
           script: |
             set -euo pipefail
             cd /opt/ems-aiot
+
+            # ── 최신 설정 파일 동기화 (배포 버전과 일치) ─────
+            curl -fsSL \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              "https://raw.githubusercontent.com/HwangYHa/energy-mgmt-aiot/${APP_VERSION}/docker-compose.prod.yml" \
+              -o /opt/ems-aiot/docker-compose.prod.yml \
+              || echo "⚠️ config sync 실패 — 기존 파일 사용"
 
             echo "=============================="
             echo " EMS AIoT 배포 시작"
