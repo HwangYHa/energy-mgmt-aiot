@@ -151,7 +151,7 @@ services:
     image: ${NCP_REGISTRY}/ems-app:${APP_VERSION:-latest}
     container_name: ems_migrate
     restart: "no"
-    command: ["npx", "prisma", "migrate", "deploy"]
+    command: ["npx", "--yes", "prisma@5.22.0", "migrate", "deploy"]
     environment:
       DATABASE_URL: mysql://${MYSQL_USER:-ems}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-energy}
     depends_on:
