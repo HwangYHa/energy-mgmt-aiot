@@ -282,17 +282,3 @@ jobs:
             echo "${PREV}" > /opt/ems-aiot/.current_version
             exit 1
 
-      # ── 배포 결과 Slack 알림 ─────────────────────────────
-      - name: Slack 배포 알림
-        if: always()
-        uses: 8398a7/action-slack@v3
-        with:
-          status: ${{ job.status }}
-          fields: repo,message,commit,author,took
-          text: |
-            ${{ job.status == 'success' && '✅' || '❌' }} 탄소이음 EMS 배포 ${{ job.status }}
-            버전: `${{ steps.target.outputs.version }}`
-            모드: `${{ steps.target.outputs.mode }}`
-            환경: `${{ github.event.inputs.environment || 'production' }}`
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
