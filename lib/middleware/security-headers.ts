@@ -40,6 +40,9 @@ export function securityHeadersMiddleware(
   }
 ): NextResponse {
   const isDev = process.env.NODE_ENV !== 'production';
+  // HTTPS 보안 헤더는 실제로 HTTPS로 서빙될 때만 활성화
+  // (도메인 + SSL 발급 전 HTTP 운영 시 브라우저가 자원을 HTTPS로 업그레이드하여 로딩 실패)
+  const isHttps = process.env.NEXTAUTH_URL?.startsWith('https://') ?? false;
   const nonce = options?.nonce || generateNonce();
   const allowedDomains = options?.allowedDomains || [];
 
@@ -125,8 +128,8 @@ export function securityHeadersMiddleware(
     // iframe/child-src (결제창 등 외부 프레임)
     extraFrameHosts ? `frame-src 'self' ${extraFrameHosts}` : "frame-src 'self'",
 
-    // 업그레이드 가능한 요청 자동 HTTPS 전환
-    isDev ? '' : 'upgrade-insecure-requests',
+    // 업그레이드 가능한 요청 자동 HTTPS 전환 (HTTPS 서빙 시에만)
+    !isDev && isHttps ? 'upgrade-insecure-requests' : '',
   ]
     .filter(Boolean)
     .join('; ');
@@ -149,7 +152,7 @@ export function securityHeadersMiddleware(
   // - max-age: 1년 (31536000초)
   // - includeSubDomains: 모든 서브도메인에도 적용
   // - preload: 브라우저 HSTS preload 리스트 등록 가능
-  if (!isDev) {
+  if (!isDev && isHttps) {
     response.headers.set(
       'Strict-Transport-Security',
       'max-age=31536000; includeSubDomains; preload'
