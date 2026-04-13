@@ -1,2 +1,1 @@
--- Migration placeholder: applied directly via prisma db push
--- Extended models were added before migration tracking was established.
+-- no-op: full schema managed by 20260130080939_init

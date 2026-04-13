@@ -1,2 +1,1 @@
--- This migration was already applied manually to the database.
--- Empty placeholder to satisfy Prisma migration tracking.
+-- no-op: full schema managed by 20260130080939_init

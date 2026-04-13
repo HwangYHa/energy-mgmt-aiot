@@ -1,2 +1,1 @@
--- AddColumn filepath to download_history
-ALTER TABLE `download_history` ADD COLUMN `filepath` VARCHAR(500);
+-- no-op: full schema managed by 20260130080939_init
