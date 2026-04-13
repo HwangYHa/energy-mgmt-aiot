@@ -124,11 +124,6 @@ jobs:
       - name: Prepare SSH key file
         run: |
           echo "${{ secrets.DEPLOY_SSH_KEY }}" | base64 -d > "${{ runner.temp }}/ssh_key"
-          chmod 600 "${{ runner.temp }}/ssh_key"
-          echo "=== KEY FINGERPRINT (from Secret) ==="
-          ssh-keygen -l -f "${{ runner.temp }}/ssh_key"
-          echo "=== PUBLIC KEY (copy this to server authorized_keys) ==="
-          ssh-keygen -y -f "${{ runner.temp }}/ssh_key"
           chmod 644 "${{ runner.temp }}/ssh_key"
 
       - name: Deploy via SSH (Blue-Green + Auto Rollback)
@@ -254,12 +249,19 @@ jobs:
               --env-file .env.production \
               up -d --no-deps --pull never ai-engine
 
-            # ── 전체 헬스 최종 확인 ──────────────────────
+            # ── Nginx 시작 (없으면 시작, 있으면 reload) ──
+            echo "▶ Nginx 시작..."
+            NCP_REGISTRY="${NCP_REGISTRY}" APP_VERSION="${APP_VERSION}" \
+              docker compose -f docker-compose.prod.yml \
+              --env-file .env.production \
+              up -d --no-deps nginx || true
+
+            # ── 전체 헬스 최종 확인 (app1 직접, 3000 포트) ─
             echo "▶ 최종 헬스 확인..."
             for i in $(seq 1 12); do
               HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-                "http://localhost/api/health" || echo "000")
-              HEALTH_STATUS=$(curl -sf "http://localhost/api/health" \
+                "http://localhost:3000/api/health" || echo "000")
+              HEALTH_STATUS=$(curl -sf "http://localhost:3000/api/health" \
                 | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','unknown'))" \
                 2>/dev/null || echo "unknown")
 
