@@ -256,22 +256,20 @@ jobs:
               --env-file .env.production \
               up -d --no-deps nginx || true
 
-            # ── 전체 헬스 최종 확인 (app1 직접, 3000 포트) ─
+            # ── 전체 헬스 최종 확인 (docker inspect, expose 환경 대응) ─
             echo "▶ 최종 헬스 확인..."
             for i in $(seq 1 12); do
-              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-                "http://localhost:3000/api/health" || echo "000")
-              HEALTH_STATUS=$(curl -sf "http://localhost:3000/api/health" \
-                | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','unknown'))" \
-                2>/dev/null || echo "unknown")
-
-              if [ "${HTTP_STATUS}" = "200" ] && [ "${HEALTH_STATUS}" = "ok" ]; then
-                echo "✅ 배포 완료 — version: ${APP_VERSION}"
+              c1=$(docker compose -f docker-compose.prod.yml ps -q app1 | head -1)
+              c2=$(docker compose -f docker-compose.prod.yml ps -q app2 | head -1)
+              h1=$(docker inspect --format='{{.State.Health.Status}}' "${c1}" 2>/dev/null || echo "none")
+              h2=$(docker inspect --format='{{.State.Health.Status}}' "${c2}" 2>/dev/null || echo "none")
+              if [ "${h1}" = "healthy" ] && [ "${h2}" = "healthy" ]; then
+                echo "✅ 배포 완료 — version: ${APP_VERSION} (app1=${h1} app2=${h2})"
                 # 오래된 이미지 정리 (최근 3개 보존)
                 docker image prune -f --filter "until=168h" || true
                 exit 0
               fi
-              echo "⏳ 헬스 확인 중... HTTP=${HTTP_STATUS} status=${HEALTH_STATUS} (${i}/12)"
+              echo "⏳ 헬스 확인 중... app1=${h1} app2=${h2} (${i}/12)"
               sleep 10
             done
 
