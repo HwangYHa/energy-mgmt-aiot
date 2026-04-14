@@ -3,6 +3,10 @@
  *
  * 역할별 + 테넌트별 동적 메뉴 필터링
  *
+ * 쿼리 파라미터:
+ *   all=true  → 관리자용 전체 메뉴 조회 (super_admin 전용, 필터링 없음)
+ *              label/sortOrder/section/enabled 필드 포함 (admin/menu 페이지용)
+ *
  * 테넌트 메뉴 설정 (tenant.settings):
  * {
  *   "menu": {
@@ -12,11 +16,12 @@
  *   }
  * }
  *
- * - allowedGroups: 허용된 메뉴 그룹 코드 목록 (미설정 시 전체 허용)
- * - allowedItems: 허용된 메뉴 아이템 코드 목록 (미설정 시 전체 허용)
- * - disabledItems: 비활성화할 메뉴 아이템 코드 목록
+ * 인증 우선순위:
+ * 1. verifyAuth (JWT Bearer, auth-token 쿠키, NextAuth 세션)
+ * 2. getServerSession (NextAuth 세션 전용 폴백)
  */
 
+import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/session';
 import { prisma } from '@/lib/db/prisma';
@@ -30,6 +35,7 @@ import {
 import { getCached } from '@/lib/cache/redis';
 import { isSuperAdmin } from '@/lib/auth/permissions';
 import { getActiveSub, PLAN_FEATURES } from '@/lib/auth/subscription';
+import { verifyAuth } from '@/lib/auth/verify';
 
 interface TenantMenuSettings {
   allowedGroups?: string[];
@@ -50,19 +56,97 @@ function parseTenantMenuSettings(settings: unknown): TenantMenuSettings {
   };
 }
 
-export async function GET() {
-  try {
-    // NextAuth 세션 검증
-    const session = await getServerSession(authOptions);
+/** 그룹 코드 → 섹션 매핑 (admin/menu 페이지 표시용) */
+const GROUP_SECTION_MAP: Record<string, string> = {
+  dashboard:   'monitoring',
+  monitoring:  'monitoring',
+  analytics:   'monitoring',
+  carbon:      'monitoring',
+  reports:     'monitoring',
+  control:     'control',
+  management:  'management',
+  settings:    'admin',
+  compliance:  'compliance',
+  alerts:      'alerts',
+  admin:       'admin',
+};
 
-    if (!session || !session.user) {
-      return unauthorizedResponse();
+export async function GET(request: NextRequest) {
+  try {
+    // ── 인증: verifyAuth 우선 (JWT/쿠키/NextAuth 세션 모두 지원) ──
+    let userRole: UserRole;
+    let tenantId: string;
+    let userId: string;
+
+    const authCtx = await verifyAuth(request);
+    if (authCtx) {
+      userRole = authCtx.role as UserRole;
+      tenantId = authCtx.tenantId;
+      userId   = authCtx.userId;
+    } else {
+      // 폴백: getServerSession (서버 컴포넌트 환경)
+      const session = await getServerSession(authOptions);
+      if (!session?.user) {
+        return unauthorizedResponse();
+      }
+      userRole = session.user.role as UserRole;
+      tenantId = session.user.tenantId as string;
+      userId   = session.user.id as string;
     }
 
-    const userRole = session.user.role as UserRole;
-    const tenantId = session.user.tenantId as string;
-    const userId   = session.user.id as string;
+    void userId;
+
     const superAdmin = isSuperAdmin(userRole);
+    const { searchParams } = new URL(request.url);
+    const allMode = searchParams.get('all') === 'true';
+
+    // ── 관리자 전체 조회 모드 (super_admin + all=true) ──────────────
+    // admin/menu 페이지에서 사용: label/sortOrder/section/enabled 필드 반환
+    if (allMode && superAdmin) {
+      const groups = await prisma.menuGroup.findMany({
+        include: {
+          menuItems: {
+            where: { menuGroupId: { not: null } },
+            orderBy: { displayOrder: 'asc' },
+          },
+        },
+        orderBy: { displayOrder: 'asc' },
+      });
+
+      const result = groups.map((group) => ({
+        id:        group.id,
+        code:      group.code,
+        label:     group.name,          // admin/menu 페이지용 필드명
+        name:      group.name,          // Sidebar 호환
+        icon:      group.icon ?? '',
+        minRole:   group.minRole,
+        sortOrder: group.displayOrder,  // admin/menu 페이지용 필드명
+        displayOrder: group.displayOrder,
+        section:   GROUP_SECTION_MAP[group.code] ?? 'general',
+        isActive:  group.isActive,
+        items: group.menuItems.map((item) => ({
+          id:              item.id,
+          code:            item.code,
+          label:           item.name,       // admin/menu 페이지용
+          name:            item.name,       // Sidebar 호환
+          icon:            item.icon ?? '',
+          path:            item.path ?? '',
+          minRole:         item.minRole,
+          sortOrder:       item.displayOrder,  // admin/menu 페이지용
+          displayOrder:    item.displayOrder,
+          enabled:         item.isActive,      // admin/menu 페이지용
+          isActive:        item.isActive,
+          featureRequired: item.featureRequired ?? null,
+          badgeType:       (item.badgeType !== 'none' ? item.badgeType : null) as string | null,
+          badgeColor:      item.badgeColor ?? null,
+          locked:          false,
+        })),
+      }));
+
+      return successResponse(result);
+    }
+
+    // ── 일반 조회 모드: 역할 + 테넌트 + 구독 필터링 ──────────────────
 
     // 구독 기반 기능 코드 사전 로드 (SUPER_ADMIN은 건너뜀)
     let allowedFeatureCodes: Set<string> | null = null;
@@ -147,12 +231,15 @@ export async function GET() {
         return tenantMenuConfig.allowedGroups.includes(group.code);
       })
       .map((group) => ({
-        id: group.id,
-        code: group.code,
-        name: group.name,
-        icon: group.icon,
+        id:          group.id,
+        code:        group.code,
+        name:        group.name,
+        label:       group.name,
+        icon:        group.icon,
         displayOrder: group.displayOrder,
-        minRole: group.minRole,
+        sortOrder:   group.displayOrder,
+        minRole:     group.minRole,
+        section:     GROUP_SECTION_MAP[group.code] ?? 'general',
         items: group.menuItems
           // 역할별 아이템 필터링 (역할 미달은 완전 숨김)
           .filter((item) => superAdmin || hasRoleOrHigher(userRole, item.minRole))
@@ -177,23 +264,25 @@ export async function GET() {
             }
 
             return {
-              id: item.id,
-              code: item.code,
-              name: item.name,
-              icon: item.icon,
-              path: item.path,
-              displayOrder: item.displayOrder,
-              minRole: item.minRole,
-              badgeType: item.badgeType,
-              badgeColor: item.badgeColor,
-              locked,                          // true → UI에서 잠금 아이콘 표시
+              id:              item.id,
+              code:            item.code,
+              name:            item.name,
+              label:           item.name,
+              icon:            item.icon,
+              path:            item.path,
+              displayOrder:    item.displayOrder,
+              sortOrder:       item.displayOrder,
+              minRole:         item.minRole,
+              enabled:         item.isActive,
+              badgeType:       (item.badgeType !== 'none' ? item.badgeType : null) as string | null,
+              badgeColor:      item.badgeColor,
+              locked,
               featureRequired: item.featureRequired ?? null,
             };
           }),
       }))
       .filter((group) => group.items.length > 0); // 아이템이 없는 그룹 제거
 
-    void userId; // used for session validation above
     return successResponse(filteredGroups);
   } catch (error) {
     console.error('[API] 메뉴 조회 오류:', error);

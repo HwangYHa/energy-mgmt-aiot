@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
+import { apiDelete } from '@/lib/api/client';
 
 // Types
 interface Device {
@@ -138,16 +139,10 @@ export default function SiteDetailPage() {
   // Delete site
   const handleDelete = async () => {
     try {
-      const { fetchWithCsrf } = await import('@/hooks/use-csrf');
-      const response = await fetchWithCsrf(`/api/sites/${siteId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || data.details || 'Failed to delete site');
+      const res = await apiDelete(`/api/sites/${siteId}`);
+      if (!res.success) {
+        throw new Error(res.error || 'Failed to delete site');
       }
-
       router.push('/sites');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '사이트 삭제에 실패했습니다.');

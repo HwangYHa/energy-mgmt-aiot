@@ -15,6 +15,7 @@ import {
   ArrowDownUp,
   Server,
 } from 'lucide-react';
+import { apiGet } from '@/lib/api/client';
 
 interface PipelineSource {
   id: string;
@@ -63,12 +64,10 @@ export default function PipelinePage() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/monitoring/pipeline');
-      if (res.ok) {
-        const json = await res.json();
-        const data = json.data || json;
-        setSources(data.sources || []);
-        setStats(data.stats || null);
+      const res = await apiGet<{ sources: PipelineSource[]; stats: PipelineStats }>('/api/monitoring/pipeline');
+      if (res.success && res.data) {
+        setSources(res.data.sources || []);
+        setStats(res.data.stats || null);
       } else {
         setError('파이프라인 상태를 불러올 수 없습니다.');
       }

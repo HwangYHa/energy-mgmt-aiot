@@ -20,7 +20,7 @@ import {
   Network,
   HardDrive,
 } from 'lucide-react';
-import { fetchWithCsrf } from '@/hooks/use-csrf';
+import { apiPost, apiPut, apiDelete } from '@/lib/api/client';
 import { toast } from '@/lib/toast';
 
 // ──────────────────────────────────────────────────────────────
@@ -184,27 +184,26 @@ function GatewayModal({
         ? { ...protoCfg, protocol }
         : null;
 
-      const res = await fetchWithCsrf(url, {
-        method: mode === 'edit' ? 'PUT' : 'POST',
-        body: JSON.stringify({
-          ...form,
-          name: form.name || undefined,
-          model: form.model || undefined,
-          firmwareVersion: form.firmwareVersion || undefined,
-          ipAddress: form.ipAddress || undefined,
-          macAddress: form.macAddress || undefined,
-          vpnAddress: form.vpnAddress || undefined,
-          installationDate: form.installationDate || undefined,
-          config: configPayload,
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
+      const payload = {
+        ...form,
+        name: form.name || undefined,
+        model: form.model || undefined,
+        firmwareVersion: form.firmwareVersion || undefined,
+        ipAddress: form.ipAddress || undefined,
+        macAddress: form.macAddress || undefined,
+        vpnAddress: form.vpnAddress || undefined,
+        installationDate: form.installationDate || undefined,
+        config: configPayload,
+      };
+      const res = mode === 'edit'
+        ? await apiPut(url, payload)
+        : await apiPost(url, payload);
+      if (res.success) {
         toast.success(mode === 'create' ? '게이트웨이가 등록되었습니다.' : '게이트웨이가 수정되었습니다.');
         onSaved();
         onClose();
       } else {
-        toast.error(json.error?.message || '저장에 실패했습니다.');
+        toast.error('저장에 실패했습니다.');
       }
     } catch {
       toast.error('저장 중 오류가 발생했습니다.');
@@ -816,7 +815,7 @@ export default function GatewaysPage() {
     try {
       const res = await fetch('/api/sites');
       const json = await res.json();
-      if (json.success) setSites(json.data.sites ?? []);
+      if (json.success) setSites(Array.isArray(json.data) ? json.data : (json.data?.sites ?? []));
     } catch { /* ignore */ }
   }, []);
 
@@ -832,13 +831,12 @@ export default function GatewaysPage() {
     if (!confirm(`"${gw.name ?? gw.serialNumber}" 게이트웨이를 삭제하시겠습니까?\n연결된 ${gw._count.devices}개 장치의 게이트웨이 연결이 해제됩니다.`)) return;
     setDeleting(gw.id);
     try {
-      const res = await fetchWithCsrf(`/api/gateways/${gw.id}`, { method: 'DELETE' });
-      const json = await res.json();
-      if (json.success) {
+      const res = await apiDelete(`/api/gateways/${gw.id}`);
+      if (res.success) {
         toast.success('게이트웨이가 삭제되었습니다.');
         fetchGateways();
       } else {
-        toast.error(json.error?.message || '삭제에 실패했습니다.');
+        toast.error('삭제에 실패했습니다.');
       }
     } catch {
       toast.error('삭제 중 오류가 발생했습니다.');

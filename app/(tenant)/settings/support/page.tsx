@@ -75,11 +75,11 @@ export default function SupportPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [charCount, setCharCount] = useState(0);
 
-  // 사용자 프로필 자동 채우기 (세션)
+  // 사용자 프로필 자동 채우기 (/api/auth/me)
   useEffect(() => {
-    apiGet<{ user?: { name?: string; email?: string } }>('/api/auth/session')
+    apiGet<{ name?: string; email?: string }>('/api/auth/me')
       .then((res) => {
-        const user = res.data?.user;
+        const user = res.data;
         if (user) {
           setForm((prev) => ({
             ...prev,

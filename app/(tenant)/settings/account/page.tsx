@@ -15,7 +15,7 @@ import {
   EyeOff,
 } from 'lucide-react';
 import Link from 'next/link';
-import { fetchWithCsrf } from '@/hooks/use-csrf';
+import { apiPatch, apiPost } from '@/lib/api/client';
 
 interface UserProfile {
   name: string;
@@ -83,21 +83,13 @@ export default function AccountSettingsPage() {
     setMessage(null);
 
     try {
-      const res = await fetchWithCsrf('/api/auth/me', {
-        method: 'PATCH',
-        body: JSON.stringify({ name: name.trim() }),
-      });
-      const json = await res.json();
-
-      if (json.success) {
+      const res = await apiPatch('/api/auth/me', { name: name.trim() });
+      if (res.success) {
         setMessage({ type: 'success', text: '프로필이 저장되었습니다.' });
         setProfile((prev) => (prev ? { ...prev, name: name.trim() } : prev));
         setTimeout(() => setMessage(null), 3000);
       } else {
-        setMessage({
-          type: 'error',
-          text: json.error || '저장에 실패했습니다.',
-        });
+        setMessage({ type: 'error', text: '저장에 실패했습니다.' });
       }
     } catch {
       setMessage({ type: 'error', text: '저장 중 오류가 발생했습니다.' });
@@ -146,14 +138,11 @@ export default function AccountSettingsPage() {
     setIsChangingPassword(true);
 
     try {
-      const res = await fetchWithCsrf('/api/auth/change-password', {
-        method: 'POST',
-        body: JSON.stringify({
-          currentPassword: passwordForm.currentPassword,
-          newPassword: passwordForm.newPassword,
-        }),
+      const res = await apiPost('/api/auth/change-password', {
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
       });
-      const json = await res.json();
+      const json = res;
 
       if (json.success) {
         setPasswordMessage({

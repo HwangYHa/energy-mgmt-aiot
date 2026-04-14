@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { FileText, Download, Calendar, Filter, CheckCircle, Loader2, RefreshCw } from 'lucide-react';
-import { fetchWithCsrf } from '@/hooks/use-csrf';
+import { apiPost } from '@/lib/api/client';
 import { toast } from '@/lib/toast';
 
 interface ReportItem {
@@ -51,29 +51,22 @@ export default function ReportsPage() {
     setIsGenerating(true);
 
     try {
-      const response = await fetchWithCsrf('/api/reports/generate', {
-        method: 'POST',
-        body: JSON.stringify({
-          type: reportType,
-          period,
-          startDate: startDate || new Date(Date.now() - 30 * 86400000).toISOString(),
-          endDate: endDate || new Date().toISOString(),
-          format,
-        }),
+      const res = await apiPost<{ fileUrl?: string }>('/api/reports/generate', {
+        type: reportType,
+        period,
+        startDate: startDate || new Date(Date.now() - 30 * 86400000).toISOString(),
+        endDate: endDate || new Date().toISOString(),
+        format,
       });
 
-      if (response.ok) {
-        const data = await response.json();
-
-        if (data.fileUrl) {
-          window.open(data.fileUrl, '_blank');
+      if (res.success) {
+        if (res.data?.fileUrl) {
+          window.open(res.data.fileUrl, '_blank');
         }
-
         toast.success('리포트가 생성되었습니다.');
         fetchRecentReports();
       } else {
-        const err = await response.json().catch(() => null);
-        toast.error(err?.message || '리포트 생성에 실패했습니다.');
+        toast.error('리포트 생성에 실패했습니다.');
       }
     } catch {
       toast.error('리포트 생성 중 오류가 발생했습니다.');

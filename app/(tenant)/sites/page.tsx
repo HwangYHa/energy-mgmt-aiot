@@ -24,7 +24,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { fetchWithCsrf } from '@/hooks/use-csrf';
+import { apiPost, apiDelete } from '@/lib/api/client';
 import { toast } from '@/lib/toast';
 
 // Types
@@ -110,15 +110,10 @@ export default function SitesPage() {
   // Delete site
   const handleDelete = async (site: Site) => {
     try {
-      const response = await fetchWithCsrf(`/api/sites/${site.id}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to delete site');
+      const res = await apiDelete(`/api/sites/${site.id}`);
+      if (!res.success) {
+        throw new Error(res.error || 'Failed to delete site');
       }
-
       setShowDeleteConfirm(false);
       setSelectedSite(null);
       fetchSites();
@@ -471,20 +466,15 @@ function SiteCreateModal({
     setError(null);
 
     try {
-      const response = await fetchWithCsrf('/api/sites', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...formData,
-          areaSqm: formData.areaSqm ? parseFloat(formData.areaSqm) : undefined,
-          peakPowerKw: formData.peakPowerKw ? parseFloat(formData.peakPowerKw) : undefined,
-        }),
+      const res = await apiPost('/api/sites', {
+        ...formData,
+        areaSqm: formData.areaSqm ? parseFloat(formData.areaSqm) : undefined,
+        peakPowerKw: formData.peakPowerKw ? parseFloat(formData.peakPowerKw) : undefined,
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to create site');
+      if (!res.success) {
+        throw new Error(res.error || '사이트 생성에 실패했습니다.');
       }
-
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : '사이트 생성에 실패했습니다.');

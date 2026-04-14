@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   AlertTriangle,
 } from 'lucide-react';
+import { apiPost } from '@/lib/api/client';
 
 interface EmissionFactor {
   id: string;
@@ -215,14 +216,9 @@ function CreateFactorModal({ onClose, onCreated }: { onClose: () => void; onCrea
     setIsSubmitting(true);
     setError('');
     try {
-      const { fetchWithCsrf } = await import('@/hooks/use-csrf');
-      const res = await fetchWithCsrf('/api/compliance/emission-factors', {
-        method: 'POST',
-        body: JSON.stringify({ ...form, factor: parseFloat(form.factor) }),
-      });
-      const json = await res.json();
-      if (json.success) onCreated();
-      else setError(json.error || '등록 실패');
+      const res = await apiPost('/api/compliance/emission-factors', { ...form, factor: parseFloat(form.factor) });
+      if (res.success) onCreated();
+      else setError('등록 실패');
     } catch { setError('등록에 실패했습니다.'); } finally { setIsSubmitting(false); }
   };
 
