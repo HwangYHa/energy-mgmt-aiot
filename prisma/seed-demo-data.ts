@@ -551,7 +551,7 @@ export async function seedDemoData(
   const allMetrics: { id: string; baseValue: number; variance: number; isAccum: boolean; gatewayId: string }[] = [];
 
   for (let si = 0; si < DEMO_SITES.length; si++) {
-    const s = DEMO_SITES[si];
+    const s = DEMO_SITES[si]!;
     const site = await (prisma.site as any).upsert({
       where: { id: `demo-site-${si + 1}` },
       update: { name: s.name },
@@ -571,7 +571,7 @@ export async function seedDemoData(
 
     const gateways = buildSiteGateways(si);
     for (let gi = 0; gi < gateways.length; gi++) {
-      const gd = gateways[gi];
+      const gd = gateways[gi]!;
       const gw = await (prisma.gateway as any).upsert({
         where: { serialNumber: gd.serial },
         update: { name: gd.name },
@@ -592,7 +592,7 @@ export async function seedDemoData(
       });
 
       for (let di = 0; di < gd.devices.length; di++) {
-        const dd = gd.devices[di];
+        const dd = gd.devices[di]!;
         const devId = `demo-dev-${si * 8 + gi * 4 + di + 1}`;
         const dev = await (prisma.device as any).upsert({
           where: { id: devId },
@@ -717,7 +717,7 @@ export async function seedDemoData(
     const d = new Date();
     d.setMonth(d.getMonth() - m);
     const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const kwh = kwh_base[5 - m] * (0.9 + Math.random() * 0.2);
+    const kwh = kwh_base[5 - m]! * (0.9 + Math.random() * 0.2);
     const ex = await (prisma.kpiSnapshot as any).findFirst({ where: { tenantId: demoTenantId, period } });
     if (!ex) {
       await (prisma.kpiSnapshot as any).create({
@@ -747,7 +747,7 @@ export async function seedDemoData(
     const d = new Date();
     d.setMonth(d.getMonth() - m);
     const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const kwh = kwh_base[5 - m] * (0.9 + Math.random() * 0.2);
+    const kwh = kwh_base[5 - m]! * (0.9 + Math.random() * 0.2);
     // Scope2 (전력)
     const s2ex = await (prisma.emissionsData as any).findFirst({ where: { tenantId: demoTenantId, period, emissionType: 'scope2' } });
     if (!s2ex) {
