@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { jwtVerify } from 'jose';
-import { securityHeadersMiddleware } from '@/lib/middleware/security-headers';
+import { securityHeadersMiddleware, generateNonce } from '@/lib/middleware/security-headers';
 import { verifyCsrfToken } from '@/lib/middleware/csrf';
 import {
   checkRateLimit,
   getAuthRateLimit,
 } from '@/lib/middleware/rate-limit';
+
+// HTTPS 환경에서는 nonce를 request 헤더로 전달 (app/layout.tsx에서 사용)
+function makeResponseWithNonce(request: NextRequest, nonce?: string) {
+  const isHttps = process.env.NEXTAUTH_URL?.startsWith('https://') ?? false;
+  if (!isHttps || !nonce) return NextResponse.next();
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+  return NextResponse.next({ request: { headers: requestHeaders } });
+}
 
 // ── 보안 이벤트 (Edge 런타임 미지원 → 동적 import 패턴) ──────
 // isIpBlocked: 메모리 Map 기반이라 Edge 런타임에서도 동작하나,
@@ -142,7 +151,9 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    return securityHeadersMiddleware(NextResponse.next(), {
+    const nonce = generateNonce();
+    return securityHeadersMiddleware(makeResponseWithNonce(request, nonce), {
+      nonce,
       scriptSrcDomains: ['https://js.tosspayments.com', 'https://js.stripe.com'],
       frameSrcDomains: ['https://payment-gateway-sandbox.tosspayments.com', 'https://js.stripe.com'],
     });
@@ -228,7 +239,9 @@ export async function middleware(request: NextRequest) {
     }
 
     // 남은 요청 수를 헤더로 전달
-    const response = securityHeadersMiddleware(NextResponse.next(), {
+    const nonce = generateNonce();
+    const response = securityHeadersMiddleware(makeResponseWithNonce(request, nonce), {
+      nonce,
       scriptSrcDomains: ['https://js.tosspayments.com', 'https://js.stripe.com'],
       frameSrcDomains: ['https://payment-gateway-sandbox.tosspayments.com', 'https://js.stripe.com'],
     });
@@ -322,7 +335,9 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return securityHeadersMiddleware(NextResponse.next(), {
+  const nonce = generateNonce();
+  return securityHeadersMiddleware(makeResponseWithNonce(request, nonce), {
+    nonce,
     scriptSrcDomains: ['https://js.tosspayments.com'],
     frameSrcDomains: ['https://payment-gateway-sandbox.tosspayments.com'],
   });

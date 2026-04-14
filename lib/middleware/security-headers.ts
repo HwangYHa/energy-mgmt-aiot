@@ -77,58 +77,63 @@ export function securityHeadersMiddleware(
   const extraScriptHosts = options?.scriptSrcDomains?.join(' ') || '';
   const extraFrameHosts = options?.frameSrcDomains?.join(' ') || '';
 
+  // script-src: HTTPS + 프로덕션에서만 nonce 기반 (strict)
+  //   - HTTP 운영 중: unsafe-inline 사용 (nonce는 HTTPS 컨텍스트 필요)
+  //   - HTTPS + 프로덕션: nonce-based (Next.js가 hydration 스크립트에 nonce 자동 주입)
+  //   - 개발: unsafe-eval 추가 (HMR)
+  const scriptSrc = isDev
+    ? `script-src 'self' ${extraScriptHosts} 'unsafe-inline' 'unsafe-eval'`
+    : isHttps
+      ? `script-src 'self' ${extraScriptHosts} 'nonce-${nonce}'`
+      : `script-src 'self' ${extraScriptHosts} 'unsafe-inline'`;
+
+  // connect-src: WebSocket 프로토콜 포함 (HTTP → ws:, HTTPS → wss:)
+  const wsScheme = isHttps ? 'wss:' : 'ws:';
+  const connectSrcExtra = allowedDomains.length > 0 ? allowedDomains.join(' ') : '';
+  const connectSrc = isHttps
+    ? `connect-src 'self' https: ${wsScheme} ${connectSrcExtra}`.trimEnd()
+    : `connect-src 'self' http: ${wsScheme} ${connectSrcExtra}`.trimEnd();
+
   const cspDirectives = [
-    // 기본: 동일 출처만 허용
     "default-src 'self'",
+    scriptSrc,
 
-    // 스크립트: nonce 기반 + 동일 출처 + 추가 호스트
-    // 개발 환경: unsafe-eval 허용 (HMR용)
-    // 프로덕션: nonce만 허용하여 인라인 스크립트 제한
-    isDev
-      ? `script-src 'self' ${extraScriptHosts} 'unsafe-inline' 'unsafe-eval'`
-      : `script-src 'self' ${extraScriptHosts} 'nonce-${nonce}'`,
+    // 스타일: unsafe-inline 허용 (Tailwind CSS 인라인 + 서드파티 위젯)
+    "style-src 'self' 'unsafe-inline'",
 
-    // 스타일: nonce 기반 + 동일 출처 (Tailwind CSS 인라인 스타일 허용)
-    isDev
-      ? `style-src 'self' 'unsafe-inline'`
-      : `style-src 'self' 'nonce-${nonce}' 'unsafe-inline'`,
-
-    // 이미지: 동일 출처 + data URI + HTTPS
-    "img-src 'self' data: https:",
+    // 이미지: 동일 출처 + data URI + 외부 이미지 (프로필 사진 등)
+    "img-src 'self' data: https: http:",
 
     // 폰트: 동일 출처 + data URI
     "font-src 'self' data:",
 
-    // AJAX/WebSocket: 동일 출처 + HTTPS (AI 엔진, 외부 API)
-    allowedDomains.length > 0
-      ? `connect-src 'self' https: ${allowedDomains.join(' ')}`
-      : "connect-src 'self' https:",
+    connectSrc,
 
-    // iframe 삽입 금지 (X-Frame-Options 백업)
+    // iframe 삽입 금지
     "frame-ancestors 'none'",
 
-    // <base> 태그 제한 (XSS 방어)
+    // <base> 태그 제한
     "base-uri 'self'",
 
     // 폼 제출 제한
     "form-action 'self'",
 
-    // Object/Embed/Applet 금지
+    // Object/Embed 금지
     "object-src 'none'",
 
-    // Worker 제한
-    "worker-src 'self'",
+    // Worker
+    "worker-src 'self' blob:",
 
-    // Manifest 제한
+    // Manifest
     "manifest-src 'self'",
 
-    // Media 제한
-    "media-src 'self' https:",
+    // Media
+    "media-src 'self'",
 
-    // iframe/child-src (결제창 등 외부 프레임)
+    // 결제창 등 외부 프레임
     extraFrameHosts ? `frame-src 'self' ${extraFrameHosts}` : "frame-src 'self'",
 
-    // 업그레이드 가능한 요청 자동 HTTPS 전환 (HTTPS 서빙 시에만)
+    // HTTPS 전환 (HTTPS 서빙 시에만)
     !isDev && isHttps ? 'upgrade-insecure-requests' : '',
   ]
     .filter(Boolean)
@@ -181,11 +186,13 @@ export function securityHeadersMiddleware(
   // 8. Cross-Origin 정책
   // ==========================================
   // Cross-Origin-Embedder-Policy: unsafe-none (OAuth, 외부 이미지/CDN 허용)
-  // require-corp은 Google OAuth, 외부 프로필 이미지 등을 차단하므로 SaaS에 부적합
   response.headers.set('Cross-Origin-Embedder-Policy', 'unsafe-none');
 
-  // Cross-Origin-Opener-Policy: same-origin-allow-popups (OAuth 팝업/리다이렉트 허용)
-  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  // Cross-Origin-Opener-Policy: HTTPS에서만 활성화
+  // (HTTP에서는 브라우저가 신뢰할 수 없는 origin으로 판단해 경고 발생)
+  if (isHttps) {
+    response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  }
 
   // Cross-Origin-Resource-Policy: cross-origin (외부 리소스 로드 허용)
   response.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');

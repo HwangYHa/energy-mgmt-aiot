@@ -63,8 +63,6 @@ const nextConfig = {
   // ─── URL 리다이렉트 ──────────────────────────────────────────────
   async redirects() {
     return [
-      // 구버전 경로 → 새 경로
-      { source: '/pricing', destination: '/pricing', permanent: false },
       // 트레일링 슬래시 정규화
       { source: '/blog/', destination: '/blog', permanent: true },
       { source: '/features/', destination: '/features', permanent: true },
