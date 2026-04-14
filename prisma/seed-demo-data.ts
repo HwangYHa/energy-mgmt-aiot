@@ -281,7 +281,7 @@ export function buildSiteGateways(siteIndex: number): GatewayDef[] {
       type: 'ev_charger',
       manufacturer: '에버온',
       model: 'EV-100A',
-      protocol: 'ocpp',
+      protocol: 'mqtt',
       controlCapable: true,
       metrics: [
         { key: 'power_kw',     name: '충전전력',   unit: 'kW',  category: 'power_active',  min: 0,  max: 100, baseValue: 22, variance: 0.70 },
@@ -605,7 +605,7 @@ export async function seedDemoData(
             name: dd.name, code: dd.code,
             deviceType: dd.type,
             manufacturer: dd.manufacturer, model: dd.model,
-            protocol: dd.protocol === 'ocpp' ? 'mqtt' : dd.protocol,
+            protocol: dd.protocol,
             connectionConfig: { host: gd.ip, port: 502 },
             controlCapable: dd.controlCapable,
             controlMode: dd.controlCapable ? 'auto' : 'disabled',
