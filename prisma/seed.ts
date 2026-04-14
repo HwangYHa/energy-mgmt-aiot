@@ -345,14 +345,16 @@ async function main() {
     console.log('  ✅ Subscription: 이미 존재');
   }
 
-  // super_admin 유저 (비밀번호는 최초 1회만 생성)
+  // super_admin 유저
   const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || 'admin@carbonieum.co.kr';
   const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || 'Carbonieum2026!';
+  // SEED_FORCE_RESET=true 일 때 비밀번호도 재설정
+  const FORCE_RESET = process.env.SEED_FORCE_RESET === 'true';
 
   const existingUser = await prisma.user.findUnique({ where: { email: ADMIN_EMAIL } });
   if (!existingUser) {
     const hash = await bcrypt.hash(ADMIN_PASSWORD, 12);
-    await upsert(`User: ${ADMIN_EMAIL} (super_admin)`, () =>
+    await upsert(`User: ${ADMIN_EMAIL} (super_admin 신규 생성)`, () =>
       prisma.user.create({
         data: {
           tenantId: adminTenant.id,
@@ -368,7 +370,86 @@ async function main() {
     console.log(`\n  ⚠️  초기 비밀번호: ${ADMIN_PASSWORD}`);
     console.log('  ⚠️  로그인 후 즉시 변경하세요!\n');
   } else {
-    console.log(`  ✅ User: ${ADMIN_EMAIL} 이미 존재 (비밀번호 유지)`);
+    // 계정 잠금 해제 + 활성화 (이전 실패 시도로 잠겼을 경우 대비)
+    const updateData: Record<string, unknown> = {
+      loginAttempts: 0,
+      lockedUntil: null,
+      isActive: true,
+    };
+    if (FORCE_RESET) {
+      updateData.passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12);
+      console.log(`  🔑 FORCE_RESET: 비밀번호 재설정 포함`);
+    }
+    await (prisma as any).user.update({
+      where: { email: ADMIN_EMAIL },
+      data: updateData,
+    });
+    console.log(`  ✅ User: ${ADMIN_EMAIL} — 계정 잠금 해제 완료 (loginAttempts=0, lockedUntil=null)`);
+    if (FORCE_RESET) {
+      console.log(`\n  ⚠️  재설정된 비밀번호: ${ADMIN_PASSWORD}\n`);
+    }
+  }
+
+  // ── 데모 계정 (로그인 페이지 "데모 체험" 버튼용) ─────────────
+  console.log('\n📦 [3b] 데모 계정');
+  const DEMO_EMAIL = 'demo@carbonieum.com';
+  const DEMO_PASSWORD = 'Demo1234!';
+
+  let demoTenant = await prisma.tenant.findFirst({ where: { domain: 'demo.carbonieum.com' } });
+  if (!demoTenant) {
+    demoTenant = await upsert('Tenant: 탄소이음 Demo', () =>
+      prisma.tenant.create({
+        data: {
+          name: '탄소이음 Demo',
+          domain: 'demo.carbonieum.com',
+          industryType: 'other',
+          country: 'KR',
+          timezone: 'Asia/Seoul',
+          status: 'active',
+          onboardingStep: 5,
+          onboardingCompletedAt: new Date(),
+          settings: { menu: null },
+        },
+      })
+    );
+    // demo 구독 (enterprise, 1년)
+    const oneYearLater = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    await prisma.subscription.create({
+      data: {
+        tenantId: demoTenant.id,
+        planId: enterprisePlan.id,
+        status: 'ACTIVE',
+        billingCycle: 'yearly',
+        startDate: new Date(),
+        endDate: oneYearLater,
+        autoRenew: false,
+      },
+    });
+  }
+
+  const existingDemo = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });
+  if (!existingDemo) {
+    const demoHash = await bcrypt.hash(DEMO_PASSWORD, 12);
+    await upsert(`User: ${DEMO_EMAIL} (demo)`, () =>
+      prisma.user.create({
+        data: {
+          tenantId: demoTenant!.id,
+          email: DEMO_EMAIL,
+          passwordHash: demoHash,
+          name: '데모 사용자',
+          role: 'tenant_admin',
+          isActive: true,
+          isEmailVerified: true,
+        },
+      })
+    );
+  } else {
+    // 데모 계정도 잠금 해제
+    await (prisma as any).user.update({
+      where: { email: DEMO_EMAIL },
+      data: { loginAttempts: 0, lockedUntil: null, isActive: true },
+    });
+    console.log(`  ✅ User: ${DEMO_EMAIL} — 계정 잠금 해제`);
   }
 
   // ── 4. 글로벌 배출계수 ───────────────────────
@@ -432,7 +513,9 @@ async function main() {
   console.log('\n🎉 시드 완료!\n');
   console.log('  접속 URL : http://49.50.130.189');
   console.log(`  관리자   : ${ADMIN_EMAIL}`);
-  console.log('  비밀번호 : 위 경고 메시지 또는 SEED_ADMIN_PASSWORD 환경변수 참조\n');
+  console.log(`  관리자PW : ${ADMIN_PASSWORD}`);
+  console.log(`  데모계정 : ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
+  console.log('\n  ※ SEED_FORCE_RESET=true 옵션으로 비밀번호 재설정 가능\n');
 }
 
 main()
