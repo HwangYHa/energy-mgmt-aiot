@@ -10,67 +10,82 @@
 import { PrismaClient } from '@prisma/client';
 
 // ─────────────────────────────────────────────────────────────
-// 1. 메뉴 그룹 + 아이템 (전역)
+// 1. 메뉴 그룹 + 아이템 (로컬 DB 기준 — 2026-04-14 추출)
 // ─────────────────────────────────────────────────────────────
 
 export const MENU_GROUPS = [
-  { code: 'dashboard',   name: '대시보드',     icon: 'LayoutDashboard', displayOrder: 1, minRole: 'viewer'       as const },
-  { code: 'energy',      name: '에너지 분석',  icon: 'Zap',             displayOrder: 2, minRole: 'viewer'       as const },
-  { code: 'carbon',      name: '탄소 관리',    icon: 'Leaf',            displayOrder: 3, minRole: 'viewer'       as const },
-  { code: 'devices',     name: '설비·HW',      icon: 'Cpu',             displayOrder: 4, minRole: 'operator'     as const },
-  { code: 'alerts',      name: '알림·DR',      icon: 'Bell',            displayOrder: 5, minRole: 'viewer'       as const },
-  { code: 'compliance',  name: 'ESG·규제',     icon: 'ShieldCheck',     displayOrder: 6, minRole: 'site_manager' as const },
-  { code: 'settings',    name: '설정',         icon: 'Settings',        displayOrder: 7, minRole: 'tenant_admin' as const },
-  { code: 'support',     name: '지원',         icon: 'LifeBuoy',        displayOrder: 8, minRole: 'viewer'       as const },
+  { code: 'dashboard',   name: '대시보드',          icon: 'LayoutDashboard', displayOrder: 1,  minRole: 'viewer'       as const },
+  { code: 'monitoring',  name: '모니터링',           icon: 'Activity',        displayOrder: 2,  minRole: 'viewer'       as const },
+  { code: 'analytics',   name: '분석 & 예측',        icon: 'BarChart3',       displayOrder: 3,  minRole: 'viewer'       as const },
+  { code: 'control',     name: '설비 제어',          icon: 'Zap',             displayOrder: 5,  minRole: 'operator'     as const },
+  { code: 'management',  name: '관리',               icon: 'Settings',        displayOrder: 5,  minRole: 'site_manager' as const },
+  { code: 'settings',    name: '설정',               icon: 'Settings',        displayOrder: 9,  minRole: 'viewer'       as const },
+  { code: 'compliance',  name: '규제/컴플라이언스',  icon: 'Shield',          displayOrder: 55, minRole: 'site_manager' as const },
+  { code: 'alerts',      name: '알람 & 알림',        icon: 'Bell',            displayOrder: 60, minRole: 'operator'     as const },
+  { code: 'admin',       name: 'Super Admin',        icon: 'Shield',          displayOrder: 70, minRole: 'super_admin'  as const },
 ];
 
 export const MENU_ITEMS = [
   // ── 대시보드 ──────────────────────────────────────────────
-  { code: 'dashboard_main',      name: '에너지 대시보드',  path: '/dashboard',                    group: 'dashboard', order: 1, role: 'viewer'       as const },
-  { code: 'dashboard_realtime',  name: '실시간 모니터링',  path: '/dashboard/realtime',           group: 'dashboard', order: 2, role: 'viewer'       as const },
-  { code: 'dashboard_kpi',       name: 'KPI 현황',         path: '/dashboard/kpi',                group: 'dashboard', order: 3, role: 'viewer'       as const },
-  { code: 'dashboard_hmi',       name: 'HMI 화면',         path: '/dashboard/hmi',                group: 'dashboard', order: 4, role: 'operator'     as const, badge: 'new' as const },
-  // ── 에너지 분석 ───────────────────────────────────────────
-  { code: 'energy_usage',        name: '전력 사용량',      path: '/analytics/energy',             group: 'energy',    order: 1, role: 'viewer'       as const },
-  { code: 'energy_peak',         name: '피크 분석',        path: '/analytics/peak',               group: 'energy',    order: 2, role: 'viewer'       as const },
-  { code: 'energy_cost',         name: '비용 분석',        path: '/analytics/cost',               group: 'energy',    order: 3, role: 'viewer'       as const },
-  { code: 'energy_forecast',     name: 'AI 예측',          path: '/analytics/forecast',           group: 'energy',    order: 4, role: 'viewer'       as const, badge: 'new' as const },
-  { code: 'energy_anomaly',      name: 'AI 이상감지',      path: '/analytics/anomaly',            group: 'energy',    order: 5, role: 'viewer'       as const },
-  { code: 'energy_optimize',     name: 'AI 최적화',        path: '/analytics/optimize',           group: 'energy',    order: 6, role: 'site_manager' as const },
-  // ── 탄소 관리 ─────────────────────────────────────────────
-  { code: 'carbon_dashboard',    name: '탄소 배출 현황',   path: '/carbon',                       group: 'carbon',    order: 1, role: 'viewer'       as const },
-  { code: 'carbon_scope',        name: 'Scope별 분석',     path: '/carbon/scope',                 group: 'carbon',    order: 2, role: 'viewer'       as const },
-  { code: 'carbon_factors',      name: '배출계수 관리',    path: '/carbon/factors',               group: 'carbon',    order: 3, role: 'site_manager' as const },
-  { code: 'carbon_trading',      name: '탄소 거래',        path: '/carbon/trading',               group: 'carbon',    order: 4, role: 'tenant_admin' as const },
-  { code: 'carbon_offset',       name: '탄소 상쇄',        path: '/carbon/offset',                group: 'carbon',    order: 5, role: 'tenant_admin' as const },
-  // ── 설비·HW ───────────────────────────────────────────────
-  { code: 'devices_sites',       name: '사이트 관리',      path: '/sites',                        group: 'devices',   order: 1, role: 'operator'     as const },
-  { code: 'devices_gateways',    name: '게이트웨이',       path: '/devices/gateways',             group: 'devices',   order: 2, role: 'operator'     as const },
-  { code: 'devices_list',        name: '설비 목록',        path: '/devices',                      group: 'devices',   order: 3, role: 'operator'     as const },
-  { code: 'devices_sensors',     name: '센서 관리',        path: '/devices/sensors',              group: 'devices',   order: 4, role: 'operator'     as const },
-  { code: 'devices_inventory',   name: '자원 재고',        path: '/inventory',                    group: 'devices',   order: 5, role: 'site_manager' as const },
-  { code: 'devices_digital_twin',name: '디지털 트윈',      path: '/digital-twin',                 group: 'devices',   order: 6, role: 'operator'     as const, badge: 'new' as const },
-  // ── 알림·DR ────────────────────────────────────────────────
-  { code: 'alerts_list',         name: '알람 현황',        path: '/alerts',                       group: 'alerts',    order: 1, role: 'viewer'       as const, badge: 'count' as const },
-  { code: 'alerts_dr',           name: 'DR 이벤트',        path: '/dr',                           group: 'alerts',    order: 2, role: 'site_manager' as const },
-  { code: 'alerts_rules',        name: '알람 규칙 설정',   path: '/alerts/rules',                 group: 'alerts',    order: 3, role: 'tenant_admin' as const },
-  { code: 'alerts_notification', name: '알림 채널 설정',   path: '/settings/notifications',       group: 'alerts',    order: 4, role: 'tenant_admin' as const },
-  // ── ESG·규제 ───────────────────────────────────────────────
-  { code: 'compliance_esg',      name: 'ESG 보고서',       path: '/esg',                          group: 'compliance',order: 1, role: 'site_manager' as const },
-  { code: 'compliance_report',   name: '에너지 보고서',    path: '/reports',                      group: 'compliance',order: 2, role: 'site_manager' as const },
-  { code: 'compliance_sandbox',  name: '규제 샌드박스',    path: '/compliance/sandbox',           group: 'compliance',order: 3, role: 'tenant_admin' as const, badge: 'new' as const },
-  { code: 'compliance_audit',    name: '감사 체인 검증',   path: '/compliance/audit',             group: 'compliance',order: 4, role: 'tenant_admin' as const },
+  { code: 'dashboard_overview',     name: '개요',              icon: 'LayoutDashboard', path: '/dashboard',                      group: 'dashboard',  order: 1,  role: 'viewer'       as const },
+  { code: 'dashboard_realtime',     name: '실시간 현황',       icon: 'Activity',        path: '/dashboard/realtime',             group: 'dashboard',  order: 2,  role: 'viewer'       as const, badge: 'new'   as const },
+  { code: 'dashboard_viewer',       name: '뷰어 대시보드',     icon: 'Eye',             path: '/dashboard/viewer',               group: 'dashboard',  order: 3,  role: 'viewer'       as const },
+  { code: 'dashboard_digital_twin', name: '디지털 트윈',       icon: 'Boxes',           path: '/digital-twin',                   group: 'dashboard',  order: 4,  role: 'viewer'       as const },
+  // ── 모니터링 ──────────────────────────────────────────────
+  { code: 'monitoring_overview',    name: '종합 모니터링',     icon: 'Monitor',         path: '/monitoring',                     group: 'monitoring', order: 1,  role: 'viewer'       as const },
+  { code: 'monitoring_pipeline',    name: '데이터 수집 상태',  icon: 'Database',        path: '/monitoring/pipeline',            group: 'monitoring', order: 3,  role: 'site_manager' as const, badge: 'new' as const },
+  // ── 분석 & 예측 ───────────────────────────────────────────
+  { code: 'analytics_energy',       name: '에너지 분석',       icon: 'BarChart3',       path: '/analytics/energy',               group: 'analytics',  order: 1,  role: 'viewer'       as const },
+  { code: 'analytics_cost',         name: '비용 분석',         icon: 'DollarSign',      path: '/analytics/cost',                 group: 'analytics',  order: 2,  role: 'viewer'       as const },
+  { code: 'analytics_carbon',       name: '탄소 분석',         icon: 'Leaf',            path: '/analytics/carbon',               group: 'analytics',  order: 3,  role: 'viewer'       as const },
+  { code: 'analytics_anomaly',      name: '이상 탐지',         icon: 'AlertTriangle',   path: '/analytics/anomaly',              group: 'analytics',  order: 4,  role: 'viewer'       as const },
+  { code: 'analytics_forecast',     name: 'AI 예측',           icon: 'TrendingUp',      path: '/analytics/forecast',             group: 'analytics',  order: 5,  role: 'viewer'       as const },
+  { code: 'analytics_simulator',    name: '절감 시뮬레이터',   icon: 'Calculator',      path: '/analytics/simulator',            group: 'analytics',  order: 6,  role: 'viewer'       as const, badge: 'new' as const },
+  { code: 'analytics_templates',    name: '분석 템플릿',       icon: 'FileBarChart',    path: '/analytics/templates',            group: 'analytics',  order: 7,  role: 'viewer'       as const },
+  { code: 'analytics_reports',      name: '리포트',            icon: 'FileText',        path: '/reports',                        group: 'analytics',  order: 8,  role: 'viewer'       as const },
+  { code: 'analytics_raw_data',     name: '원시 데이터 탐색',  icon: 'Table2',          path: '/analytics/raw-data',             group: 'analytics',  order: 9,  role: 'site_manager' as const },
+  { code: 'analytics_download',     name: '데이터 다운로드',   icon: 'Download',        path: '/analytics/download',             group: 'analytics',  order: 10, role: 'operator'     as const },
+  { code: 'analytics_carbon_trading',     name: '배출권 거래소',     icon: 'TrendingUp',  path: '/analytics/carbon/trading',       group: 'analytics',  order: 11, role: 'viewer'       as const, badge: 'new' as const },
+  { code: 'analytics_carbon_market_prices', name: '시장 가격',       icon: 'BarChart2',   path: '/analytics/carbon/market-prices', group: 'analytics',  order: 12, role: 'viewer'       as const },
+  { code: 'analytics_carbon_roadmap',     name: '탄소중립 로드맵',   icon: 'Target',      path: '/analytics/carbon/roadmap',       group: 'analytics',  order: 13, role: 'viewer'       as const },
+  // ── 설비 제어 ─────────────────────────────────────────────
+  { code: 'control_manual',         name: '수동 제어',         icon: 'Sliders',         path: '/control/manual',                 group: 'control',    order: 1,  role: 'operator'     as const },
+  { code: 'control_schedule',       name: '스케줄 제어',       icon: 'Calendar',        path: '/control/schedule',               group: 'control',    order: 2,  role: 'operator'     as const },
+  { code: 'control_optimization',   name: 'AI 최적 제어',      icon: 'Brain',           path: '/control/optimization',           group: 'control',    order: 3,  role: 'site_manager' as const, badge: 'new' as const },
+  { code: 'control_dr',             name: 'DR 참여',           icon: 'Zap',             path: '/control/dr',                     group: 'control',    order: 4,  role: 'operator'     as const },
+  // ── 관리 ──────────────────────────────────────────────────
+  { code: 'management_sites',       name: '사이트 관리',       icon: 'Building2',       path: '/sites',                          group: 'management', order: 1,  role: 'viewer'       as const },
+  { code: 'management_users',       name: '사용자 관리',       icon: 'Users',           path: '/admin/users',                    group: 'management', order: 2,  role: 'tenant_admin' as const },
+  { code: 'management_subscription',name: '구독 관리',         icon: 'CreditCard',      path: '/settings/subscription',          group: 'management', order: 3,  role: 'tenant_admin' as const },
+  { code: 'control_devices',        name: '설비 관리',         icon: 'Cpu',             path: '/devices',                        group: 'management', order: 4,  role: 'operator'     as const },
+  { code: 'control_gateways',       name: '게이트웨이 관리',   icon: 'Server',          path: '/settings/gateways',              group: 'management', order: 5,  role: 'operator'     as const },
+  { code: 'management_asset',       name: '센서 관리',         icon: 'Radio',           path: '/sensors',                        group: 'management', order: 6,  role: 'operator'     as const },
   // ── 설정 ──────────────────────────────────────────────────
-  { code: 'settings_profile',    name: '프로필·계정',      path: '/settings/profile',             group: 'settings',  order: 1, role: 'viewer'       as const },
-  { code: 'settings_users',      name: '사용자 관리',      path: '/settings/users',               group: 'settings',  order: 2, role: 'tenant_admin' as const },
-  { code: 'settings_plan',       name: '구독·요금제',      path: '/settings/subscription',        group: 'settings',  order: 3, role: 'tenant_admin' as const },
-  { code: 'settings_api',        name: 'API 키 관리',      path: '/settings/api-keys',            group: 'settings',  order: 4, role: 'tenant_admin' as const },
-  { code: 'settings_security',   name: '보안 설정',        path: '/settings/security',            group: 'settings',  order: 5, role: 'tenant_admin' as const },
-  { code: 'settings_system',     name: '시스템 설정',      path: '/admin/settings',               group: 'settings',  order: 6, role: 'super_admin'  as const },
-  // ── 지원 ──────────────────────────────────────────────────
-  { code: 'support_tickets',     name: '고객 지원',        path: '/support',                      group: 'support',   order: 1, role: 'viewer'       as const },
-  { code: 'support_docs',        name: 'API 문서',         path: '/docs',                         group: 'support',   order: 2, role: 'viewer'       as const },
-  { code: 'support_manual',      name: '사용 설명서',      path: '/manual',                       group: 'support',   order: 3, role: 'viewer'       as const },
+  { code: 'settings_account',       name: '계정 설정',         icon: 'User',            path: '/settings/account',               group: 'settings',   order: 1,  role: 'viewer'       as const },
+  { code: 'settings_notifications', name: '알림 설정',         icon: 'Bell',            path: '/settings/notifications',         group: 'settings',   order: 2,  role: 'viewer'       as const },
+  { code: 'settings_api',           name: 'API 키 관리',       icon: 'Key',             path: '/settings/api',                   group: 'settings',   order: 3,  role: 'tenant_admin' as const },
+  { code: 'settings_system',        name: '시스템 설정',       icon: 'Settings',        path: '/settings/system',                group: 'settings',   order: 5,  role: 'viewer'       as const },
+  { code: 'settings_manual',        name: '매뉴얼',            icon: 'FileText',        path: '/manual',                         group: 'settings',   order: 6,  role: 'viewer'       as const },
+  { code: 'settings_support',       name: '문의/피드백',       icon: 'MessageSquare',   path: '/settings/support',               group: 'settings',   order: 7,  role: 'viewer'       as const },
+  // ── 규제/컴플라이언스 ─────────────────────────────────────
+  { code: 'compliance_audit',           name: '감사 추적',       icon: 'FileText',      path: '/compliance/audit-trail',         group: 'compliance', order: 1,  role: 'site_manager' as const },
+  { code: 'compliance_emission_factors',name: '배출계수 관리',   icon: 'Leaf',          path: '/compliance/emission-factors',    group: 'compliance', order: 2,  role: 'site_manager' as const },
+  { code: 'compliance_reports',         name: '규제 리포트',     icon: 'ClipboardList', path: '/compliance/reports',             group: 'compliance', order: 3,  role: 'site_manager' as const },
+  // ── 알람 & 알림 ───────────────────────────────────────────
+  { code: 'alerts_overview',        name: '알림 현황',         icon: 'Bell',            path: '/alerts',                         group: 'alerts',     order: 1,  role: 'operator'     as const },
+  { code: 'alerts_rules',           name: '알림 규칙',         icon: 'Settings',        path: '/alerts/rules',                   group: 'alerts',     order: 2,  role: 'operator'     as const },
+  // ── Super Admin ───────────────────────────────────────────
+  { code: 'admin_tenants',          name: '테넌트 관리',       icon: 'Building2',       path: '/admin/tenants',                  group: 'admin',      order: 1,  role: 'super_admin'  as const },
+  { code: 'admin_menu',             name: '메뉴 관리',         icon: 'LayoutGrid',      path: '/admin/menu',                     group: 'admin',      order: 2,  role: 'super_admin'  as const },
+  { code: 'admin_traffic',          name: '트래픽 관리',       icon: 'Activity',        path: '/admin/traffic',                  group: 'admin',      order: 3,  role: 'tenant_admin' as const },
+  { code: 'admin_support',          name: '지원 관리',         icon: 'MessageSquare',   path: '/admin/support',                  group: 'admin',      order: 4,  role: 'tenant_admin' as const },
+  { code: 'admin_partners',         name: '파트너 포털',       icon: 'Link2',           path: '/admin/partners',                 group: 'admin',      order: 5,  role: 'super_admin'  as const, badge: 'new' as const },
+  { code: 'resource_Management',    name: '자원 관리',         icon: 'Link2',           path: '/admin/equipment',                group: 'admin',      order: 6,  role: 'super_admin'  as const, badge: 'new' as const },
+  { code: 'admin_sandbox',          name: '규제 샌드박스',     icon: 'FlaskConical',    path: '/admin/sandbox',                  group: 'admin',      order: 7,  role: 'super_admin'  as const },
+  { code: 'admin_security',         name: '보안 모니터링',     icon: 'Shield',          path: '/admin/security',                 group: 'admin',      order: 8,  role: 'super_admin'  as const },
+  { code: 'admin_ransomware',       name: '랜섬웨어 대응',     icon: 'ShieldAlert',     path: '/admin/security/ransomware',      group: 'admin',      order: 9,  role: 'super_admin'  as const },
+  { code: 'super_admin_retention',  name: '리텐션 대시보드',   icon: 'BarChart3',       path: '/admin/retention',                group: 'admin',      order: 97, role: 'super_admin'  as const },
+  { code: 'super_admin_erp',        name: 'ERP 대시보드',      icon: 'TrendingUp',      path: '/admin/erp',                      group: 'admin',      order: 98, role: 'super_admin'  as const },
 ];
 
 // ─────────────────────────────────────────────────────────────
@@ -492,15 +507,17 @@ export async function seedMenuSystem(prisma: PrismaClient) {
       where: { code: item.code },
       update: {
         name: item.name,
+        icon: (item as any).icon ?? null,
         path: item.path,
         menuGroupId: groupMap[item.group],
         displayOrder: item.order,
         minRole: item.role,
-        ...(item.badge ? { badgeType: item.badge } : {}),
+        badgeType: (item.badge as any) ?? 'none',
       },
       create: {
         code: item.code,
         name: item.name,
+        icon: (item as any).icon ?? null,
         path: item.path,
         menuGroupId: groupMap[item.group],
         displayOrder: item.order,
