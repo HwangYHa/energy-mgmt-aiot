@@ -359,21 +359,25 @@ export const authOptions: NextAuthOptions = {
     },
 
     async redirect({ url, baseUrl }) {
-      if (url.startsWith(baseUrl)) {
+      // NextAuth 4 + App Router에서 baseUrl이 HOSTNAME:PORT(내부 주소)로
+      // 폴백되는 버그 방지 — NEXTAUTH_URL 환경변수를 직접 사용
+      const appBase = (process.env.NEXTAUTH_URL ?? baseUrl).replace(/\/$/, '');
+
+      if (url.startsWith(appBase) || url.startsWith(baseUrl)) {
         if (url.includes('/api/auth/signin') || url.includes('/api/auth/callback')) {
-          return `${baseUrl}/dashboard`;
+          return `${appBase}/dashboard`;
         }
-        return url;
+        return url.startsWith(appBase) ? url : url.replace(baseUrl, appBase);
       }
 
       if (url.startsWith('/')) {
         if (url === '/login' || url === '/register') {
-          return `${baseUrl}/dashboard`;
+          return `${appBase}/dashboard`;
         }
-        return `${baseUrl}${url}`;
+        return `${appBase}${url}`;
       }
 
-      return `${baseUrl}/dashboard`;
+      return `${appBase}/dashboard`;
     },
   },
 
