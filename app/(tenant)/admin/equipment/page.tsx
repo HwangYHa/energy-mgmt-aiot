@@ -1433,10 +1433,9 @@ function ProductSeedBanner({ onSeeded }: { onSeeded: () => void }) {
   const seed = async () => {
     setIsSeeding(true);
     try {
-      const res = await fetch('/api/admin/equipment/products/seed', { method: 'POST' });
-      const json = await res.json();
-      if (json.success) {
-        toast.success(`제품 초기 데이터 등록 완료 (${json.data.created}개 신규)`);
+      const res = await apiPost<{ created: number }>('/api/admin/equipment/products/seed', {});
+      if (res.success) {
+        toast.success(`제품 초기 데이터 등록 완료 (${res.data?.created ?? 0}개 신규)`);
         onSeeded();
       } else {
         toast.error('시드 데이터 등록 실패');
