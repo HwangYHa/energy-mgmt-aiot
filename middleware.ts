@@ -160,10 +160,12 @@ export async function middleware(request: NextRequest) {
   }
 
   // ── 2. 인증 검증 ──────────────────────────────────────────
-  const cookieName =
-    process.env.NODE_ENV === 'production'
-      ? '__Secure-next-auth.session-token'
-      : 'next-auth.session-token';
+  // session.ts cookies 설정과 반드시 동기화
+  // HTTPS일 때만 __Secure- prefix 사용
+  const isHttpsEnv = process.env.NEXTAUTH_URL?.startsWith('https://') ?? false;
+  const cookieName = isHttpsEnv
+    ? '__Secure-next-auth.session-token'
+    : 'next-auth.session-token';
 
   const token = await getToken({
     req: request,
@@ -187,8 +189,16 @@ export async function middleware(request: NextRequest) {
   }
 
   if (!token && !naverTokenValid) {
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('callbackUrl', request.url);
+    // request.url이 내부 바인딩 주소(0.0.0.0:3000)로 오는 경우를 방어
+    // NEXTAUTH_URL을 기준으로 callbackUrl 구성
+    const appBase = (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, '');
+    const callbackPath = request.nextUrl.pathname + (request.nextUrl.search || '');
+    const loginBase = appBase || request.url;
+    const loginUrl = new URL('/login', loginBase);
+    loginUrl.searchParams.set(
+      'callbackUrl',
+      appBase ? `${appBase}${callbackPath}` : request.url
+    );
     return NextResponse.redirect(loginUrl);
   }
 

@@ -397,7 +397,10 @@ export const authOptions: NextAuthOptions = {
     maxAge: 24 * 60 * 60,
   },
 
-  cookies: process.env.NODE_ENV === 'production'
+  // __Secure-/__Host- prefix는 HTTPS에서만 유효
+  // HTTP 운영 중(도메인+SSL 발급 전)에는 일반 쿠키명 사용
+  // NEXTAUTH_URL이 https://로 시작할 때만 Secure 쿠키 활성화
+  cookies: process.env.NEXTAUTH_URL?.startsWith('https://')
     ? {
         sessionToken: {
           name: '__Secure-next-auth.session-token',
