@@ -8,6 +8,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 // ─────────────────────────────────────────────────────────────
 // 1. 메뉴 그룹 + 아이템 (로컬 DB 기준 — 2026-04-14 추출)
@@ -767,7 +768,6 @@ export async function seedDemoData(
 
   // ── Users (사이트 관리자, 운영자 추가) ──────────────────────
   console.log('\n📦 [데모] 추가 사용자');
-  const bcrypt = await import('bcryptjs');
   const extraUsers = [
     { email: 'manager@carbonieum.com', name: '김사이트', role: 'site_manager', site: siteIds[0] },
     { email: 'operator@carbonieum.com',name: '이운영자', role: 'operator',     site: siteIds[1] },
@@ -776,7 +776,7 @@ export async function seedDemoData(
   for (const eu of extraUsers) {
     const ex = await prisma.user.findUnique({ where: { email: eu.email } });
     if (!ex) {
-      const hash = await bcrypt.default.hash('Password1!', 12);
+      const hash = await bcrypt.hash('Password1!', 12);
       await prisma.user.create({
         data: {
           tenantId: demoTenantId,
