@@ -8,12 +8,17 @@
  *   1. Feature 코드 (기능 단위)
  *   2. Plan + PlanFeature (구독 플랜)
  *   3. 슈퍼어드민 Tenant + User + Subscription
- *   4. 글로벌 EmissionFactor (한국 환경부 2024 기준)
- *   5. CarbonMarketPrice (K-ETS, EU ETS, VCM 최신 참고가)
+ *   4. 데모 테넌트 + 데모 계정
+ *   5. 글로벌 EmissionFactor (한국 환경부 2024 기준)
+ *   6. CarbonMarketPrice (K-ETS, EU ETS, VCM 최신 참고가)
+ *   7. 메뉴 시스템 (MenuGroup + MenuItem)
+ *   8. 시스템 설정 (SystemSetting)
+ *   9. 데모 데이터 (Site, Gateway, Device, Metric, Measurement, AlertRule 등)
  */
 
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { seedMenuSystem, seedSystemSettings, seedDemoData } from './seed-demo-data';
 
 const prisma = new PrismaClient();
 
@@ -238,7 +243,7 @@ async function main() {
   console.log('\n🌱 탄소이음 EMS AIoT — 시드 데이터 삽입 시작\n');
 
   // ── 1. Feature ───────────────────────────────
-  console.log('📦 [1/5] Feature 코드');
+  console.log('📦 [1/9] Feature 코드');
   for (const f of FEATURES) {
     await upsert(`Feature: ${f.code}`, () =>
       prisma.feature.upsert({
@@ -250,7 +255,7 @@ async function main() {
   }
 
   // ── 2. Plan + PlanFeature ────────────────────
-  console.log('\n📦 [2/5] 구독 플랜');
+  console.log('\n📦 [2/9] 구독 플랜');
   for (const p of PLANS) {
     const existing = await prisma.plan.findFirst({ where: { tier: p.tier, isActive: true } });
     const plan = await upsert(`Plan: ${p.name} (${p.tier})`, () =>
@@ -299,7 +304,7 @@ async function main() {
   }
 
   // ── 3. 슈퍼어드민 테넌트 + 유저 + 구독 ────────
-  console.log('\n📦 [3/5] 슈퍼어드민 테넌트 / 사용자');
+  console.log('\n📦 [3/9] 슈퍼어드민 테넌트 / 사용자');
 
   const enterprisePlan = await prisma.plan.findFirst({ where: { tier: 'enterprise' } });
   if (!enterprisePlan) throw new Error('enterprise plan not found');
@@ -390,8 +395,8 @@ async function main() {
     }
   }
 
-  // ── 데모 계정 (로그인 페이지 "데모 체험" 버튼용) ─────────────
-  console.log('\n📦 [3b] 데모 계정');
+  // ── 4. 데모 계정 (로그인 페이지 "데모 체험" 버튼용) ───────────
+  console.log('\n📦 [4/9] 데모 계정');
   const DEMO_EMAIL = 'demo@carbonieum.com';
   const DEMO_PASSWORD = 'Demo1234!';
 
@@ -452,8 +457,8 @@ async function main() {
     console.log(`  ✅ User: ${DEMO_EMAIL} — 계정 잠금 해제`);
   }
 
-  // ── 4. 글로벌 배출계수 ───────────────────────
-  console.log('\n📦 [4/5] 글로벌 배출계수 (환경부 2024)');
+  // ── 5. 글로벌 배출계수 ───────────────────────
+  console.log('\n📦 [5/9] 글로벌 배출계수 (환경부 2024)');
   for (const ef of EMISSION_FACTORS) {
     await upsert(`EmissionFactor: ${ef.code}`, () =>
       (prisma.emissionFactor as any).upsert({
@@ -489,8 +494,8 @@ async function main() {
     );
   }
 
-  // ── 5. 탄소시장 가격 ──────────────────────────
-  console.log('\n📦 [5/5] 탄소시장 참고 가격');
+  // ── 6. 탄소시장 가격 ──────────────────────────
+  console.log('\n📦 [6/9] 탄소시장 참고 가격');
   const today = new Date().toISOString().split('T')[0]!;
   const todayDate = new Date(today);
   for (const p of CARBON_MARKET_PRICES) {
@@ -510,11 +515,30 @@ async function main() {
     );
   }
 
+  // ── 7. 메뉴 시스템 ───────────────────────────
+  await seedMenuSystem(prisma);
+
+  // ── 8. 시스템 설정 ───────────────────────────
+  await seedSystemSettings(prisma);
+
+  // ── 9. 데모 데이터 (Site/Gateway/Device/Metric/Measurement/Alert 등) ──
+  // demoTenant, demoUser가 존재하면 데모 데이터 삽입
+  const demoTenantFinal = await prisma.tenant.findFirst({ where: { domain: 'demo.carbonieum.com' } });
+  const demoUserFinal   = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });
+  if (demoTenantFinal && demoUserFinal) {
+    await seedDemoData(prisma, demoTenantFinal.id, demoUserFinal.id);
+  } else {
+    console.warn('  ⚠️  데모 테넌트/유저 없음 — 데모 데이터 생략');
+  }
+
   console.log('\n🎉 시드 완료!\n');
   console.log('  접속 URL : http://49.50.130.189');
   console.log(`  관리자   : ${ADMIN_EMAIL}`);
   console.log(`  관리자PW : ${ADMIN_PASSWORD}`);
   console.log(`  데모계정 : ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
+  console.log('  추가계정 : manager@carbonieum.com / Password1!');
+  console.log('  추가계정 : operator@carbonieum.com / Password1!');
+  console.log('  추가계정 : viewer@carbonieum.com / Password1!');
   console.log('\n  ※ SEED_FORCE_RESET=true 옵션으로 비밀번호 재설정 가능\n');
 }
 
