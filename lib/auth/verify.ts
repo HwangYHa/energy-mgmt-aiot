@@ -47,11 +47,12 @@ function extractCookieToken(request: NextRequest): string | null {
  */
 async function verifyNextAuthSession(request: NextRequest): Promise<TenantContext | null> {
   try {
-    // 개발환경과 프로덕션에서 쿠키 이름이 다름
-    const cookieName =
-      process.env.NODE_ENV === 'production'
-        ? '__Secure-next-auth.session-token'
-        : 'next-auth.session-token';
+    // HTTPS 여부에 따라 쿠키 이름 결정 (middleware.ts, session.ts와 반드시 동기화)
+    // NODE_ENV가 아닌 NEXTAUTH_URL로 판단 — HTTP 운영 환경 대응
+    const isHttps = process.env.NEXTAUTH_URL?.startsWith('https://') ?? false;
+    const cookieName = isHttps
+      ? '__Secure-next-auth.session-token'
+      : 'next-auth.session-token';
 
     const token = await getToken({
       req: request,
