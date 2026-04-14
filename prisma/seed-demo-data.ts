@@ -483,77 +483,9 @@ export function buildAlertRules(tenantId: string) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 메인 export: seedDemoData
+// seedDemoData — 데모 테넌트 전용 운영 데이터
+// (feature/plan/menu/emission_factor 등 정적 데이터는 seed-data.sql 에서 처리)
 // ─────────────────────────────────────────────────────────────
-
-export async function seedMenuSystem(prisma: PrismaClient) {
-  console.log('\n📦 [메뉴] MenuGroup + MenuItem');
-
-  // MenuGroup upsert
-  const groupMap: Record<string, string> = {};
-  for (const g of MENU_GROUPS) {
-    const grp = await (prisma.menuGroup as any).upsert({
-      where: { code: g.code },
-      update: { name: g.name, icon: g.icon, displayOrder: g.displayOrder, minRole: g.minRole },
-      create: { code: g.code, name: g.name, icon: g.icon, displayOrder: g.displayOrder, minRole: g.minRole, isActive: true, isVisible: true },
-    });
-    groupMap[g.code] = grp.id;
-    process.stdout.write('.');
-  }
-
-  // MenuItem upsert
-  for (const item of MENU_ITEMS) {
-    await (prisma.menuItem as any).upsert({
-      where: { code: item.code },
-      update: {
-        name: item.name,
-        icon: (item as any).icon ?? null,
-        path: item.path,
-        menuGroupId: groupMap[item.group],
-        displayOrder: item.order,
-        minRole: item.role,
-        badgeType: (item.badge as any) ?? 'none',
-      },
-      create: {
-        code: item.code,
-        name: item.name,
-        icon: (item as any).icon ?? null,
-        path: item.path,
-        menuGroupId: groupMap[item.group],
-        displayOrder: item.order,
-        minRole: item.role,
-        badgeType: (item.badge as any) ?? 'none',
-        isActive: true,
-        isVisible: true,
-        subscriptionRequired: false,
-      },
-    });
-    process.stdout.write('.');
-  }
-  console.log(`\n  ✅ MenuGroup ${MENU_GROUPS.length}개, MenuItem ${MENU_ITEMS.length}개`);
-}
-
-export async function seedSystemSettings(prisma: PrismaClient) {
-  console.log('\n📦 [설정] SystemSetting');
-  for (const s of SYSTEM_SETTINGS) {
-    await (prisma.systemSetting as any).upsert({
-      where: { settingKey: s.key },
-      update: { settingValue: s.value, valueType: s.type },
-      create: {
-        category: s.category,
-        settingKey: s.key,
-        settingValue: s.value,
-        valueType: s.type,
-        displayName: s.name,
-        isActive: true,
-        isRequired: false,
-        isReadonly: false,
-      },
-    });
-    process.stdout.write('.');
-  }
-  console.log(`\n  ✅ SystemSetting ${SYSTEM_SETTINGS.length}개`);
-}
 
 export async function seedDemoData(
   prisma: PrismaClient,
