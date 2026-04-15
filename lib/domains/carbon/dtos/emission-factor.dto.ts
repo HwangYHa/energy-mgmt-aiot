@@ -116,11 +116,23 @@ export interface CreateEmissionFactorInput {
   /** 배출계수 코드 */
   code: string;
 
+  /** 계수명 */
+  name?: string;
+
+  /** 버전 체인 코드 (factorCode) */
+  factorCode?: string;
+
   /** 카테고리 */
   category: string;
 
   /** 배출원 타입 */
   sourceType: string;
+
+  /** 에너지 타입 (선택) */
+  energyType?: string;
+
+  /** 산정 방식 */
+  calculationType?: string;
 
   /** 배출계수 값 (양수만 허용) */
   factor: number;
@@ -140,11 +152,26 @@ export interface CreateEmissionFactorInput {
   /** 출처 */
   source: string;
 
+  /** 출처 기관명 */
+  sourceName?: string;
+
+  /** 출처 버전 */
+  sourceVersion?: string;
+
+  /** 출처 URL */
+  sourceUrl?: string;
+
+  /** 출처 유형 (official | international | tenant_custom) */
+  factorSourceType?: string;
+
   /** 근거 연도 */
   year: number;
 
   /** 지역 코드 */
   region: string;
+
+  /** 국가 코드 */
+  countryCode?: string;
 
   /** 변경 사유 (선택, '규제 변경', '데이터 재검증' 등) */
   changeReason?: string;

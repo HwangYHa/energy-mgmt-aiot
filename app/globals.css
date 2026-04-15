@@ -8,6 +8,12 @@
   }
 }
 
+@layer components {
+  .input-base {
+    @apply w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-emerald-500 outline-none;
+  }
+}
+
 @layer utilities {
   .animate-in {
     animation-duration: 0.3s;
