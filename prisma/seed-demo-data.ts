@@ -343,8 +343,46 @@ export function buildSiteGateways(siteIndex: number): GatewayDef[] {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 4. 측정 데이터 생성 (7일 hourly)
+// 4. 측정 데이터 생성 (hourly, 계절·요일·시간대 복합 패턴)
 // ─────────────────────────────────────────────────────────────
+
+/**
+ * 시간(0~23), 요일(0=일), 월(0=1월)을 고려한 현실적인 부하계수 반환
+ * - 업무시간(8~20): 높은 부하
+ * - 야간(0~7, 21~23): 낮은 부하
+ * - 주말: 30% 감소
+ * - 하계(7~8월)/동계(12~2월): 냉난방으로 10~15% 증가
+ */
+function getLoadFactor(hourOfDay: number, dayOfWeek: number, month: number): number {
+  // 시간대 기본 패턴
+  let load: number;
+  if (hourOfDay >= 8 && hourOfDay <= 11) {
+    load = 0.85 + Math.random() * 0.30; // 오전 피크
+  } else if (hourOfDay >= 12 && hourOfDay <= 13) {
+    load = 0.70 + Math.random() * 0.20; // 점심시간 소폭 감소
+  } else if (hourOfDay >= 14 && hourOfDay <= 17) {
+    load = 0.90 + Math.random() * 0.25; // 오후 피크
+  } else if (hourOfDay >= 18 && hourOfDay <= 20) {
+    load = 0.65 + Math.random() * 0.20; // 저녁 감소
+  } else if (hourOfDay >= 21 || hourOfDay <= 4) {
+    load = 0.15 + Math.random() * 0.10; // 심야 최저
+  } else {
+    load = 0.30 + Math.random() * 0.15; // 새벽/야간
+  }
+
+  // 주말 보정 (일:0, 토:6)
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    load *= 0.65 + Math.random() * 0.10;
+  }
+
+  // 계절 보정: 하계(7~8월) / 동계(12~2월) — 냉난방 부하 증가
+  const isSummer = month === 6 || month === 7;  // 7~8월
+  const isWinter = month === 11 || month === 0 || month === 1; // 12~2월
+  if (isSummer) load *= 1.12 + Math.random() * 0.05;
+  if (isWinter) load *= 1.08 + Math.random() * 0.04;
+
+  return Math.max(0.05, load);
+}
 
 function generateMeasurements(
   metricId: string,
@@ -353,7 +391,7 @@ function generateMeasurements(
   baseValue: number,
   variance: number,
   isAccumulator: boolean,
-  days = 7
+  days = 365
 ) {
   const records: { time: Date; tenantId: string; metricId: string; value: number; gatewayId: string }[] = [];
   const now = new Date();
@@ -362,21 +400,21 @@ function generateMeasurements(
 
   for (let h = totalHours; h >= 0; h--) {
     const t = new Date(now.getTime() - h * 3600_000);
-    const hourOfDay = t.getHours();
-    // 시간대별 부하 패턴 (0~23h)
-    const loadFactor = hourOfDay >= 8 && hourOfDay <= 20
-      ? 0.8 + Math.random() * 0.4   // 업무시간: 80~120%
-      : 0.2 + Math.random() * 0.15; // 야간: 20~35%
+    const hourOfDay  = t.getHours();
+    const dayOfWeek  = t.getDay();   // 0=일, 6=토
+    const month      = t.getMonth(); // 0=1월
+
+    const loadFactor = getLoadFactor(hourOfDay, dayOfWeek, month);
 
     let val: number;
     if (isAccumulator) {
-      // 누적값: 단조 증가
-      accumValue += (baseValue / (365 * 24)) * (0.5 + loadFactor);
+      // 누적값: 단조 증가 (부하비례)
+      accumValue += (baseValue / (365 * 24)) * (0.3 + loadFactor);
       val = Math.round(accumValue * 10) / 10;
     } else if (variance === 0) {
       val = baseValue;
     } else {
-      const noise = (Math.random() - 0.5) * 2 * variance;
+      const noise = (Math.random() - 0.5) * 2 * variance * 0.5;
       val = Math.max(0, baseValue * (loadFactor + noise));
       val = Math.round(val * 100) / 100;
     }
@@ -595,11 +633,12 @@ export async function seedDemoData(
   }
   console.log(`  ✅ 총 Device ${totalDevices}개, Metric ${totalMetrics}개`);
 
-  // ── Measurements (7일 hourly) ────────────────────────────────
-  console.log('\n📦 [데모] Measurements (7일 hourly 데이터 생성 중...)');
+  // ── Measurements (365일 hourly) ────────────────────────────────
+  const MEAS_DAYS = 365; // 1년치 hourly 데이터
+  console.log(`\n📦 [데모] Measurements (${MEAS_DAYS}일 hourly 데이터 생성 중... 약 2~3분 소요)`);
   let measCount = 0;
   for (const m of allMetrics) {
-    const records = generateMeasurements(m.id, demoTenantId, m.gatewayId, m.baseValue, m.variance, m.isAccum, 7);
+    const records = generateMeasurements(m.id, demoTenantId, m.gatewayId, m.baseValue, m.variance, m.isAccum, MEAS_DAYS);
 
     // MySQL upsert with createMany (ON DUPLICATE KEY UPDATE)
     // Prisma의 createMany skipDuplicates 사용

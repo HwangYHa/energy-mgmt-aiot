@@ -17,6 +17,7 @@ import bcrypt from 'bcryptjs';
 import * as fs from 'fs';
 import * as path from 'path';
 import { seedDemoData } from './seed-demo-data';
+import { seedDemoExtra } from './seed-demo-extra';
 
 const prisma = new PrismaClient();
 
@@ -189,6 +190,23 @@ async function main() {
   const demoUserFinal   = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });
   if (demoTenantFinal && demoUserFinal) {
     await seedDemoData(prisma, demoTenantFinal.id, demoUserFinal.id);
+
+    // 사이트/디바이스 ID 조회 후 추가 데모 데이터 삽입
+    const demoSites = await prisma.site.findMany({
+      where: { tenantId: demoTenantFinal.id },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const demoDevices = await prisma.device.findMany({
+      where: { tenantId: demoTenantFinal.id },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+      take: 20,
+    });
+    const siteIds   = demoSites.map(s => s.id);
+    const deviceIds = demoDevices.map(d => d.id);
+
+    await seedDemoExtra(prisma, demoTenantFinal.id, demoUserFinal.id, siteIds, deviceIds);
   } else {
     console.warn('  ⚠️  데모 테넌트/유저 없음 — 데모 데이터 생략');
   }
