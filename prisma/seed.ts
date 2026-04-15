@@ -18,6 +18,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { seedDemoData } from './seed-demo-data';
 import { seedDemoExtra } from './seed-demo-extra';
+import { seedDemoFull }  from './seed-demo-full';
 
 const prisma = new PrismaClient();
 
@@ -207,6 +208,9 @@ async function main() {
     const deviceIds = demoDevices.map(d => d.id);
 
     await seedDemoExtra(prisma, demoTenantFinal.id, demoUserFinal.id, siteIds, deviceIds);
+
+    // 2차: 전체 메뉴 화면 누락 데이터 완전 삽입
+    await seedDemoFull(prisma, demoTenantFinal.id, demoUserFinal.id, siteIds, deviceIds);
   } else {
     console.warn('  ⚠️  데모 테넌트/유저 없음 — 데모 데이터 생략');
   }
