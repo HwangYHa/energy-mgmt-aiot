@@ -1,84 +1,44 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { generateCsrfToken } from '@/lib/middleware/csrf';
-import { logHttpRequest, logHttpResponse } from '@/lib/logger';
-import crypto from 'crypto';
 
 /**
  * CSRF 토큰 발급 엔드포인트
  * GET /api/security/csrf
  *
- * 응답:
- * {
- *   csrfToken: "...",
- *   cookie: "Set via Set-Cookie header"
- * }
+ * 응답: { csrfToken: string, timestamp: string }
+ * 쿠키: csrf-token (httpOnly: false — 클라이언트에서 X-CSRF-Token 헤더로 포함)
  *
  * 사용법:
- * 1. 페이지 로드 시 이 엔드포인트 호출
- * 2. 응답에서 csrfToken 추출
- * 3. Form 데이터나 Header에 토큰 포함:
- *    - Hidden input: <input type="hidden" name="csrf-token" value="..." />
- *    - Header: X-CSRF-Token: ...
- * 4. 서버에서 자동으로 검증됨 (middleware)
+ * 1. 페이지 로드 시 이 엔드포인트를 호출해 토큰 발급
+ * 2. POST/PUT/DELETE/PATCH 요청 시 X-CSRF-Token 헤더에 포함
+ * 3. 미들웨어(csrf.ts)에서 헤더 ↔ 쿠키 값을 비교해 자동 검증
+ *
+ * 주의: 이 엔드포인트는 CSRF 검증 제외 경로(CSRF_EXEMPT_PATHS)에 포함되어 있어야 함
  */
-
-export async function GET(request: NextRequest) {
-  const requestId = crypto.randomUUID();
-
+export async function GET() {
   try {
-    // 요청 로깅
-    logHttpRequest({
-      requestId,
-      method: 'GET',
-      path: '/api/security/csrf',
-      ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
-    });
-
-    // CSRF 토큰 생성
     const csrfToken = generateCsrfToken();
 
-    // 응답 생성
     const response = NextResponse.json(
-      {
-        csrfToken,
-        timestamp: new Date().toISOString(),
-      },
+      { csrfToken, timestamp: new Date().toISOString() },
       { status: 200 }
     );
 
-    // CSRF 토큰을 쿠키로도 설정
-    // (middleware에서 검증할 때 사용)
+    // 클라이언트 JS가 읽어 X-CSRF-Token 헤더로 포함할 수 있도록 httpOnly: false
     response.cookies.set('csrf-token', csrfToken, {
-      httpOnly: false, // JavaScript에서 접근 가능하도록 (요청 시 X-CSRF-Token 헤더에 포함)
+      httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24, // 24시간
       path: '/',
     });
 
-    // 응답 로깅
-    logHttpResponse({
-      requestId,
-      method: 'GET',
-      path: '/api/security/csrf',
-      statusCode: 200,
-      duration: 5,
-    });
-
     return response;
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : '알 수 없는 오류';
-
-    logHttpResponse({
-      requestId,
-      method: 'GET',
-      path: '/api/security/csrf',
-      statusCode: 500,
-      duration: 10,
-    });
-
+    const msg = error instanceof Error ? error.message : '알 수 없는 오류';
+    console.error('[CSRF] 토큰 생성 오류:', msg);
     return NextResponse.json(
-      { error: 'Failed to generate CSRF token', details: errorMsg },
+      { error: 'CSRF 토큰 생성에 실패했습니다.', details: msg },
       { status: 500 }
     );
   }
@@ -87,7 +47,7 @@ export async function GET(request: NextRequest) {
 /**
  * OPTIONS 요청 처리 (CORS preflight)
  */
-export async function OPTIONS(_request: NextRequest) {
+export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
     headers: {

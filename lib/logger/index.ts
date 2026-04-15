@@ -2,10 +2,17 @@ import winston from 'winston';
 import path from 'path';
 import fs from 'fs';
 
-// 로그 디렉토리 생성
+// 로그 디렉토리 생성 (파일시스템 쓰기 권한이 없어도 안전하게 처리)
 const logsDir = path.join(process.cwd(), 'logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
+let fileLoggingEnabled = false;
+try {
+  if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true });
+  }
+  fileLoggingEnabled = true;
+} catch {
+  // Docker/읽기전용 파일시스템 환경에서는 콘솔 로그만 사용
+  console.warn('[Logger] 로그 디렉토리 생성 불가 — 콘솔 로그만 활성화합니다:', logsDir);
 }
 
 // ========================================
@@ -46,64 +53,60 @@ const format = winston.format.combine(
 // ========================================
 // 트랜스포트
 // ========================================
-const transports = [
-  // Console (모든 레벨)
-  new winston.transports.Console({
-    format: format,
-  }),
 
-  // Error 로그 파일
-  new winston.transports.File({
-    filename: path.join(logsDir, 'error.log'),
-    level: 'error',
-    format: winston.format.combine(
-      winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
-      winston.format.json()
-    ),
-    maxsize: 5242880, // 5MB
-    maxFiles: 5,
-  }),
+// 콘솔 트랜스포트 (개발 환경에서는 항상 활성화)
+const consoleTransport = new winston.transports.Console({ format });
 
-  // 전체 로그 파일
-  new winston.transports.File({
-    filename: path.join(logsDir, 'combined.log'),
-    format: winston.format.combine(
-      winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
-      winston.format.json()
-    ),
-    maxsize: 5242880, // 5MB
-    maxFiles: 10,
-  }),
+// 파일 트랜스포트 (파일시스템 접근 가능한 경우에만 추가)
+const fileTransports: winston.transport[] = fileLoggingEnabled
+  ? [
+      new winston.transports.File({
+        filename: path.join(logsDir, 'error.log'),
+        level: 'error',
+        format: winston.format.combine(
+          winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
+          winston.format.json()
+        ),
+        maxsize: 5242880, // 5MB
+        maxFiles: 5,
+      }),
+      new winston.transports.File({
+        filename: path.join(logsDir, 'combined.log'),
+        format: winston.format.combine(
+          winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
+          winston.format.json()
+        ),
+        maxsize: 5242880, // 5MB
+        maxFiles: 10,
+      }),
+      new winston.transports.File({
+        filename: path.join(logsDir, 'security.log'),
+        level: 'info',
+        format: winston.format.combine(
+          winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
+          winston.format.json()
+        ),
+        maxsize: 5242880, // 5MB
+        maxFiles: 10,
+      }),
+      new winston.transports.File({
+        filename: path.join(logsDir, 'http.log'),
+        level: 'http',
+        format: winston.format.combine(
+          winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
+          winston.format.json()
+        ),
+        maxsize: 5242880, // 5MB
+        maxFiles: 5,
+      }),
+    ]
+  : [];
 
-  // 보안 이벤트 로그 파일 (별도)
-  new winston.transports.File({
-    filename: path.join(logsDir, 'security.log'),
-    level: 'info',
-    format: winston.format.combine(
-      winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
-      winston.format.json()
-    ),
-    maxsize: 5242880, // 5MB
-    maxFiles: 10,
-  }),
-
-  // HTTP 요청 로그 파일
-  new winston.transports.File({
-    filename: path.join(logsDir, 'http.log'),
-    level: 'http',
-    format: winston.format.combine(
-      winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
-      winston.format.json()
-    ),
-    maxsize: 5242880, // 5MB
-    maxFiles: 5,
-  }),
-];
-
-// 프로덕션에서는 콘솔 제거
-if (process.env.NODE_ENV === 'production') {
-  transports.shift(); // Console 제거
-}
+// 프로덕션: 파일 로깅이 가능한 경우 콘솔 제외, 불가능한 경우 콘솔만 사용
+const transports: winston.transport[] =
+  process.env.NODE_ENV === 'production' && fileLoggingEnabled
+    ? fileTransports
+    : [consoleTransport, ...fileTransports];
 
 // ========================================
 // 로거 생성
@@ -113,16 +116,21 @@ const logger = winston.createLogger({
   levels: LOG_LEVELS,
   format,
   transports,
-  exceptionHandlers: [
-    new winston.transports.File({
-      filename: path.join(logsDir, 'exceptions.log'),
-    }),
-  ],
-  rejectionHandlers: [
-    new winston.transports.File({
-      filename: path.join(logsDir, 'rejections.log'),
-    }),
-  ],
+  // 파일 접근 가능한 경우에만 예외/거부 핸들러 등록
+  ...(fileLoggingEnabled
+    ? {
+        exceptionHandlers: [
+          new winston.transports.File({
+            filename: path.join(logsDir, 'exceptions.log'),
+          }),
+        ],
+        rejectionHandlers: [
+          new winston.transports.File({
+            filename: path.join(logsDir, 'rejections.log'),
+          }),
+        ],
+      }
+    : {}),
 });
 
 // ========================================

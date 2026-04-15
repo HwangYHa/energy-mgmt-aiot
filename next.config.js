@@ -8,9 +8,10 @@ const nextConfig = {
   // Dockerfile에서 .next/standalone + .next/static을 복사하므로 반드시 필요
   output: 'standalone',
 
-  // pdfkit은 내부에서 __dirname 기반 상대경로로 폰트(.afm) 파일을 참조하므로
-  // webpack 번들링 시 경로가 깨짐 → Next.js가 번들링하지 않고 네이티브 Node.js로 실행
-  serverExternalPackages: ['pdfkit'],
+  // Node.js 네이티브 의존성이 있는 패키지는 webpack 번들링에서 제외
+  // pdfkit: __dirname 기반 폰트 파일 참조
+  // winston: fs/path 기반 로그 파일 생성 (번들링 시 모듈 로드 오류 발생)
+  serverExternalPackages: ['pdfkit', 'winston'],
 
   // ─── 이미지 최적화 (Core Web Vitals LCP) ───────────────────────
   images: {
@@ -74,10 +75,12 @@ const nextConfig = {
     if (isServer) {
       config.externals = config.externals || [];
       if (Array.isArray(config.externals)) {
-        // bcryptjs, pdfkit 모두 네이티브 경로 의존성 있음 → 번들링 제외
-        config.externals.push('bcryptjs', 'pdfkit');
+        // 네이티브 경로/파일시스템 의존성이 있는 패키지 → 번들링 제외
+        // winston: fs 기반 로그 파일 생성
+        // bcryptjs, pdfkit: 기존 제외 항목 유지
+        config.externals.push('bcryptjs', 'pdfkit', 'winston');
       } else {
-        config.externals = [config.externals, 'bcryptjs', 'pdfkit'];
+        config.externals = [config.externals, 'bcryptjs', 'pdfkit', 'winston'];
       }
     }
     return config;
