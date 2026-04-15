@@ -25,9 +25,12 @@ export async function GET() {
     );
 
     // 클라이언트 JS가 읽어 X-CSRF-Token 헤더로 포함할 수 있도록 httpOnly: false
+    // secure: NEXTAUTH_URL 기준 (NODE_ENV가 아닌 실제 프로토콜로 판단)
+    // HTTP 서버에서 secure: true 쿠키는 브라우저가 전송하지 않으므로 HTTPS일 때만 활성화
+    const isHttps = process.env.NEXTAUTH_URL?.startsWith('https://') ?? false;
     response.cookies.set('csrf-token', csrfToken, {
       httpOnly: false,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isHttps,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24, // 24시간
       path: '/',

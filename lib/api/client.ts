@@ -186,6 +186,7 @@ export async function apiRequest<T = unknown>(
   // 재시도 로직
   let lastError: Error | null = null;
   let attempt = 0;
+  let csrfRetried = false; // CSRF 오류 시 자동 1회 재시도 플래그
 
   while (attempt <= retries) {
     try {
@@ -219,15 +220,16 @@ export async function apiRequest<T = unknown>(
         };
       }
 
-      // CSRF 토큰 오류 시 캐시 초기화 후 재시도
-      if (response.status === 403 && responseData.code?.includes('CSRF')) {
+      // CSRF 토큰 오류 시 캐시 초기화 후 자동 1회 재시도 (retries 설정과 무관)
+      if (response.status === 403 && responseData.code?.includes('CSRF') && !csrfRetried) {
+        csrfRetried = true;
         clearCsrfTokenCache();
-
-        if (attempt < retries) {
-          attempt++;
-          await new Promise((resolve) => setTimeout(resolve, retryDelay));
-          continue;
-        }
+        // 새 CSRF 토큰 발급 후 헤더 갱신
+        try {
+          const newToken = await getCsrfToken();
+          headers.set('X-CSRF-Token', newToken);
+        } catch { /* ignore — next attempt will also fail and throw */ }
+        continue; // attempt 증가 없이 재시도
       }
 
       // 402 Payment Required — fetchWithCsrf와 동일하게 ems:upgrade 이벤트 발행

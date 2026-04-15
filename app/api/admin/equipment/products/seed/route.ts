@@ -264,17 +264,38 @@ export async function POST(request: NextRequest) {
     let skipped = 0;
 
     for (const product of SEED_PRODUCTS) {
-      const existing = await (prisma as any).equipmentProduct.findUnique({
-        where: { modelNumber: product.modelNumber },
-        select: { id: true },
-      });
+      // 중복 체크 (raw SQL — prisma generate EPERM 회피)
+      const rows = await prisma.$queryRawUnsafe<{ cnt: bigint }[]>(
+        'SELECT COUNT(*) AS cnt FROM equipment_product WHERE model_number = ?',
+        product.modelNumber,
+      );
+      if (Number(rows[0]?.cnt ?? 0) > 0) { skipped++; continue; }
 
-      if (existing) {
-        skipped++;
-        continue;
-      }
-
-      await (prisma as any).equipmentProduct.create({ data: product });
+      const { randomUUID } = await import('crypto');
+      const id  = randomUUID();
+      const now = new Date();
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO equipment_product
+           (id, name, model_number, manufacturer, category,
+            facility_types, specs, protocols, unit_price, description,
+            install_difficulty, warranty_months, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id,
+        product.name,
+        product.modelNumber,
+        product.manufacturer,
+        product.category,
+        JSON.stringify(product.facilityTypes),
+        JSON.stringify(product.specs),
+        JSON.stringify(product.protocols),
+        product.unitPrice,
+        product.description,
+        product.installDifficulty,
+        product.warrantyMonths,
+        product.isActive ? 1 : 0,
+        now,
+        now,
+      );
       created++;
     }
 
