@@ -72,7 +72,17 @@ export interface TenantSystemSettings {
     retentionCount: number;
     includeAttachments: boolean;
     notifyEmail: string;
-    storageType: 'local' | 's3' | 'gcs';
+    /** 저장 위치 유형
+     *  - local: 서버 로컬 파일시스템
+     *  - ncp:   네이버 클라우드 Object Storage (S3 호환, 권장)
+     *  - s3:    AWS S3
+     *  - gcs:   Google Cloud Storage (미지원)
+     */
+    storageType: 'local' | 'ncp' | 's3' | 'gcs';
+    /** 저장 경로
+     *  - local: 디렉토리 경로 (예: /var/backups/tansoeum)
+     *  - ncp/s3: 버킷 내 경로 접두어 (예: backups/tenantId) — 버킷명은 환경변수
+     */
     storagePath?: string;
   };
 }

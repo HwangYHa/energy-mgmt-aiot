@@ -1,23 +1,34 @@
 /**
- * PUT /api/admin/backup — 수동 백업 트리거 (실제 mysqldump 실행)
+ * PUT /api/admin/backup — 수동 백업 트리거 (테넌트별 데이터 추출)
  * GET /api/admin/backup — 백업 설정 + 최근 이력 조회
  *
- * 스토리지 유형:
- *  - local: mysqldump → gzip → 로컬 파일 시스템 (즉시 실행)
- *  - s3:    mysqldump → 로컬 임시 → S3 업로드 (AWS SDK 필요)
- *  - gcs:   mysqldump → 로컬 임시 → GCS 업로드 (GCS SDK 필요)
+ * ┌──────────────────────────────────────────────────────────────────┐
+ * │  백업 방식: 테넌트별 선택적 추출 (전체 DB 덤프 X)                 │
+ * │  - Prisma로 해당 tenantId 데이터만 추출 → JSON Lines → gzip      │
+ * │  - 타 업체 데이터 절대 포함 안 됨 (멀티테넌트 격리 보장)           │
+ * │                                                                  │
+ * │  스토리지 유형:                                                   │
+ * │  - local: 서버 로컬 파일시스템 저장                               │
+ * │  - ncp:   네이버 클라우드 Object Storage (S3 호환 API) — 권장     │
+ * │  - s3:    AWS S3                                                 │
+ * │  - gcs:   미지원                                                 │
+ * └──────────────────────────────────────────────────────────────────┘
  *
  * 권한: tenant_admin 이상
  */
 
 import { NextRequest } from 'next/server';
+import { unlinkSync } from 'fs';
 import { verifyAuth, requireRoleOrHigher } from '@/lib/auth/verify';
 import { getSystemSettings } from '@/lib/services/system-settings.service';
 import {
-  runLocalBackup,
+  runTenantDataExport,
   resolveBackupPath,
   getDefaultBackupDir,
   formatFileSize,
+  uploadToObjectStorage,
+  getNcpConfig,
+  getAwsS3Config,
 } from '@/lib/services/backup.service';
 import { prisma } from '@/lib/db/prisma';
 import {
@@ -40,66 +51,102 @@ export async function PUT(request: NextRequest) {
       return forbiddenResponse();
     }
 
-    const body = await request.json().catch(() => ({}));
+    const body    = await request.json().catch(() => ({}));
     const trigger = (body?.trigger as string) ?? 'manual';
 
-    // 테넌트 백업 설정 조회
-    const settings = await getSystemSettings(auth.tenantId);
+    const settings  = await getSystemSettings(auth.tenantId);
     const backupCfg = settings.backup;
 
     const startedAt = new Date();
     const backupId  = `backup_${auth.tenantId.slice(0, 8)}_${Date.now()}`;
 
     let backupPath: string;
-    let resultStatus: 'success' | 'failed' | 'not_supported';
+    let resultStatus: 'success' | 'failed';
     let message: string;
     let sizeBytes: number | undefined;
     let sizeMb: string | undefined;
-    let durationMs = 0;
+    let durationMs  = 0;
+    let recordCount: number | undefined;
     let errorDetail: string | undefined;
 
-    // ── 스토리지 유형별 백업 실행 ─────────────────────────────────
+    // ─── 1단계: 로컬에 테넌트 데이터 추출 ───────────────────────
 
-    if (backupCfg.storageType === 'local') {
-      // 실제 mysqldump 실행
-      backupPath = resolveBackupPath(backupCfg.storagePath, backupId);
-      const result = await runLocalBackup(backupPath);
+    // local 저장소는 최종 경로로, ncp/s3는 임시 경로로 먼저 로컬 생성
+    const localPath = resolveBackupPath(
+      backupCfg.storageType === 'local' ? backupCfg.storagePath : undefined,
+      backupId,
+      'jsonl.gz',
+    );
 
-      resultStatus = result.status;
-      durationMs   = result.durationMs;
-      sizeBytes    = result.sizeBytes;
-      sizeMb       = result.sizeMb;
-      errorDetail  = result.error;
+    const exportResult = await runTenantDataExport(auth.tenantId, localPath);
 
-      if (result.status === 'success') {
-        const sizeStr = sizeBytes ? ` (${formatFileSize(sizeBytes)})` : '';
-        const secStr  = (durationMs / 1000).toFixed(1);
-        message = `로컬 백업 완료${sizeStr} — ${secStr}초 소요. 저장 경로: ${backupPath}`;
-      } else {
-        message = `로컬 백업 실패: ${result.error}`;
-      }
-
-    } else if (backupCfg.storageType === 's3') {
-      // S3: 로컬 덤프 후 업로드 (AWS SDK @aws-sdk/client-s3 필요)
-      const s3Path = backupCfg.storagePath ?? `s3://tansoeum-backups/${auth.tenantId}`;
-      backupPath   = `${s3Path}/${backupId}.sql.gz`;
-      resultStatus = 'not_supported' as 'failed';
-      message = `S3 백업은 @aws-sdk/client-s3 설치 후 지원됩니다. 현재 로컬(mysqldump) 백업으로 전환하거나, AWS SDK를 설치하세요.`;
-      errorDetail = message;
-      // Fallback: log queue intent
-      console.info(`[Backup] S3 백업 미지원 (SDK 미설치): ${backupPath}`);
+    if (exportResult.status === 'failed') {
+      backupPath  = localPath;
+      resultStatus = 'failed';
+      message     = `테넌트 데이터 추출 실패: ${exportResult.error}`;
+      durationMs  = exportResult.durationMs;
+      errorDetail = exportResult.error;
 
     } else {
-      // GCS
-      const gcsPath = backupCfg.storagePath ?? `gs://tansoeum-backups/${auth.tenantId}`;
-      backupPath    = `${gcsPath}/${backupId}.sql.gz`;
-      resultStatus  = 'not_supported' as 'failed';
-      message = `GCS 백업은 @google-cloud/storage 설치 후 지원됩니다. 현재 로컬(mysqldump) 백업으로 전환하거나, GCS SDK를 설치하세요.`;
-      errorDetail = message;
-      console.info(`[Backup] GCS 백업 미지원 (SDK 미설치): ${backupPath}`);
+      // 추출 성공
+      sizeBytes   = exportResult.sizeBytes;
+      sizeMb      = exportResult.sizeMb;
+      durationMs  = exportResult.durationMs;
+      recordCount = exportResult.recordCount;
+
+      // ─── 2단계: 스토리지별 처리 ────────────────────────────────
+
+      if (backupCfg.storageType === 'local') {
+        backupPath   = localPath;
+        resultStatus = 'success';
+        const sizeStr = sizeBytes ? ` (${formatFileSize(sizeBytes)})` : '';
+        const secStr  = (durationMs / 1000).toFixed(1);
+        const recStr  = recordCount ? `, 레코드 ${recordCount.toLocaleString()}건` : '';
+        message = `로컬 백업 완료${sizeStr}${recStr} — ${secStr}초 소요\n저장 경로: ${localPath}`;
+
+      } else if (backupCfg.storageType === 'ncp' || backupCfg.storageType === 's3') {
+        let uploadSucceeded = false;
+        try {
+          const cfg        = backupCfg.storageType === 'ncp' ? getNcpConfig() : getAwsS3Config();
+          // 원격 키: {storagePath접두어}/{tenantId}/{backupId}.jsonl.gz
+          const pathPrefix = backupCfg.storagePath?.trim() || `tansoeum-backups/${auth.tenantId}`;
+          const remoteKey  = `${pathPrefix}/${backupId}.jsonl.gz`;
+
+          const uploadResult = await uploadToObjectStorage(localPath, remoteKey, cfg);
+          backupPath       = uploadResult.url;
+          resultStatus     = 'success';
+          uploadSucceeded  = true;
+
+          const sizeStr = sizeBytes ? ` (${formatFileSize(sizeBytes)})` : '';
+          const secStr  = (durationMs / 1000).toFixed(1);
+          const recStr  = recordCount ? `, 레코드 ${recordCount.toLocaleString()}건` : '';
+          const typeLbl = backupCfg.storageType === 'ncp' ? 'NCP Object Storage' : 'AWS S3';
+          message = `${typeLbl} 백업 완료${sizeStr}${recStr} — ${secStr}초 소요\n저장 경로: ${remoteKey}`;
+
+        } catch (uploadErr) {
+          // 업로드 실패 시 로컬 파일은 백업으로 유지
+          backupPath   = localPath;
+          resultStatus = 'failed';
+          errorDetail  = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+          message      = `클라우드 업로드 실패 (로컬 파일 보존): ${errorDetail}`;
+        } finally {
+          // 업로드 성공 시 임시 로컬 파일 정리
+          if (uploadSucceeded) {
+            try { unlinkSync(localPath); } catch { /* ignore */ }
+          }
+        }
+
+      } else {
+        // gcs — 미지원
+        backupPath   = localPath;
+        resultStatus = 'failed';
+        errorDetail  = 'Google Cloud Storage 백업은 현재 미지원입니다. NCP Object Storage를 사용하세요.';
+        message      = errorDetail;
+        try { unlinkSync(localPath); } catch { /* ignore */ }
+      }
     }
 
-    // ── 감사 로그 기록 ────────────────────────────────────────────
+    // ── 감사 로그 기록 ─────────────────────────────────────────
 
     try {
       await prisma.auditLog.create({
@@ -115,6 +162,7 @@ export async function PUT(request: NextRequest) {
             backupPath,
             backupStatus: resultStatus,
             sizeBytes:    sizeBytes ?? null,
+            recordCount:  recordCount ?? null,
             durationMs,
             startedAt:    startedAt.toISOString(),
             error:        errorDetail ?? null,
@@ -125,29 +173,24 @@ export async function PUT(request: NextRequest) {
       console.warn('[Backup] 감사 로그 기록 실패:', logErr);
     }
 
-    // ── 완료 알림 이메일 ──────────────────────────────────────────
+    // ── 완료 알림 이메일 ───────────────────────────────────────
     if (backupCfg.notifyEmail && resultStatus === 'success') {
-      // notifyByEmail(backupCfg.notifyEmail, '백업 완료', message);
       console.info(`[Backup] 완료 알림 예정: ${backupCfg.notifyEmail}`);
     }
 
-    const isSuccess = resultStatus === 'success';
-    return successResponse(
-      {
-        backupId,
-        status:              resultStatus,
-        message,
-        storageType:         backupCfg.storageType,
-        backupPath,
-        sizeBytes,
-        sizeMb,
-        durationMs,
-        startedAt:           startedAt.toISOString(),
-        includesAttachments: backupCfg.includeAttachments,
-        error:               errorDetail,
-      },
-      isSuccess ? undefined : { status: 200 },   // 항상 200 (UI에서 status 필드로 판단)
-    );
+    return successResponse({
+      backupId,
+      status:     resultStatus,
+      message,
+      storageType: backupCfg.storageType,
+      backupPath,
+      sizeBytes,
+      sizeMb,
+      durationMs,
+      recordCount,
+      startedAt:  startedAt.toISOString(),
+      error:      errorDetail,
+    });
 
   } catch (error) {
     console.error('[Backup] 백업 트리거 오류:', error);
@@ -167,17 +210,32 @@ export async function GET(request: NextRequest) {
 
     const settings = await getSystemSettings(auth.tenantId);
 
-    // 최근 백업 이력 (감사 로그)
     const recentBackups = await prisma.auditLog.findMany({
       where:   { tenantId: auth.tenantId, action: 'BACKUP_TRIGGERED' },
       orderBy: { createdAt: 'desc' },
-      take:    10,
+      take:    15,
       select:  { resourceId: true, metadata: true, createdAt: true },
     });
 
+    // NCP 설정 상태 (환경변수 있는지만 확인, 키값 노출 X)
+    const ncpConfigured = !!(
+      process.env.NCP_ACCESS_KEY &&
+      process.env.NCP_SECRET_KEY &&
+      process.env.NCP_BUCKET_NAME
+    );
+    const s3Configured = !!(
+      process.env.AWS_ACCESS_KEY_ID &&
+      process.env.AWS_SECRET_ACCESS_KEY &&
+      process.env.AWS_S3_BUCKET
+    );
+
     return successResponse({
-      config: settings.backup,
+      config:     settings.backup,
       defaultDir: getDefaultBackupDir(),
+      ncpConfigured,
+      s3Configured,
+      ncpBucket:  process.env.NCP_BUCKET_NAME ?? null,
+      ncpEndpoint: process.env.NCP_STORAGE_ENDPOINT ?? 'https://kr.object.ncloudstorage.com',
       recentBackups: recentBackups.map((b) => ({
         backupId:  b.resourceId,
         metadata:  b.metadata,
