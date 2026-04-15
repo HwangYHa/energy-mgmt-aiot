@@ -26,16 +26,18 @@ const INDUSTRY_REDUCTION: Record<string, { min: number; max: number; avg: number
   other:         { min: 0.15, max: 0.30, avg: 0.22 },
 };
 
-/** 플랜별 월 구독료 */
+/** 플랜별 월 구독료 (2026 개정)
+ *  Basic ₩99K = 10만원 미만 심리가격 / Pro ₩290K = 30만원 미만 심리가격
+ *  고정 운영비 ₩255K 기준: Pro 1명 or Basic 3명이면 BEP 달성 */
 const PLAN_COST: Record<string, number> = {
-  basic:      99000,
-  pro:       299000,
-  enterprise: 500000, // 평균 견적
+  basic:       99000,
+  pro:        290000,
+  enterprise: 890000, // 내부 최저 기준선 (맞춤 견적 시 상향)
 };
 
-/** 설치비 (IoT 기본 패키지) */
+/** 설치비 (IoT 기본 패키지 — VAT 별도) */
 const INSTALLATION_COST: Record<string, number> = {
-  basic:       500000,
+  basic:       300000,
   pro:       1500000,
   enterprise: 5000000,
 };
