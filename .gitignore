@@ -101,3 +101,10 @@ docker-compose.yml
 .env.production
 
 .env.production
+
+# Python collector
+collector/**/__pycache__/
+collector/**/*.pyc
+collector/data/*.db
+collector/logs/
+collector/.venv/
