@@ -1,0 +1,158 @@
+# ─── 탄소이음 Collector Service 설정 ─────────────────────────────────
+# 이 파일을 config.yaml로 복사하여 실제 값을 채우세요.
+
+# ── Cloud SaaS 연결 ────────────────────────────────────────────────
+cloud:
+  api_url: "http://49.50.130.189"          # 탄소이음 플랫폼 URL
+  gateway_id: "gw_xxxxxxxxxxxxxxxx"        # 이 게이트웨이의 고유 ID
+  gateway_token: "your-gateway-token"      # 인증 토큰 (Bearer)
+  sync_interval_sec: 10                    # 클라우드 동기화 주기 (초)
+  heartbeat_interval_sec: 30              # 하트비트 전송 주기
+  batch_size: 500                          # 1회 전송 최대 레코드 수
+  timeout_sec: 15                          # HTTP 요청 타임아웃
+  max_retries: 5                           # 최대 재시도 횟수
+
+# ── 로컬 버퍼 ─────────────────────────────────────────────────────
+buffer:
+  db_path: "data/collector_buffer.db"      # SQLite 파일 경로
+  max_records: 500000                      # 최대 보관 레코드 수
+  retention_hours: 72                      # 미전송 데이터 보관 시간
+
+# ── 수집 엔진 ─────────────────────────────────────────────────────
+engine:
+  max_workers: 20                          # 동시 폴링 스레드 수
+  default_poll_interval_ms: 5000          # 기본 폴링 주기 (ms)
+  connection_timeout_sec: 10              # 장치 연결 타임아웃
+  reconnect_delay_sec: 30                 # 재연결 대기 시간
+
+# ── 로깅 ──────────────────────────────────────────────────────────
+logging:
+  level: "INFO"                            # DEBUG | INFO | WARNING | ERROR
+  file: "logs/collector.log"
+  max_bytes: 10485760                      # 10MB
+  backup_count: 5
+
+# ── 장치 목록 (직접 정의 또는 클라우드에서 자동 로드) ──────────────
+# cloud.api_url에서 자동 로드되면 이 섹션 불필요
+devices:
+  - id: "dev_meter_01"
+    name: "3상 전력계량기 #1"
+    protocol: "modbus_tcp"
+    enabled: true
+    poll_interval_ms: 5000
+    connection:
+      host: "192.168.1.100"
+      port: 502
+      unit_id: 1
+    registers:
+      - address: 0x0000
+        type: "input"
+        data_type: "float32"
+        sensor_code: "EM3P-01-POWER"
+        metric_key: "power_active"
+        scale: 0.1
+        unit: "kW"
+      - address: 0x0002
+        type: "input"
+        data_type: "float32"
+        sensor_code: "EM3P-01-ENERGY"
+        metric_key: "energy_kwh"
+        scale: 0.01
+        unit: "kWh"
+      - address: 0x0048
+        type: "input"
+        data_type: "int16"
+        sensor_code: "EM3P-01-PF"
+        metric_key: "power_factor"
+        scale: 0.001
+        unit: ""
+
+  - id: "dev_sensor_01"
+    name: "실내환경 복합센서 #1"
+    protocol: "modbus_rtu"
+    enabled: true
+    poll_interval_ms: 30000
+    connection:
+      port: "COM3"                         # Windows: COM3, Linux: /dev/ttyUSB0
+      baudrate: 9600
+      parity: "N"
+      stopbits: 1
+      unit_id: 2
+    registers:
+      - address: 0x0000
+        type: "holding"
+        data_type: "int16"
+        sensor_code: "TH-CO2-01-TEMP"
+        metric_key: "temperature"
+        scale: 0.1
+        unit: "°C"
+      - address: 0x0001
+        type: "holding"
+        data_type: "int16"
+        sensor_code: "TH-CO2-01-HUM"
+        metric_key: "humidity"
+        scale: 0.1
+        unit: "%RH"
+      - address: 0x0002
+        type: "holding"
+        data_type: "uint16"
+        sensor_code: "TH-CO2-01-CO2"
+        metric_key: "co2"
+        scale: 1.0
+        unit: "ppm"
+
+  - id: "dev_mqtt_broker"
+    name: "MQTT 센서 그룹"
+    protocol: "mqtt"
+    enabled: true
+    poll_interval_ms: 0                    # Push 방식 (폴링 없음)
+    connection:
+      broker_host: "localhost"
+      broker_port: 1883
+      username: ""
+      password: ""
+      topic_pattern: "sensors/#"
+      qos: 1
+
+  - id: "dev_inverter_01"
+    name: "인버터 #1"
+    protocol: "modbus_tcp"
+    enabled: true
+    poll_interval_ms: 3000
+    connection:
+      host: "192.168.1.101"
+      port: 502
+      unit_id: 1
+    registers:
+      - address: 0x0100
+        type: "holding"
+        data_type: "uint16"
+        sensor_code: "INV-01-FREQ"
+        metric_key: "frequency"
+        scale: 0.01
+        unit: "Hz"
+      - address: 0x0101
+        type: "holding"
+        data_type: "uint16"
+        sensor_code: "INV-01-SPEED"
+        metric_key: "motor_speed"
+        scale: 1.0
+        unit: "RPM"
+
+  - id: "dev_http_api"
+    name: "외부 API 연동"
+    protocol: "http"
+    enabled: false
+    poll_interval_ms: 60000
+    connection:
+      base_url: "https://api.external-system.com"
+      api_key: "your-api-key"
+      headers:
+        Authorization: "Bearer your-token"
+    endpoints:
+      - path: "/v1/meters/current"
+        method: "GET"
+        value_path: "data.power"
+        sensor_code: "EXT-PWR-01"
+        metric_key: "power_active"
+        unit: "kW"

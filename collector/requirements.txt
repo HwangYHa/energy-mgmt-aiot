@@ -1,0 +1,38 @@
+# ─── Core ────────────────────────────────────────────────────────────
+asyncio-mqtt==0.16.2
+paho-mqtt==2.1.0
+pymodbus==3.7.4
+httpx==0.27.2
+pydantic==2.9.2
+pydantic-settings==2.6.1
+PyYAML==6.0.2
+python-dotenv==1.0.1
+
+# ─── Local Buffer ────────────────────────────────────────────────────
+aiosqlite==0.20.0
+
+# ─── OPC-UA ─────────────────────────────────────────────────────────
+asyncua==1.1.5
+
+# ─── BACnet ─────────────────────────────────────────────────────────
+BAC0==22.9.21
+
+# ─── Scheduling ─────────────────────────────────────────────────────
+apscheduler==3.10.4
+
+# ─── GUI ────────────────────────────────────────────────────────────
+ttkbootstrap==1.10.1      # Modern tkinter themes
+Pillow==10.4.0            # Icons / image support
+
+# ─── Packaging (EXE build) ──────────────────────────────────────────
+pyinstaller==6.11.0
+
+# ─── Logging ────────────────────────────────────────────────────────
+structlog==24.4.0
+colorlog==6.9.0
+
+# ─── Utilities ──────────────────────────────────────────────────────
+tenacity==9.0.0           # Retry logic
+cachetools==5.5.0         # TTL cache
+pyserial==3.5             # Modbus RTU serial
+cryptography==43.0.3      # Token encryption at rest

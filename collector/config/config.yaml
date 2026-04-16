@@ -1,0 +1,212 @@
+buffer:
+  db_path: data/collector_buffer.db
+  max_records: 500000
+  retention_hours: 72
+cloud:
+  api_url: http://49.50.130.189
+  batch_size: 500
+  gateway_id: gw_test_001
+  gateway_token: test_token
+  heartbeat_interval_sec: 30
+  max_retries: 5
+  sync_interval_sec: 10
+  timeout_sec: 15
+devices:
+- connection:
+    api_key: null
+    base_url: null
+    baudrate: 9600
+    broker_host: null
+    broker_port: 1883
+    headers: {}
+    host: 192.168.1.100
+    parity: N
+    password: null
+    port: 502
+    qos: 1
+    serial_port: null
+    stopbits: 1
+    topic_pattern: sensors/#
+    unit_id: 1
+    username: null
+  enabled: true
+  endpoints: []
+  id: dev_meter_01
+  name: '3상 전력계량기 #1'
+  poll_interval_ms: 5000
+  protocol: modbus_tcp
+  registers:
+  - address: 0
+    data_type: float32
+    metric_key: power_active
+    scale: 0.1
+    sensor_code: EM3P-01-POWER
+    type: input
+    unit: kW
+  - address: 2
+    data_type: float32
+    metric_key: energy_kwh
+    scale: 0.01
+    sensor_code: EM3P-01-ENERGY
+    type: input
+    unit: kWh
+  - address: 72
+    data_type: int16
+    metric_key: power_factor
+    scale: 0.001
+    sensor_code: EM3P-01-PF
+    type: input
+    unit: ''
+  tags: {}
+- connection:
+    api_key: null
+    base_url: null
+    baudrate: 9600
+    broker_host: null
+    broker_port: 1883
+    headers: {}
+    host: null
+    parity: N
+    password: null
+    port: null
+    qos: 1
+    serial_port: COM3
+    stopbits: 1
+    topic_pattern: sensors/#
+    unit_id: 2
+    username: null
+  enabled: true
+  endpoints: []
+  id: dev_sensor_01
+  name: '실내환경 복합센서 #1'
+  poll_interval_ms: 30000
+  protocol: modbus_rtu
+  registers:
+  - address: 0
+    data_type: int16
+    metric_key: temperature
+    scale: 0.1
+    sensor_code: TH-CO2-01-TEMP
+    type: holding
+    unit: °C
+  - address: 1
+    data_type: int16
+    metric_key: humidity
+    scale: 0.1
+    sensor_code: TH-CO2-01-HUM
+    type: holding
+    unit: '%RH'
+  - address: 2
+    data_type: uint16
+    metric_key: co2
+    scale: 1.0
+    sensor_code: TH-CO2-01-CO2
+    type: holding
+    unit: ppm
+  tags: {}
+- connection:
+    api_key: null
+    base_url: null
+    baudrate: 9600
+    broker_host: localhost
+    broker_port: 1883
+    headers: {}
+    host: null
+    parity: N
+    password: ''
+    port: null
+    qos: 1
+    serial_port: null
+    stopbits: 1
+    topic_pattern: sensors/#
+    unit_id: 1
+    username: ''
+  enabled: true
+  endpoints: []
+  id: dev_mqtt_broker
+  name: MQTT 센서 그룹
+  poll_interval_ms: 0
+  protocol: mqtt
+  registers: []
+  tags: {}
+- connection:
+    api_key: null
+    base_url: null
+    baudrate: 9600
+    broker_host: null
+    broker_port: 1883
+    headers: {}
+    host: 192.168.1.101
+    parity: N
+    password: null
+    port: 502
+    qos: 1
+    serial_port: null
+    stopbits: 1
+    topic_pattern: sensors/#
+    unit_id: 1
+    username: null
+  enabled: true
+  endpoints: []
+  id: dev_inverter_01
+  name: '인버터 #1'
+  poll_interval_ms: 3000
+  protocol: modbus_tcp
+  registers:
+  - address: 256
+    data_type: uint16
+    metric_key: frequency
+    scale: 0.01
+    sensor_code: INV-01-FREQ
+    type: holding
+    unit: Hz
+  - address: 257
+    data_type: uint16
+    metric_key: motor_speed
+    scale: 1.0
+    sensor_code: INV-01-SPEED
+    type: holding
+    unit: RPM
+  tags: {}
+- connection:
+    api_key: your-api-key
+    base_url: https://api.external-system.com
+    baudrate: 9600
+    broker_host: null
+    broker_port: 1883
+    headers:
+      Authorization: Bearer your-token
+    host: null
+    parity: N
+    password: null
+    port: null
+    qos: 1
+    serial_port: null
+    stopbits: 1
+    topic_pattern: sensors/#
+    unit_id: 1
+    username: null
+  enabled: false
+  endpoints:
+  - method: GET
+    metric_key: power_active
+    path: /v1/meters/current
+    sensor_code: EXT-PWR-01
+    unit: kW
+    value_path: data.power
+  id: dev_http_api
+  name: 외부 API 연동
+  poll_interval_ms: 60000
+  protocol: http
+  registers: []
+  tags: {}
+engine:
+  connection_timeout_sec: 10
+  default_poll_interval_ms: 5000
+  max_workers: 20
+  reconnect_delay_sec: 30
+logging:
+  backup_count: 5
+  file: logs/collector.log
+  level: INFO
+  max_bytes: 10485760

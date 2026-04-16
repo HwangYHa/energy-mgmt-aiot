@@ -19,6 +19,12 @@ import {
   Server,
   Network,
   HardDrive,
+  Download,
+  Monitor,
+  Container,
+  Terminal,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { apiPost, apiPut, apiDelete } from '@/lib/api/client';
 import { toast } from '@/lib/toast';
@@ -774,6 +780,165 @@ function GatewayModal({
 }
 
 // ──────────────────────────────────────────────────────────────
+// Collector Download Modal
+// ──────────────────────────────────────────────────────────────
+
+function CollectorDownloadModal({ gateway, onClose }: { gateway: Gateway; onClose: () => void }) {
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const gwName = gateway.name ?? gateway.serialNumber;
+
+  const handleDownload = async (type: 'windows' | 'docker' | 'linux') => {
+    setDownloading(type);
+    try {
+      const res = await fetch(`/api/gateways/${gateway.id}/installer-config?type=${type}`);
+      if (!res.ok) { toast.error('다운로드 실패'); return; }
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      const cd   = res.headers.get('content-disposition') ?? '';
+      const name = cd.match(/filename="(.+?)"/)?.[1]
+        ?? (type === 'windows' ? `collector-config-${gateway.id}.yaml`
+          : type === 'docker'  ? `docker-compose-${gateway.id}.yml`
+          : `install-${gateway.id}.sh`);
+      a.href = url; a.download = name; a.click();
+      URL.revokeObjectURL(url);
+      toast.success('다운로드 완료');
+    } catch {
+      toast.error('다운로드 중 오류가 발생했습니다.');
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  const linuxOneLiner = `curl -sSL "${window.location.origin}/api/gateways/${gateway.id}/installer-config?type=linux" | bash`;
+
+  const copyOneLiner = () => {
+    navigator.clipboard.writeText(linuxOneLiner);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+          <div>
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <Download className="w-5 h-5 text-cyan-400" />
+              수집기 다운로드
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">{gwName} · {gateway.id}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700 transition">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-3">
+          <p className="text-sm text-slate-300 mb-4">
+            아래에서 환경에 맞는 방법을 선택하세요. 인증 정보가 자동으로 포함된 파일이 다운로드됩니다.
+          </p>
+
+          {/* Windows EXE */}
+          <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-500/10 rounded-lg">
+                  <Monitor className="w-5 h-5 text-blue-400" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-white">Windows (현장 PC)</div>
+                  <div className="text-xs text-slate-400 mt-0.5">config.yaml 다운로드 → EXE와 같은 폴더에 배치 후 실행</div>
+                </div>
+              </div>
+              <button
+                onClick={() => handleDownload('windows')}
+                disabled={!!downloading}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg font-medium transition disabled:opacity-50"
+              >
+                {downloading === 'windows' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                config.yaml
+              </button>
+            </div>
+            <div className="mt-3 bg-slate-900/60 rounded-lg px-3 py-2 text-xs text-slate-400">
+              <span className="text-slate-500">1.</span> <a href="https://github.com/tansoeum/collector/releases/latest" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">GitHub Releases</a>에서 EXE 다운로드
+              <br /><span className="text-slate-500">2.</span> config.yaml 같은 폴더에 배치
+              <br /><span className="text-slate-500">3.</span> TansoEum-Collector.exe 실행
+            </div>
+          </div>
+
+          {/* Docker */}
+          <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-cyan-500/10 rounded-lg">
+                  <Container className="w-5 h-5 text-cyan-400" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-white">Docker (Linux 서버)</div>
+                  <div className="text-xs text-slate-400 mt-0.5">docker-compose.yml 다운로드 → docker compose up -d</div>
+                </div>
+              </div>
+              <button
+                onClick={() => handleDownload('docker')}
+                disabled={!!downloading}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs rounded-lg font-medium transition disabled:opacity-50"
+              >
+                {downloading === 'docker' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                compose.yml
+              </button>
+            </div>
+            <div className="mt-3 bg-slate-900/60 rounded-lg px-3 py-2 font-mono text-xs text-emerald-400">
+              docker compose up -d
+            </div>
+          </div>
+
+          {/* Linux 원클릭 */}
+          <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-orange-500/10 rounded-lg">
+                <Terminal className="w-5 h-5 text-orange-400" />
+              </div>
+              <div>
+                <div className="text-sm font-medium text-white">Linux 원클릭 설치</div>
+                <div className="text-xs text-slate-400 mt-0.5">서버 터미널에서 아래 명령어 실행 (Docker 자동 설치 포함)</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-slate-900/80 rounded-lg px-3 py-2.5">
+              <code className="flex-1 text-xs text-emerald-400 font-mono break-all">
+                curl -sSL &quot;…/installer-config?type=linux&quot; | bash
+              </code>
+              <button
+                onClick={copyOneLiner}
+                className="shrink-0 p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-700 transition"
+                title="복사"
+              >
+                {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <p className="text-xs text-amber-400/70 flex items-center gap-1.5 pt-1">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            다운로드 파일에는 인증 토큰이 포함됩니다. 외부 공유하지 마세요.
+          </p>
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-700 flex justify-end">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-300 hover:text-white border border-slate-600 rounded-lg hover:border-slate-500 transition">
+            닫기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
 // Main Page
 // ──────────────────────────────────────────────────────────────
 
@@ -786,6 +951,7 @@ export default function GatewaysPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [modal, setModal] = useState<{ mode: 'create' | 'edit'; gateway?: Gateway } | null>(null);
+  const [downloadGw, setDownloadGw] = useState<Gateway | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const LIMIT = 20;
 
@@ -999,6 +1165,13 @@ export default function GatewaysPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
                           <button
+                            onClick={() => setDownloadGw(gw)}
+                            className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition"
+                            title="수집기 다운로드"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => setModal({ mode: 'edit', gateway: gw })}
                             className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-lg transition"
                             title="수정"
@@ -1054,7 +1227,7 @@ export default function GatewaysPage() {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Gateway Edit Modal */}
       {modal && (
         <GatewayModal
           mode={modal.mode}
@@ -1062,6 +1235,14 @@ export default function GatewaysPage() {
           sites={sites}
           onClose={() => setModal(null)}
           onSaved={fetchGateways}
+        />
+      )}
+
+      {/* Collector Download Modal */}
+      {downloadGw && (
+        <CollectorDownloadModal
+          gateway={downloadGw}
+          onClose={() => setDownloadGw(null)}
         />
       )}
 
