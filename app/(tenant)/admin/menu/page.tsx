@@ -213,10 +213,6 @@ export default function MenuManagementPage() {
     ));
   };
 
-  const updateGroupRole = (groupId: string, role: string) => {
-    updateGroups(g => g.map(grp => grp.id === groupId ? { ...grp, minRole: role } : grp));
-  };
-
   const updateItemRole = (groupId: string, itemId: string, role: string) => {
     updateGroups(g => g.map(grp => grp.id === groupId
       ? { ...grp, items: grp.items.map(i => i.id === itemId ? { ...i, minRole: role } : i) }
@@ -233,6 +229,7 @@ export default function MenuManagementPage() {
       if (from === to) return groups;
       const result = [...groups];
       const [removed] = result.splice(from, 1);
+      if (!removed) return groups;
       result.splice(to, 0, removed);
       return result;
     });
@@ -248,6 +245,7 @@ export default function MenuManagementPage() {
       if (from === to) return grp;
       const items = [...grp.items];
       const [removed] = items.splice(from, 1);
+      if (!removed) return grp;
       items.splice(to, 0, removed);
       return { ...grp, items };
     }));
@@ -274,6 +272,7 @@ export default function MenuManagementPage() {
       const from   = result.findIndex(g => g.id === drag.id);
       if (from < 0) return groups;
       const [removed] = result.splice(from, 1);
+      if (!removed) return groups;
       result.splice(targetIndex, 0, removed);
       return result;
     });
@@ -304,6 +303,7 @@ export default function MenuManagementPage() {
       const from   = items.findIndex(i => i.id === drag.id);
       if (from < 0) return grp;
       const [removed] = items.splice(from, 1);
+      if (!removed) return grp;
       items.splice(targetIndex, 0, removed);
       return { ...grp, items };
     }));
