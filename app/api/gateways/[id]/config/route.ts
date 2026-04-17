@@ -59,7 +59,7 @@ async function authenticateGateway(
         where: { id: gatewayId, tenantId: key.tenantId },
         select: { id: true, tenantId: true },
       });
-      if (gw) return gw;
+      if (gw) return { tenantId: gw.tenantId, gatewayId: gw.id };
     }
   }
 
@@ -71,7 +71,7 @@ async function authenticateGateway(
       where: { id: gatewayId, serialNumber: serial },
       select: { id: true, tenantId: true },
     });
-    if (gw) return gw;
+    if (gw) return { tenantId: gw.tenantId, gatewayId: gw.id };
   }
 
   return null;
