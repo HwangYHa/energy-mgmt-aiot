@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Shield, AlertTriangle, XCircle, Ban, RefreshCw,
   Eye, Lock, Wifi, ChevronDown, Activity, Globe,
@@ -736,8 +736,8 @@ export default function SecurityMonitoringPage() {
                         {alerts.map(alert => {
                           const isExp = ranExpanded === alert.id;
                           return (
-                            <>
-                              <tr key={alert.id}
+                            <React.Fragment key={alert.id}>
+                              <tr
                                 className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer"
                                 onClick={() => setRanExpanded(isExp ? null : alert.id)}>
                                 <td className="px-4 py-3">
@@ -788,7 +788,7 @@ export default function SecurityMonitoringPage() {
                                 </td>
                               </tr>
                               {isExp && (
-                                <tr key={`${alert.id}-exp`} className="border-b border-gray-800/50">
+                                <tr className="border-b border-gray-800/50">
                                   <td colSpan={7} className="px-4 py-3 bg-gray-900/60">
                                     <div className="text-xs text-gray-400 space-y-1 font-mono">
                                       <div>사용자 ID: {alert.userId ?? '-'}</div>
@@ -802,7 +802,7 @@ export default function SecurityMonitoringPage() {
                                   </td>
                                 </tr>
                               )}
-                            </>
+                            </React.Fragment>
                           );
                         })}
                       </tbody>

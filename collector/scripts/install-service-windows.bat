@@ -1,6 +1,7 @@
 @echo off
+@chcp 65001 >nul 2>&1
 REM =============================================================================
-REM EMS AIoT 수집기 — Windows NSSM 서비스 설치 스크립트
+REM EMS AIoT Collector - Windows NSSM Service Install Script
 REM
 REM 필요 조건:
 REM   - NSSM (Non-Sucking Service Manager) 설치
