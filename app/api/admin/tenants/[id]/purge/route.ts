@@ -101,7 +101,7 @@ export async function DELETE(
 
     // ── 2. 분석 데이터 ────────────────────────────────
     const [forecasts, emissions] = await Promise.all([
-      prisma.forecastResult.deleteMany({ where: { tenantId } }),
+      (prisma as any).forecastresult.deleteMany({ where: { tenantId } }),
       prisma.emissionsData.deleteMany({ where: { tenantId } }).catch(() => ({ count: 0 })),
     ]);
     stats.forecastResults = forecasts.count;

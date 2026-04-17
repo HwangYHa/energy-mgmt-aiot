@@ -278,7 +278,7 @@ export async function POST(request: NextRequest) {
           const { predictions, confidence, accuracy, model = 'LSTM-v1.0', metadata = {} } = aiResult;
 
           const forecastResult = await prisma.$transaction(async (tx) => {
-            const saved = await tx.forecastResult.create({
+            const saved = await (tx as any).forecastresult.create({
               data: { tenantId, siteId: siteId || null, horizon, predictions, accuracy: confidence, model },
             });
             await tx.auditLog.create({
@@ -384,7 +384,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid siteId format' }, { status: 400 });
     }
 
-    const forecasts = await prisma.forecastResult.findMany({
+    const forecasts = await (prisma as any).forecastresult.findMany({
       where: {
         tenantId: auth.tenantId,
         ...(siteId && { siteId }),
