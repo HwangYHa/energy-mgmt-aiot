@@ -3,12 +3,13 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import {
   Zap, Plus, Search, RefreshCw, MoreVertical, Edit, Trash2, Eye,
   AlertCircle, Loader2, CheckCircle, XCircle, Clock, Settings,
   Activity, Thermometer, Gauge, Lightbulb, Cpu, Building2,
   Network, Server, ChevronRight, Info, Plug, Battery,
-  Wind, Sun, Wrench,
+  Wind, Sun, Wrench, Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiGet, apiPost, apiDelete } from '@/lib/api/client';
@@ -382,7 +383,7 @@ function DeviceCreateModal({ sites, gateways, defaultSiteId, onClose, onCreated 
     ? gateways.filter(g => g.siteId === form.siteId)
     : gateways;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!form.name.trim()) { setError('설비명을 입력해주세요.'); setActiveTab('기본 정보'); return; }
     if (!form.siteId) { setError('사이트를 선택해주세요.'); setActiveTab('기본 정보'); return; }
@@ -685,10 +686,20 @@ function DeviceCreateModal({ sites, gateways, defaultSiteId, onClose, onCreated 
 
 // ── 메인 페이지 ──────────────────────────────────────────────────
 
+// role level 비교 (viewer=0, operator=1, site_manager=2, tenant_admin=3, super_admin=4)
+const ROLE_LEVELS: Record<string, number> = {
+  viewer: 0, operator: 1, site_manager: 2, tenant_admin: 3, super_admin: 4,
+};
+function hasMinRole(userRole: string | undefined | null, minRole: string): boolean {
+  return (ROLE_LEVELS[userRole ?? ''] ?? -1) >= (ROLE_LEVELS[minRole] ?? 99);
+}
+
 function DevicesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialSiteId = searchParams.get('siteId');
+  const { data: session } = useSession();
+  const canInstallCollector = hasMinRole(session?.user?.role as string, 'site_manager');
 
   const [devices, setDevices] = useState<Device[]>([]);
   const [sites, setSites] = useState<{ id: string; name: string }[]>([]);
@@ -790,6 +801,13 @@ function DevicesPageContent() {
           <Link href="/settings/gateways" className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors">
             <Server className="w-4 h-4" /> 게이트웨이 관리
           </Link>
+          {canInstallCollector && (
+            <Link href="/settings/gateways?install=true"
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm transition-colors font-medium"
+              title="수집기를 설치하면 플랫폼에 등록된 설비 설정이 자동으로 내려갑니다 (OTA)">
+              <Download className="w-4 h-4" /> 수집기 설치
+            </Link>
+          )}
           <button onClick={() => setShowCreateModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg font-medium transition-colors">
             <Plus className="w-5 h-5" /> 설비 등록
@@ -954,6 +972,14 @@ function DevicesPageContent() {
                                     className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700 transition-colors">
                                     <Edit className="w-4 h-4" /> 수정
                                   </button>
+                                  {canInstallCollector && device.gatewayId && (
+                                    <Link
+                                      href={`/settings/gateways?install=true&gwId=${device.gatewayId}`}
+                                      onClick={() => setActionMenuId(null)}
+                                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-emerald-400 hover:bg-emerald-500/10 transition-colors">
+                                      <Download className="w-4 h-4" /> 수집기 설치
+                                    </Link>
+                                  )}
                                   <button onClick={() => { setSelectedDevice(device); setShowDeleteConfirm(true); setActionMenuId(null); }}
                                     className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors">
                                     <Trash2 className="w-4 h-4" /> 삭제

@@ -228,22 +228,47 @@ class CloudSync:
         except Exception:
             pass
 
-    # ── 클라우드 설정 조회 (OTA) ─────────────────────────────────────
+    # ── OTA 설정 조회 ────────────────────────────────────────────────
 
-    def fetch_device_config(self) -> Optional[dict]:
+    def fetch_ota_config(self) -> Optional[dict]:
         """
-        클라우드에서 최신 게이트웨이 설정 조회.
-        반환값: gateway.config JSON (프로토콜별 설정)
+        플랫폼에서 전체 장치 설정 조회 (OTA).
+
+        GET /api/gateways/{id}/config
+        반환값:
+          {
+            "gateway_id": ...,
+            "config_hash": ...,
+            "fetched_at": ...,
+            "devices": [...]   ← collector 형식 device 목록
+          }
+        또는 None (연결 실패 / 장치 미등록)
         """
-        url = f"{self.api_url}/api/gateways/{self.gateway_id}"
+        url = f"{self.api_url}/api/gateways/{self.gateway_id}/config"
         try:
             resp = self._client.get(url)
             if resp.status_code == 200:
                 data = resp.json()
-                return data.get("data", {}).get("config")
+                if data.get("success") and "devices" in data:
+                    logger.info(
+                        f"[OTA] 설정 조회 성공: {data.get('device_count', 0)}개 장치 "
+                        f"(hash: {data.get('config_hash', '?')})"
+                    )
+                    return data
+            elif resp.status_code == 401:
+                logger.error("[OTA] 인증 실패 (401) — API 키 확인")
+            elif resp.status_code == 404:
+                logger.warning("[OTA] 게이트웨이 없음 (404)")
+            else:
+                logger.debug(f"[OTA] 설정 조회 실패: HTTP {resp.status_code}")
         except Exception as e:
-            logger.warning(f"[CloudSync] 설정 조회 실패: {e}")
+            logger.debug(f"[OTA] 설정 조회 실패 (오프라인?): {e}")
         return None
+
+    # 하위 호환 alias
+    def fetch_device_config(self) -> Optional[dict]:
+        """[Deprecated] fetch_ota_config() 사용 권장"""
+        return self.fetch_ota_config()
 
     # ── 상태 조회 ─────────────────────────────────────────────────────
 

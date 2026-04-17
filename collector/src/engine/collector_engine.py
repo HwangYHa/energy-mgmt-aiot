@@ -9,13 +9,19 @@ collector_engine.py
     ├── ThreadPoolExecutor (max_workers=20)
     ├── APScheduler     → 장치별 독립 폴링 주기
     ├── LocalBuffer     → 로컬 SQLite 버퍼
-    └── CloudSync       → 클라우드 전송 + 하트비트
+    ├── CloudSync       → 클라우드 전송 + 하트비트
+    └── OtaCache        → 오프라인 내성 OTA 설정 캐시
 
 데이터 흐름:
   장치 → Driver.safe_poll() → Reading []
        → LocalBuffer.push()
        → on_data callback (GUI 실시간 표시)
        ← CloudSync 배치 전송 (별도 스레드)
+
+OTA 설정 우선순위 (start() 시):
+  1. 플랫폼 API (online) → OtaCache에 저장
+  2. OtaCache (offline) → 마지막 성공 설정 사용
+  3. config.yaml devices → 수동 폴백
 """
 from __future__ import annotations
 
@@ -23,18 +29,22 @@ import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Set
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from ..buffer.local_buffer import LocalBuffer, Reading
-from ..config.config_manager import CollectorConfig, DeviceConfig
+from ..config.config_manager import CollectorConfig, ConnectionConfig, DeviceConfig, RegisterConfig
 from ..drivers import DriverRegistry
 from ..drivers.base_driver import BaseDriver, DriverStatus
 from ..sync.cloud_sync import CloudSync
+from ..sync.ota_cache import OtaCache
 
 logger = logging.getLogger(__name__)
+
+# OTA 설정 폴링 주기 (초)
+OTA_POLL_INTERVAL_SEC = 300   # 5분
 
 # ── 엔진 상태 ─────────────────────────────────────────────────────────
 
@@ -71,6 +81,7 @@ class CollectorEngine:
         self._on_data_cb:   Optional[Callable[[str, List[Reading]], None]] = None
         self._on_status_cb: Optional[Callable[[str, str, str], None]] = None
         self._on_engine_status_cb: Optional[Callable[[str], None]] = None
+        self._on_ota_update_cb: Optional[Callable[[int, str], None]] = None  # (device_count, hash)
 
         # 로컬 버퍼
         self.buffer = LocalBuffer(
@@ -90,6 +101,10 @@ class CollectorEngine:
             batch_size=config.cloud.batch_size,
             timeout=config.cloud.timeout_sec,
         )
+
+        # OTA 설정 캐시 (오프라인 내성)
+        self.ota_cache = OtaCache("data/ota_config_cache.json")
+        self._ota_source: str = "none"   # "platform" | "cache" | "config_yaml" | "none"
 
         # APScheduler (장치별 독립 폴링 주기)
         self._scheduler = BackgroundScheduler(
@@ -120,6 +135,10 @@ class CollectorEngine:
         """엔진 상태 변경 콜백: callback(status)"""
         self._on_engine_status_cb = callback
 
+    def on_ota_update(self, callback: Callable[[int, str], None]):
+        """OTA 설정 갱신 콜백: callback(device_count, config_hash)"""
+        self._on_ota_update_cb = callback
+
     # ── 엔진 생명주기 ─────────────────────────────────────────────────
 
     def start(self):
@@ -128,10 +147,13 @@ class CollectorEngine:
             return
 
         self._set_engine_status(EngineStatus.STARTING)
-        logger.info(f"[Engine] 시작 — 장치 {len(self.config.devices)}개")
+
+        # ── OTA 설정 로드 (우선순위: 플랫폼 → 캐시 → config.yaml) ──────
+        devices = self._load_devices_with_ota()
+        logger.info(f"[Engine] 시작 — 장치 {len(devices)}개 (소스: {self._ota_source})")
 
         # 드라이버 초기화 + 스케줄러 등록
-        for dev_cfg in self.config.devices:
+        for dev_cfg in devices:
             if dev_cfg.enabled:
                 self._register_device(dev_cfg)
 
@@ -142,6 +164,12 @@ class CollectorEngine:
         self._scheduler.add_job(
             self._maintenance, trigger=IntervalTrigger(hours=1),
             id="__maintenance__", replace_existing=True,
+        )
+
+        # OTA 폴링 작업 (5분마다)
+        self._scheduler.add_job(
+            self._ota_poll, trigger=IntervalTrigger(seconds=OTA_POLL_INTERVAL_SEC),
+            id="__ota_poll__", replace_existing=True,
         )
 
         # 클라우드 동기화 시작
@@ -177,6 +205,157 @@ class CollectorEngine:
 
         self._set_engine_status(EngineStatus.STOPPED)
         logger.info("[Engine] 종료 완료")
+
+    # ── OTA 설정 로드 ─────────────────────────────────────────────────
+
+    def _load_devices_with_ota(self) -> List[DeviceConfig]:
+        """
+        OTA 우선순위로 장치 목록 로드.
+
+        1. 플랫폼 API 시도 (온라인)
+        2. OtaCache 폴백 (오프라인)
+        3. config.yaml devices 폴백 (수동 설정)
+        """
+        # 1) 플랫폼 OTA 시도
+        ota_data = self.cloud_sync.fetch_ota_config()
+        if ota_data and ota_data.get("devices") is not None:
+            self.ota_cache.save(ota_data)
+            self._ota_source = "platform"
+            devices = self._parse_ota_devices(ota_data["devices"])
+            logger.info(
+                f"[OTA] 플랫폼 설정 적용: {len(devices)}개 장치 "
+                f"(hash: {ota_data.get('config_hash', '?')})"
+            )
+            return devices
+
+        # 2) 로컬 캐시 폴백
+        cached = self.ota_cache.load()
+        if cached and cached.get("devices"):
+            self._ota_source = "cache"
+            devices = self._parse_ota_devices(cached["devices"])
+            logger.warning(
+                f"[OTA] 오프라인 — 캐시 설정 적용: {len(devices)}개 장치 "
+                f"(저장: {cached.get('saved_at', '?')[:19]})"
+            )
+            return devices
+
+        # 3) config.yaml 폴백
+        if self.config.devices:
+            self._ota_source = "config_yaml"
+            logger.warning(
+                f"[OTA] 캐시 없음 — config.yaml 장치 {len(self.config.devices)}개 사용. "
+                "플랫폼에 게이트웨이를 등록하고 장치를 추가하세요."
+            )
+            return self.config.devices
+
+        # 4) 장치 없음
+        self._ota_source = "none"
+        logger.warning("[OTA] 장치 설정 없음 — 플랫폼 연결 또는 config.yaml 설정 필요")
+        return []
+
+    def _parse_ota_devices(self, raw_devices: list) -> List[DeviceConfig]:
+        """OTA API 응답의 devices[] → DeviceConfig 목록 변환"""
+        result: List[DeviceConfig] = []
+        for d in raw_devices:
+            try:
+                conn_raw = d.get("connection", {})
+                # subscribe_topics 배열 → topic_pattern (첫 번째 항목)
+                if "subscribe_topics" in conn_raw:
+                    topics = conn_raw.pop("subscribe_topics")
+                    if isinstance(topics, list) and topics:
+                        conn_raw.setdefault("topic_pattern", topics[0])
+
+                registers = []
+                for r in d.get("registers", []):
+                    try:
+                        registers.append(RegisterConfig(**r))
+                    except Exception as e:
+                        logger.debug(f"[OTA] 레지스터 파싱 오류 ({d.get('id')}, addr={r.get('address')}): {e}")
+
+                dev = DeviceConfig(
+                    id=d["id"],
+                    name=d.get("name", d["id"]),
+                    protocol=d.get("protocol", "modbus_tcp"),
+                    enabled=d.get("enabled", True),
+                    poll_interval_ms=d.get("poll_interval_ms", 5000),
+                    connection=ConnectionConfig(**conn_raw),
+                    registers=registers,
+                )
+                result.append(dev)
+            except Exception as e:
+                logger.warning(f"[OTA] 장치 파싱 오류 ({d.get('id', '?')}): {e}")
+        return result
+
+    def _ota_poll(self):
+        """5분마다 실행: OTA 설정 변경 확인 → 변경 시 hot-swap"""
+        try:
+            ota_data = self.cloud_sync.fetch_ota_config()
+            if not ota_data:
+                return   # 오프라인 — 현재 설정 유지
+
+            new_hash = ota_data.get("config_hash", "")
+            if not self.ota_cache.is_changed(new_hash):
+                logger.debug(f"[OTA] 설정 변경 없음 (hash: {new_hash})")
+                return   # 변경 없음 — 건너뜀
+
+            logger.info(f"[OTA] 설정 변경 감지 (hash: {new_hash}) — hot-swap 시작")
+            self.ota_cache.save(ota_data)
+            new_devices = self._parse_ota_devices(ota_data.get("devices", []))
+            self._apply_ota_hotswap(new_devices)
+
+            if self._on_ota_update_cb:
+                try:
+                    self._on_ota_update_cb(len(new_devices), new_hash)
+                except Exception:
+                    pass
+
+        except Exception as e:
+            logger.error(f"[OTA] 폴링 오류: {e}")
+
+    def _apply_ota_hotswap(self, new_devices: List[DeviceConfig]):
+        """
+        실행 중 장치 목록 변경 (무중단 hot-swap).
+
+        - 새 장치 추가
+        - 삭제된 장치 제거
+        - 기존 장치 설정 변경 시 재등록
+        """
+        with self._driver_lock:
+            current_ids: Set[str] = set(self._drivers.keys())
+        new_ids: Set[str] = {d.id for d in new_devices if d.enabled}
+
+        # 삭제된 장치 제거
+        for removed_id in current_ids - new_ids:
+            self.remove_device(removed_id)
+            logger.info(f"[OTA] 장치 제거: {removed_id}")
+
+        # 새 장치 추가 / 변경된 장치 재등록
+        for dev_cfg in new_devices:
+            if not dev_cfg.enabled:
+                if dev_cfg.id in current_ids:
+                    self.remove_device(dev_cfg.id)
+                continue
+
+            if dev_cfg.id in current_ids:
+                # 연결 설정이 바뀐 경우만 재등록 (불필요한 재연결 방지)
+                with self._driver_lock:
+                    existing = self._drivers.get(dev_cfg.id)
+                existing_conn = existing.config.get("connection", {}) if existing else {}
+                new_conn = dev_cfg.connection.model_dump(exclude_none=True)
+                if existing_conn != new_conn:
+                    logger.info(f"[OTA] 장치 설정 변경 — 재등록: {dev_cfg.id}")
+                    self.remove_device(dev_cfg.id)
+                    self._register_device(dev_cfg)
+                # 설정 동일 → 건너뜀
+            else:
+                # 신규 장치
+                logger.info(f"[OTA] 신규 장치 추가: {dev_cfg.id} ({dev_cfg.name})")
+                self._register_device(dev_cfg)
+
+        logger.info(
+            f"[OTA] hot-swap 완료 — 활성 장치: {len(new_ids)}개 "
+            f"(추가: {len(new_ids - current_ids)}, 제거: {len(current_ids - new_ids)})"
+        )
 
     # ── 장치 관리 ─────────────────────────────────────────────────────
 
@@ -321,6 +500,10 @@ class CollectorEngine:
             "device_count":   len(self._drivers),
             "buffer":         self.buffer.stats(),
             "cloud_sync":     self.cloud_sync.get_status(),
+            "ota": {
+                "source":        self._ota_source,
+                **self.ota_cache.stats(),
+            },
             "drivers":        drivers_info,
             "supported_protocols": DriverRegistry.list_protocols(),
         }

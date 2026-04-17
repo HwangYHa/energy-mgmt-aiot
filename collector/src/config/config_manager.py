@@ -2,6 +2,14 @@
 config_manager.py
 ─────────────────
 YAML 설정 파일 로드 + 환경변수 오버라이드 + Pydantic 검증
+
+OTA 모드 (권장):
+  config.yaml에 cloud.gateway_id + cloud.gateway_token만 설정하면
+  플랫폼에서 장치 목록을 자동으로 가져옵니다 (devices 섹션 불필요).
+
+수동 모드 (오프라인 또는 플랫폼 미사용):
+  config.yaml의 devices 섹션에 직접 장치를 정의합니다.
+  OTA를 사용하는 경우 이 섹션은 폴백으로만 사용됩니다.
 """
 from __future__ import annotations
 

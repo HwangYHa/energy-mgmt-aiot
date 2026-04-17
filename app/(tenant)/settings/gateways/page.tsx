@@ -26,8 +26,16 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import { apiPost, apiPut, apiDelete } from '@/lib/api/client';
 import { toast } from '@/lib/toast';
+
+const ROLE_LEVELS: Record<string, number> = {
+  viewer: 0, operator: 1, site_manager: 2, tenant_admin: 3, super_admin: 4,
+};
+function hasMinRole(userRole: string | undefined | null, minRole: string): boolean {
+  return (ROLE_LEVELS[userRole ?? ''] ?? -1) >= (ROLE_LEVELS[minRole] ?? 99);
+}
 
 // ──────────────────────────────────────────────────────────────
 // Types
@@ -943,6 +951,9 @@ function CollectorDownloadModal({ gateway, onClose }: { gateway: Gateway; onClos
 // ──────────────────────────────────────────────────────────────
 
 export default function GatewaysPage() {
+  const { data: session } = useSession();
+  const canInstallCollector = hasMinRole(session?.user?.role as string, 'site_manager');
+
   const [gateways, setGateways] = useState<Gateway[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [total, setTotal] = useState(0);
@@ -1164,13 +1175,15 @@ export default function GatewaysPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => setDownloadGw(gw)}
-                            className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition"
-                            title="수집기 다운로드"
-                          >
-                            <Download className="w-4 h-4" />
-                          </button>
+                          {canInstallCollector && (
+                            <button
+                              onClick={() => setDownloadGw(gw)}
+                              className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition"
+                              title="수집기 설치 파일 다운로드 (site_manager 이상)"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => setModal({ mode: 'edit', gateway: gw })}
                             className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-lg transition"
