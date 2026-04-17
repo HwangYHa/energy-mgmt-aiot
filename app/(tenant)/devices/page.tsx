@@ -3,18 +3,16 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
 import {
   Zap, Plus, Search, RefreshCw, MoreVertical, Edit, Trash2, Eye,
   AlertCircle, Loader2, CheckCircle, XCircle, Clock, Settings,
   Activity, Thermometer, Gauge, Lightbulb, Cpu, Building2,
   Network, Server, ChevronRight, Info, Plug, Battery,
-  Wind, Sun, Wrench, Download,
+  Wind, Sun, Wrench,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiGet, apiPost, apiDelete } from '@/lib/api/client';
 import { toast } from '@/lib/toast';
-import CollectorDownloadModal from '@/components/collector/CollectorDownloadModal';
 
 // ── 타입 ─────────────────────────────────────────────────────────
 
@@ -687,20 +685,10 @@ function DeviceCreateModal({ sites, gateways, defaultSiteId, onClose, onCreated 
 
 // ── 메인 페이지 ──────────────────────────────────────────────────
 
-// role level 비교 (viewer=0, operator=1, site_manager=2, tenant_admin=3, super_admin=4)
-const ROLE_LEVELS: Record<string, number> = {
-  viewer: 0, operator: 1, site_manager: 2, tenant_admin: 3, super_admin: 4,
-};
-function hasMinRole(userRole: string | undefined | null, minRole: string): boolean {
-  return (ROLE_LEVELS[userRole ?? ''] ?? -1) >= (ROLE_LEVELS[minRole] ?? 99);
-}
-
 function DevicesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialSiteId = searchParams.get('siteId');
-  const { data: session } = useSession();
-  const canInstallCollector = hasMinRole(session?.user?.role as string, 'site_manager');
 
   const [devices, setDevices] = useState<Device[]>([]);
   const [sites, setSites] = useState<{ id: string; name: string }[]>([]);
@@ -716,9 +704,6 @@ function DevicesPageContent() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
-  // 수집기 다운로드 모달
-  const [dlGateway, setDlGateway] = useState<Gateway | null>(null);
-  const [showGwPicker, setShowGwPicker] = useState(false);
 
   const fetchSites = useCallback(async () => {
     try {
@@ -805,18 +790,6 @@ function DevicesPageContent() {
           <Link href="/settings/gateways" className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm transition-colors">
             <Server className="w-4 h-4" /> 게이트웨이 관리
           </Link>
-          {canInstallCollector && (
-            <button
-              onClick={() => {
-                if (gateways.length === 0) { toast.error('게이트웨이를 먼저 등록하세요.'); return; }
-                if (gateways.length === 1) { setDlGateway(gateways[0] ?? null); return; }
-                setShowGwPicker(true);
-              }}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm transition-colors font-medium"
-              title="수집기를 설치하면 플랫폼에 등록된 설비 설정이 자동으로 내려갑니다 (OTA)">
-              <Download className="w-4 h-4" /> 수집기 설치
-            </button>
-          )}
           <button onClick={() => setShowCreateModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg font-medium transition-colors">
             <Plus className="w-5 h-5" /> 설비 등록
@@ -981,16 +954,6 @@ function DevicesPageContent() {
                                     className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700 transition-colors">
                                     <Edit className="w-4 h-4" /> 수정
                                   </button>
-                                  {canInstallCollector && device.gatewayId && device.gateway && (
-                                    <button
-                                      onClick={() => {
-                                        setDlGateway(device.gateway as Gateway);
-                                        setActionMenuId(null);
-                                      }}
-                                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-emerald-400 hover:bg-emerald-500/10 transition-colors">
-                                      <Download className="w-4 h-4" /> 수집기 설치
-                                    </button>
-                                  )}
                                   <button onClick={() => { setSelectedDevice(device); setShowDeleteConfirm(true); setActionMenuId(null); }}
                                     className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors">
                                     <Trash2 className="w-4 h-4" /> 삭제
@@ -1028,39 +991,6 @@ function DevicesPageContent() {
           onClose={() => setShowCreateModal(false)}
           onCreated={() => { setShowCreateModal(false); fetchDevices(); }}
         />
-      )}
-
-      {/* 수집기 다운로드 — 게이트웨이 선택 (여러 개인 경우) */}
-      {showGwPicker && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-xl max-w-sm w-full p-6">
-            <h3 className="text-base font-semibold text-white mb-1 flex items-center gap-2">
-              <Download className="w-4 h-4 text-emerald-400" /> 게이트웨이 선택
-            </h3>
-            <p className="text-slate-400 text-sm mb-4">설치 파일을 생성할 게이트웨이를 선택하세요.</p>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {gateways.map(gw => (
-                <button key={gw.id} onClick={() => { setDlGateway(gw); setShowGwPicker(false); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 bg-slate-700 hover:bg-emerald-600/20 border border-slate-600 hover:border-emerald-500 text-left rounded-lg transition-colors group">
-                  <Server className="w-4 h-4 text-slate-400 group-hover:text-emerald-400" />
-                  <div>
-                    <div className="text-sm font-medium text-white">{gw.name ?? gw.serialNumber}</div>
-                    <div className="text-xs text-slate-500 font-mono">{gw.id}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-            <button onClick={() => setShowGwPicker(false)}
-              className="mt-4 w-full px-4 py-2 text-sm text-slate-400 hover:text-white border border-slate-600 rounded-lg hover:border-slate-500 transition">
-              취소
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 수집기 다운로드 모달 */}
-      {dlGateway && (
-        <CollectorDownloadModal gateway={dlGateway} onClose={() => setDlGateway(null)} />
       )}
 
       {/* 삭제 확인 */}

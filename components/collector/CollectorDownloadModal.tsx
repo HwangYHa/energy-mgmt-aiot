@@ -92,22 +92,30 @@ export default function CollectorDownloadModal({ gateway, onClose }: Props) {
 
           {/* Windows */}
           <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-500/10 rounded-lg">
-                  <Monitor className="w-5 h-5 text-blue-400" />
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-white">Windows (현장 PC)</div>
-                  <div className="text-xs text-slate-400 mt-0.5">
-                    config.yaml 다운로드 → EXE와 같은 폴더에 배치 후 실행
-                  </div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-blue-500/10 rounded-lg">
+                <Monitor className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <div className="text-sm font-medium text-white">Windows (현장 PC)</div>
+                <div className="text-xs text-slate-400 mt-0.5">
+                  EXE와 config.yaml을 같은 폴더에 배치 후 실행
                 </div>
               </div>
+            </div>
+            <div className="flex gap-2">
+              <a
+                href="/downloads/TansoEum-Collector.exe"
+                download="TansoEum-Collector.exe"
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg font-medium transition"
+              >
+                <Download className="w-3.5 h-3.5" />
+                TansoEum-Collector.exe
+              </a>
               <button
                 onClick={() => handleDownload('windows')}
                 disabled={!!downloading}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg font-medium transition disabled:opacity-50"
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded-lg font-medium transition disabled:opacity-50"
               >
                 {downloading === 'windows'
                   ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -116,18 +124,8 @@ export default function CollectorDownloadModal({ gateway, onClose }: Props) {
               </button>
             </div>
             <div className="mt-3 bg-slate-900/60 rounded-lg px-3 py-2 text-xs text-slate-400 space-y-0.5">
-              <div>
-                <span className="text-slate-500">1. </span>
-                <a
-                  href="https://github.com/tansoeum/collector/releases/latest"
-                  target="_blank" rel="noreferrer"
-                  className="text-cyan-400 hover:underline"
-                >
-                  GitHub Releases
-                </a>
-                에서 TansoEum-Collector.exe 다운로드
-              </div>
-              <div><span className="text-slate-500">2. </span>위 config.yaml 을 EXE 와 같은 폴더에 배치</div>
+              <div><span className="text-slate-500">1. </span>TansoEum-Collector.exe 다운로드</div>
+              <div><span className="text-slate-500">2. </span>config.yaml 다운로드 → EXE와 같은 폴더에 배치</div>
               <div><span className="text-slate-500">3. </span>TansoEum-Collector.exe 실행</div>
             </div>
           </div>

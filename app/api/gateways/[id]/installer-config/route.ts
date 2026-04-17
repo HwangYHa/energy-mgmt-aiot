@@ -22,6 +22,7 @@ import { createHash, randomBytes } from 'crypto';
 async function getOrCreateCollectorApiKey(
   tenantId: string,
   gatewayId: string,
+  userId: string,
 ): Promise<string> {
   // 기존 수집기 전용 키 조회
   const existing = await (prisma as any).apiKey.findFirst({
@@ -33,10 +34,10 @@ async function getOrCreateCollectorApiKey(
     select: { id: true },
   });
 
-  // 이미 있으면 새로 발급 (키 원문은 DB에 없음 — 재발급 필요)
-  // 수집기용은 항상 새로 발급하고 응답에 포함 (1회 노출)
-  const rawKey  = `sk_collector_${randomBytes(24).toString('hex')}`;
-  const keyHash = createHash('sha256').update(rawKey).digest('hex');
+  // 수집기용은 항상 새로 발급하고 응답에 포함 (1회 노출, 원문 DB 미저장)
+  const rawKey   = `sk_col_${randomBytes(24).toString('hex')}`;
+  const keyHash  = createHash('sha256').update(rawKey).digest('hex');
+  const keyPrefix = rawKey.substring(0, 12); // "sk_col_xxxxx" 앞 12자
 
   // 기존 키 비활성화
   if (existing) {
@@ -46,14 +47,16 @@ async function getOrCreateCollectorApiKey(
     });
   }
 
-  // 신규 발급
+  // 신규 발급 (userId, keyPrefix 필수)
   await (prisma as any).apiKey.create({
     data: {
       tenantId,
+      userId,
       name:      `collector-${gatewayId}-${Date.now()}`,
       keyHash,
+      keyPrefix,
       isActive:  true,
-      expiresAt: null,   // 만료 없음
+      expiresAt: null,
     },
   });
 
@@ -283,7 +286,7 @@ export async function GET(
     }
 
     // 수집기 전용 API 키 발급
-    const apiKey  = await getOrCreateCollectorApiKey(auth.tenantId, gatewayId);
+    const apiKey  = await getOrCreateCollectorApiKey(auth.tenantId, gatewayId, auth.userId);
     const apiUrl  = process.env.NEXTAUTH_URL ?? 'https://your-server.com';
     const gwName  = gateway.name ?? gateway.serialNumber;
 
