@@ -908,13 +908,28 @@ function GatewaysPageContent() {
             현장 IoT 게이트웨이 등록 및 상태 모니터링
           </p>
         </div>
-        <button
-          onClick={() => setModal({ mode: 'create' })}
-          className="flex items-center gap-2 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-sm font-medium transition"
-        >
-          <Plus className="w-4 h-4" />
-          게이트웨이 등록
-        </button>
+        <div className="flex items-center gap-2">
+          {canInstallCollector && (
+            <button
+              onClick={() => {
+                if (gateways.length === 0) { toast.error('등록된 게이트웨이가 없습니다.'); return; }
+                setDownloadGw(gateways[0] ?? null);
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-600 rounded-lg text-sm font-medium transition"
+              title="수집기 설치 파일 다운로드"
+            >
+              <Download className="w-4 h-4" />
+              수집기 다운로드
+            </button>
+          )}
+          <button
+            onClick={() => setModal({ mode: 'create' })}
+            className="flex items-center gap-2 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-sm font-medium transition"
+          >
+            <Plus className="w-4 h-4" />
+            게이트웨이 등록
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -1044,15 +1059,6 @@ function GatewaysPageContent() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          {canInstallCollector && (
-                            <button
-                              onClick={() => setDownloadGw(gw)}
-                              className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition"
-                              title="수집기 설치 파일 다운로드 (site_manager 이상)"
-                            >
-                              <Download className="w-4 h-4" />
-                            </button>
-                          )}
                           <button
                             onClick={() => setModal({ mode: 'edit', gateway: gw })}
                             className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-lg transition"

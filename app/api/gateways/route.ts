@@ -23,7 +23,6 @@ import {
 } from '@/lib/api/response';
 import { UserRole } from '@/lib/constants/roles';
 import { checkPlanLimit } from '@/lib/middleware/plan-limit';
-import { generateSeqNo } from '@/lib/utils/sequence';
 
 export const dynamic = 'force-dynamic';
 
@@ -150,15 +149,11 @@ export async function POST(request: NextRequest) {
     });
     if (existing) return errorResponse('RESOURCE_ALREADY_EXISTS');
 
-    // 게이트웨이 코드 자동 채번: GW-YYYYMMDD-NNNN
-    const code = await generateSeqNo('GATEWAY_MGMT');
-
     const gateway = await (prisma as any).gateway.create({
       data: {
         tenantId: auth.tenantId,
         siteId: d.siteId,
         serialNumber: d.serialNumber,
-        code,
         name: d.name ?? null,
         model: d.model ?? null,
         firmwareVersion: d.firmwareVersion ?? null,
@@ -180,7 +175,8 @@ export async function POST(request: NextRequest) {
 
     return successResponse({ gateway }, { status: 201 });
   } catch (error) {
-    console.error('[API] 게이트웨이 등록 오류:', error);
-    return serverErrorResponse();
+    const msg = error instanceof Error ? error.message.split('\n')[0] : String(error);
+    console.error('[API] 게이트웨이 등록 오류:', msg);
+    return serverErrorResponse({ message: `게이트웨이 등록 실패: ${msg}` });
   }
 }
