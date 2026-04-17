@@ -1,5 +1,5 @@
 /**
- * 구독 관리 페이지
+ * 구독 · 요금제 페이지
  * tenant_admin 이상만 접근 가능
  */
 
@@ -42,7 +42,7 @@ export default async function SubscriptionPage() {
           <CreditCard className="w-6 h-6 text-cyan-400" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-white">구독 관리</h1>
+          <h1 className="text-2xl font-bold text-white">구독 · 요금제</h1>
           <p className="text-slate-400 text-sm">플랜 및 결제를 관리합니다</p>
         </div>
       </div>

@@ -86,7 +86,7 @@ export default function ViewerDashboardPage() {
             <div>
               <h1 className="text-3xl font-bold text-white flex items-center gap-3">
                 <Eye className="w-8 h-8 text-blue-400" />
-                실시간 모니터링
+                에너지 현황판
               </h1>
               <p className="text-sm text-slate-400 mt-1">
                 조회 전용 • {currentTime}

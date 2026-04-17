@@ -219,7 +219,7 @@ export default function RealtimePage() {
             <div className="p-2 bg-emerald-500/20 rounded-lg">
               <Activity className="w-6 h-6 text-emerald-400" />
             </div>
-            실시간 현황
+            실시간 모니터링
             <span className="flex items-center gap-1.5 text-xs font-normal bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">
               <span className={`w-1.5 h-1.5 rounded-full bg-emerald-400 ${!isPaused ? 'animate-pulse' : ''}`} />
               {isPaused ? 'PAUSED' : 'LIVE'}
