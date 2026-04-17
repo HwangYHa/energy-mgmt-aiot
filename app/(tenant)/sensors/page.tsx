@@ -10,7 +10,6 @@ import {
   Eye,
   Loader2,
   X,
-  Database,
   AlertCircle,
 } from 'lucide-react';
 import { apiGet, apiPost, apiDelete } from '@/lib/api/client';
@@ -76,7 +75,6 @@ export default function SensorsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState<string | null>(null);
   const [detailSensor, setDetailSensor] = useState<Sensor | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
 
   const fetchSensors = useCallback(async () => {
     setIsLoading(true);
@@ -121,27 +119,6 @@ export default function SensorsPage() {
     }
   };
 
-  const handleGenerateData = async () => {
-    setIsGenerating(true);
-    try {
-      const res = await apiPost<{ totalMeasurements: number }>(
-        '/api/data-collection/generate',
-        { hours: 24, intervalMinutes: 15 },
-      );
-      const raw = res as unknown as { success: boolean; data?: { totalMeasurements: number }; error?: { message: string } };
-      if (raw.success && raw.data) {
-        toast.success(`데이터 생성 완료: ${raw.data.totalMeasurements}건`);
-        fetchSensors();
-      } else {
-        toast.error('데이터 생성 실패: ' + (raw.error?.message || '오류'));
-      }
-    } catch {
-      toast.error('데이터 생성 중 오류');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
   const viewDetail = async (id: string) => {
     setShowDetailModal(id);
     try {
@@ -168,14 +145,6 @@ export default function SensorsPage() {
           <p className="text-gray-400 mt-1">센서 등록/관리 및 데이터 수집 현황</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleGenerateData}
-            disabled={isGenerating}
-            className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm font-medium transition disabled:opacity-50"
-          >
-            {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-            시뮬레이션 데이터 생성
-          </button>
           <button
             onClick={() => setShowCreateModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-sm font-medium transition"

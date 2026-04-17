@@ -214,7 +214,18 @@ function GatewayModal({
         onSaved();
         onClose();
       } else {
-        toast.error('저장에 실패했습니다.');
+        // 서버 유효성 검증 오류 상세 표시
+        const errRes = res as unknown as { code?: string; message?: string; details?: { fields?: Record<string, string> } };
+        if (errRes.code === 'VALIDATION_ERROR' && errRes.details?.fields) {
+          const firstErr = Object.values(errRes.details.fields)[0];
+          toast.error(firstErr ?? '입력 데이터를 확인하세요.');
+        } else if (errRes.code === 'RESOURCE_ALREADY_EXISTS') {
+          toast.error('이미 등록된 시리얼 번호입니다.');
+        } else if (errRes.code === 'PLAN_LIMIT_EXCEEDED') {
+          toast.error('플랜 한도를 초과했습니다. 업그레이드 후 다시 시도하세요.');
+        } else {
+          toast.error(errRes.message ?? '저장에 실패했습니다.');
+        }
       }
     } catch {
       toast.error('저장 중 오류가 발생했습니다.');
