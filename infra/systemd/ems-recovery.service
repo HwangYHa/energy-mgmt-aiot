@@ -1,0 +1,29 @@
+# /etc/systemd/system/ems-recovery.service
+#
+# EMS AIoT 부팅 복구 서비스
+# 설치:
+#   sudo cp infra/systemd/ems-recovery.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable ems-recovery.service
+#
+# 동작: 부팅 시 Docker 데몬 기동 확인 후 Compose 서비스 자동 복구
+
+[Unit]
+Description=EMS AIoT Startup Recovery
+# Docker가 먼저 실행된 후에 동작
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/ems-aiot/infra/scripts/startup-recovery.sh
+TimeoutStartSec=600
+StandardOutput=journal
+StandardError=journal
+# 환경 변수 파일 (선택)
+EnvironmentFile=-/opt/ems-aiot/.env.recovery
+
+[Install]
+WantedBy=multi-user.target

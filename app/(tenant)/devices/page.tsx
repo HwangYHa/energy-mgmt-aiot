@@ -802,7 +802,7 @@ function DevicesPageContent() {
             <Server className="w-4 h-4" /> 게이트웨이 관리
           </Link>
           {canInstallCollector && (
-            <Link href="/settings/gateways?install=true"
+            <Link href="/settings/gateways?openInstall=1"
               className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm transition-colors font-medium"
               title="수집기를 설치하면 플랫폼에 등록된 설비 설정이 자동으로 내려갑니다 (OTA)">
               <Download className="w-4 h-4" /> 수집기 설치

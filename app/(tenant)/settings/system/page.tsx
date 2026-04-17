@@ -105,7 +105,7 @@ interface SystemSettings {
     retentionCount: number;
     includeAttachments: boolean;
     notifyEmail: string;
-    storageType: 'local' | 'ncp' | 's3' | 'gcs';
+    storageType: 'local' | 'ncp';
     storagePath?: string;
   };
 }
@@ -152,7 +152,6 @@ export default function SystemSettingsPage() {
   const [backupHistory,   setBackupHistory]   = useState<BackupHistoryEntry[]>([]);
   const [defaultBackupDir, setDefaultBackupDir] = useState<string>('');
   const [ncpConfigured,   setNcpConfigured]   = useState(false);
-  const [s3Configured,    setS3Configured]    = useState(false);
   const [ncpBucket,       setNcpBucket]       = useState<string | null>(null);
   const savedRef = useRef<SystemSettings | null>(null);
 
@@ -188,7 +187,6 @@ export default function SystemSettingsPage() {
         setBackupHistory(res.data.recentBackups);
         setDefaultBackupDir(res.data.defaultDir);
         setNcpConfigured(res.data.ncpConfigured);
-        setS3Configured(res.data.s3Configured);
         setNcpBucket(res.data.ncpBucket);
       }
     } catch { /* ignore */ }
@@ -753,8 +751,6 @@ export default function SystemSettingsPage() {
                   >
                     <option value="local">로컬 스토리지</option>
                     <option value="ncp">네이버 클라우드 (NCP)</option>
-                    <option value="s3">AWS S3</option>
-                    <option value="gcs">Google Cloud Storage</option>
                   </select>
                 </SettingRow>
                 <SettingRow
@@ -762,9 +758,7 @@ export default function SystemSettingsPage() {
                   description={
                     settings.backup.storageType === 'local'
                       ? `서버 내 백업 디렉토리 (기본: ${defaultBackupDir || 'BACKUP_DIR 환경변수 또는 ./backups/'})`
-                      : settings.backup.storageType === 'ncp'
-                      ? `버킷 내 경로 접두어 (기본: tansoeum-backups/{tenantId})${ncpBucket ? ` — 버킷: ${ncpBucket}` : ''}`
-                      : '버킷 내 경로 접두어'
+                      : `버킷 내 경로 접두어 (기본: tansoeum-backups/{tenantId})${ncpBucket ? ` — 버킷: ${ncpBucket}` : ''}`
                   }
                 >
                   <div className="flex flex-col gap-1">
@@ -775,9 +769,7 @@ export default function SystemSettingsPage() {
                       placeholder={
                         settings.backup.storageType === 'local'
                           ? (defaultBackupDir || './backups/')
-                          : settings.backup.storageType === 'ncp'
-                          ? 'tansoeum-backups/backups'
-                          : 'my-bucket/backups'
+                          : 'tansoeum-backups/backups'
                       }
                       className="w-64 bg-slate-700/60 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 disabled:opacity-50"
                     />
@@ -848,34 +840,6 @@ export default function SystemSettingsPage() {
                   <div className="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-xs text-emerald-300 flex items-center gap-2">
                     <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                     NCP Object Storage 연결 설정 확인됨{ncpBucket ? ` — 버킷: ${ncpBucket}` : ''}
-                  </div>
-                )}
-                {/* S3: 지원됨 (환경변수 필요) */}
-                {settings.backup.storageType === 's3' && !s3Configured && (
-                  <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-300 space-y-1.5">
-                    <div className="flex items-center gap-2 font-semibold">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      AWS S3 환경변수가 설정되지 않았습니다
-                    </div>
-                    <div className="text-slate-300 font-mono bg-slate-900/60 rounded p-2 space-y-0.5">
-                      <div>AWS_ACCESS_KEY_ID=<span className="text-slate-500">액세스 키</span></div>
-                      <div>AWS_SECRET_ACCESS_KEY=<span className="text-slate-500">시크릿 키</span></div>
-                      <div>AWS_S3_BUCKET=<span className="text-slate-500">버킷명</span></div>
-                      <div>AWS_REGION=ap-northeast-2</div>
-                    </div>
-                  </div>
-                )}
-                {settings.backup.storageType === 's3' && s3Configured && (
-                  <div className="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-xs text-emerald-300 flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                    AWS S3 연결 설정 확인됨
-                  </div>
-                )}
-                {/* GCS: 미지원 */}
-                {settings.backup.storageType === 'gcs' && (
-                  <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-300 flex items-start gap-2">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                    Google Cloud Storage 백업은 현재 미지원입니다. 네이버 클라우드(NCP) 또는 로컬 스토리지를 사용하세요.
                   </div>
                 )}
               </div>

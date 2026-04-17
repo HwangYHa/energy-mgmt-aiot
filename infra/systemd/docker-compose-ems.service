@@ -1,0 +1,38 @@
+# /etc/systemd/system/docker-compose-ems.service
+#
+# EMS AIoT Docker Compose 자동 시작/종료 서비스
+# (ems-recovery.service 와 함께 사용하면 이중 보장)
+#
+# 설치:
+#   sudo cp infra/systemd/docker-compose-ems.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable docker-compose-ems.service
+
+[Unit]
+Description=EMS AIoT Docker Compose Stack
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=forking
+RemainAfterExit=yes
+WorkingDirectory=/opt/ems-aiot
+
+ExecStartPre=/usr/bin/docker compose -f /opt/ems-aiot/docker-compose.prod.yml pull --quiet
+ExecStart=/usr/bin/docker compose -f /opt/ems-aiot/docker-compose.prod.yml up -d --remove-orphans
+
+ExecStop=/usr/bin/docker compose -f /opt/ems-aiot/docker-compose.prod.yml down
+
+ExecReload=/usr/bin/docker compose -f /opt/ems-aiot/docker-compose.prod.yml restart
+
+TimeoutStartSec=300
+TimeoutStopSec=120
+Restart=on-failure
+RestartSec=30
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

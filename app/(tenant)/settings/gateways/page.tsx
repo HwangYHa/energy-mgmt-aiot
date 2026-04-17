@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Router,
   Plus,
@@ -950,9 +951,10 @@ function CollectorDownloadModal({ gateway, onClose }: { gateway: Gateway; onClos
 // Main Page
 // ──────────────────────────────────────────────────────────────
 
-export default function GatewaysPage() {
+function GatewaysPageContent() {
   const { data: session } = useSession();
   const canInstallCollector = hasMinRole(session?.user?.role as string, 'site_manager');
+  const searchParams = useSearchParams();
 
   const [gateways, setGateways] = useState<Gateway[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
@@ -964,6 +966,8 @@ export default function GatewaysPage() {
   const [modal, setModal] = useState<{ mode: 'create' | 'edit'; gateway?: Gateway } | null>(null);
   const [downloadGw, setDownloadGw] = useState<Gateway | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  // URL 파라미터로 모달 자동 오픈 여부 (한 번만 처리)
+  const [autoOpenHandled, setAutoOpenHandled] = useState(false);
   const LIMIT = 20;
 
   const fetchGateways = useCallback(async () => {
@@ -1003,6 +1007,21 @@ export default function GatewaysPage() {
   useEffect(() => {
     fetchSites();
   }, [fetchSites]);
+
+  // URL 파라미터 자동 모달 오픈 (?openInstall=1&gwId=xxx)
+  useEffect(() => {
+    if (isLoading || autoOpenHandled) return;
+    const openInstall = searchParams.get('openInstall');
+    if (openInstall !== '1') return;
+    setAutoOpenHandled(true);
+    const gwId = searchParams.get('gwId');
+    if (gwId) {
+      const target = gateways.find(g => g.id === gwId) ?? null;
+      if (target) { setDownloadGw(target); return; }
+    }
+    // gwId 없으면 첫 번째 게이트웨이 자동 선택
+    if (gateways.length > 0) setDownloadGw(gateways[0] ?? null);
+  }, [isLoading, gateways, searchParams, autoOpenHandled]);
 
   const handleDelete = async (gw: Gateway) => {
     if (!confirm(`"${gw.name ?? gw.serialNumber}" 게이트웨이를 삭제하시겠습니까?\n연결된 ${gw._count.devices}개 장치의 게이트웨이 연결이 해제됩니다.`)) return;
@@ -1275,5 +1294,13 @@ export default function GatewaysPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function GatewaysPage() {
+  return (
+    <Suspense fallback={<div className="h-full bg-[#051225] flex items-center justify-center"><div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" /></div>}>
+      <GatewaysPageContent />
+    </Suspense>
   );
 }
