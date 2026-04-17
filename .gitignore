@@ -106,5 +106,7 @@ docker-compose.yml
 collector/**/__pycache__/
 collector/**/*.pyc
 collector/data/*.db
+collector/data/*.db-shm
+collector/data/*.db-wal
 collector/logs/
 collector/.venv/
