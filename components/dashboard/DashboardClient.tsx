@@ -3,6 +3,7 @@
 /**
  * components/dashboard/DashboardClient.tsx
  * HMI 이미지 자산 기반 대시보드 — ah_image*.png / gauge_loading.png / download.png 활용
+ * Mobile-first responsive layout
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -238,33 +239,21 @@ function GaugeCard({ value, label, sub, accent }: GaugeCardProps) {
 
   return (
     <div className="relative overflow-hidden" style={{ minHeight: 110 }}>
-      {/* ah_image2.png — panel frame background */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/images/ah_image2.png" alt="" className="absolute inset-0 w-full h-full object-fill pointer-events-none" />
-
-      {/* Content */}
       <div className="relative z-10 flex flex-col items-center pt-3 pb-2 px-1">
-        {/* Gauge ring */}
         <div className="relative" style={{ width: 72, height: 72 }}>
-          {/* gauge_loading.png — ring texture */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/images/gauge_loading.png" alt="" className="absolute inset-0 w-full h-full object-contain opacity-20 pointer-events-none" />
-          {/* download.png — quarter arc decoration */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/images/download.png" alt="" className="absolute inset-0 w-full h-full object-contain opacity-25 pointer-events-none" />
-
-          {/* SVG arc */}
           <svg className="absolute inset-0 -rotate-90" width="72" height="72" viewBox="0 0 72 72">
-            {/* Track */}
             <circle cx="36" cy="36" r={r} fill="none" stroke="#1e3a5f" strokeWidth="5" />
-            {/* Progress */}
             <circle cx="36" cy="36" r={r} fill="none" stroke={c.stroke} strokeWidth="5"
               strokeDasharray={circ} strokeDashoffset={offset}
               strokeLinecap="round"
               style={{ filter: `drop-shadow(0 0 4px ${c.glow})`, transition: 'stroke-dashoffset 1s ease' }} />
           </svg>
-
-          {/* Value */}
           <div className="absolute inset-0 flex items-center justify-center">
             <span className={cn('text-[15px] font-black font-mono tabular-nums', c.text)}
               style={{ textShadow: `0 0 10px ${c.glow}` }}>
@@ -272,7 +261,6 @@ function GaugeCard({ value, label, sub, accent }: GaugeCardProps) {
             </span>
           </div>
         </div>
-
         <p className={cn('text-[10px] font-bold mt-1.5 tracking-wide uppercase', c.text)}>{label}</p>
         <p className="text-[9px] text-slate-500 font-mono">{sub}</p>
       </div>
@@ -293,7 +281,6 @@ function CenterFrame({ children, className, fill }: { children: React.ReactNode;
     </div>
   );
 }
-
 
 // ─────────────────────────────────────────────────────
 // MetricRow
@@ -391,8 +378,7 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
     <div className="h-full bg-[#020c1b] flex flex-col select-none">
 
       {/* ── 타이틀 헤더 ── */}
-      <div className="relative flex-shrink-0 h-[52px] flex items-center justify-center
-                      border-b border-cyan-900/40 bg-[#010a17]">
+      <div className="relative flex-shrink-0 border-b border-cyan-900/40 bg-[#010a17]">
         {/* 장식 선 */}
         <div className="absolute inset-y-0 left-0 right-0 flex items-center pointer-events-none">
           <div className="flex-1 h-px bg-gradient-to-r from-transparent via-cyan-600/20 to-cyan-600/5 mr-8" />
@@ -400,61 +386,68 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
         </div>
 
         {/* 타이틀 */}
-        <div className="relative z-10 text-center">
-          <h1 className="text-[15px] md:text-base font-black tracking-[0.35em] uppercase"
+        <div className="relative z-10 text-center pt-2 pb-1">
+          <h1 className="text-[13px] sm:text-[15px] md:text-base font-black tracking-[0.25em] sm:tracking-[0.35em] uppercase"
             style={{ color: '#67e8f9', textShadow: '0 0 24px rgba(6,182,212,0.55)' }}>
             ◆ 에너지 운영 관리 시스템 ◆
           </h1>
-          <p className="text-[10px] text-cyan-200/35 font-mono tracking-[0.2em] mt-0.5" suppressHydrationWarning>
+          <p className="text-[10px] text-cyan-200/35 font-mono tracking-[0.2em] mt-0.5 pb-1" suppressHydrationWarning>
             {currentTime}
           </p>
         </div>
 
-        {/* 우측 액션 */}
-        <div className="absolute right-3 inset-y-0 flex items-center gap-1.5 z-10">
-          <div className={cn('flex items-center gap-1 px-2 py-0.5 rounded text-[10px] border font-mono',
-            sseConnected
-              ? 'bg-emerald-500/10 border-emerald-600/20 text-emerald-400'
-              : sseStatus === 'connecting'
-              ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
-              : 'bg-slate-800/60 border-slate-700/30 text-slate-500')}>
-            <Radio className={cn('w-2.5 h-2.5', sseConnected && 'animate-pulse')} />
-            <span>{sseConnected
-              ? `LIVE · ${realtimeAggregates.totalPower.toFixed(1)} kW`
-              : sseStatus === 'connecting' ? 'CONN...' : 'OFFLINE'}</span>
-          </div>
-          <button onClick={() => setShowUploadModal(true)}
-            className="px-2 py-0.5 text-[10px] text-cyan-400 border border-cyan-800/40 rounded hover:bg-cyan-900/30 transition flex items-center gap-1 font-mono">
-            <FileText className="w-2.5 h-2.5" /> 고지서
-          </button>
-          <button onClick={() => mutate()}
-            className="p-1 text-slate-600 hover:text-cyan-400 border border-slate-800/40 rounded hover:border-cyan-800/40 transition">
-            <RefreshCw className="w-3 h-3" />
-          </button>
-        </div>
-
-        {/* 좌측 상태 */}
-        <div className="absolute left-3 inset-y-0 flex items-center gap-1.5 z-10">
-          {dataStatus === 'invoice_only' && (
-            <span className="text-[10px] text-blue-400 border border-blue-800/40 bg-blue-900/20 px-2 py-0.5 rounded font-mono flex items-center gap-1">
-              <FileText className="w-2.5 h-2.5" /> 고지서
-            </span>
-          )}
-          {dataStatus === 'disconnected' && (
-            <Link href="/onboarding">
-              <span className="text-[10px] text-amber-400 border border-amber-800/40 bg-amber-900/20 px-2 py-0.5 rounded font-mono flex items-center gap-1 cursor-pointer hover:bg-amber-900/40 transition">
-                <Settings className="w-2.5 h-2.5" /> 초기설정
+        {/* 상태 바 — 모바일 독립 행 */}
+        <div className="relative z-10 flex items-center justify-between px-2 pb-2 gap-1.5 flex-wrap">
+          {/* 좌측 상태 */}
+          <div className="flex items-center gap-1.5">
+            {dataStatus === 'invoice_only' && (
+              <span className="text-[10px] text-blue-400 border border-blue-800/40 bg-blue-900/20 px-2 py-0.5 rounded font-mono flex items-center gap-1">
+                <FileText className="w-2.5 h-2.5" /> 고지서
               </span>
-            </Link>
-          )}
-          {stats.dataSource === 'simulation' && (
-            <span className="text-[9px] text-slate-700 font-mono">DEMO</span>
-          )}
+            )}
+            {dataStatus === 'disconnected' && (
+              <Link href="/onboarding">
+                <span className="text-[10px] text-amber-400 border border-amber-800/40 bg-amber-900/20 px-2 py-0.5 rounded font-mono flex items-center gap-1 cursor-pointer hover:bg-amber-900/40 transition">
+                  <Settings className="w-2.5 h-2.5" /> 초기설정
+                </span>
+              </Link>
+            )}
+            {stats.dataSource === 'simulation' && (
+              <span className="text-[9px] text-slate-700 font-mono">DEMO</span>
+            )}
+          </div>
+
+          {/* 우측 액션 */}
+          <div className="flex items-center gap-1.5 ml-auto">
+            <div className={cn('flex items-center gap-1 px-2 py-0.5 rounded text-[10px] border font-mono',
+              sseConnected
+                ? 'bg-emerald-500/10 border-emerald-600/20 text-emerald-400'
+                : sseStatus === 'connecting'
+                ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                : 'bg-slate-800/60 border-slate-700/30 text-slate-500')}>
+              <Radio className={cn('w-2.5 h-2.5', sseConnected && 'animate-pulse')} />
+              <span className="hidden sm:inline">{sseConnected
+                ? `LIVE · ${realtimeAggregates.totalPower.toFixed(1)} kW`
+                : sseStatus === 'connecting' ? 'CONN...' : 'OFFLINE'}</span>
+              <span className="sm:hidden">{sseConnected
+                ? `${realtimeAggregates.totalPower.toFixed(1)} kW`
+                : sseStatus === 'connecting' ? '...' : 'OFF'}</span>
+            </div>
+            <button onClick={() => setShowUploadModal(true)}
+              className="px-2 py-0.5 text-[10px] text-cyan-400 border border-cyan-800/40 rounded hover:bg-cyan-900/30 transition flex items-center gap-1 font-mono">
+              <FileText className="w-2.5 h-2.5" />
+              <span className="hidden sm:inline">고지서</span>
+            </button>
+            <button onClick={() => mutate()}
+              className="p-1 text-slate-600 hover:text-cyan-400 border border-slate-800/40 rounded hover:border-cyan-800/40 transition">
+              <RefreshCw className="w-3 h-3" />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* ── ah_image4.png 헤더 하단 구분선 ── */}
-      <div className="flex-shrink-0 h-4 w-full relative">
+      <div className="flex-shrink-0 h-3 w-full relative">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/images/ah_image4.png" alt="" className="absolute inset-0 w-full h-full object-fill opacity-80 pointer-events-none" />
       </div>
@@ -464,199 +457,232 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
         <InvoiceUploadModal onClose={() => setShowUploadModal(false)} onUploaded={() => mutate()} />
       )}
 
-      {/* ── 메인 그리드 ── */}
-      <div className="flex-1 grid grid-cols-12 gap-1 p-1 overflow-hidden">
+      {/* ── 메인 레이아웃 ──
+           모바일: 세로 스크롤, 섹션 순서 재정렬
+           데스크탑 lg+: 3컬럼 고정 HMI 레이아웃
+      ── */}
+      <div className="flex-1 overflow-y-auto lg:overflow-hidden">
+        <div className="lg:h-full flex flex-col lg:grid lg:grid-cols-12 gap-1.5 p-1.5">
 
-        {/* ═══ 좌측 컬럼 ═══ */}
-        <div className="col-span-12 lg:col-span-3 flex flex-col gap-1">
+          {/* ═══ [모바일 1순위] 중앙 컬럼 — KPI + 게이지 + 토폴로지 ═══ */}
+          <div className="order-1 lg:col-span-6 lg:order-2 flex flex-col gap-1.5">
 
-          <DashboardPanel title="월별 에너지 소비량" variant="frame" fill className="flex-1 min-h-0">
-            <EnergyBarChart
-              data={d.monthlyConsumption}
-              bars={[
-                { dataKey: 'consumption', color: '#06b6d4', name: '소비량' },
-                { dataKey: 'target',      color: '#22c55e', name: '목표'   },
-              ]}
-              height="100%"
-              showLegend={false}
-            />
-          </DashboardPanel>
+            {/* 메인 KPI */}
+            <CenterFrame className="flex-shrink-0 rounded-sm">
+              <div className="px-4 pt-3 pb-3 text-center">
+                <p className="text-[9px] font-bold text-cyan-500/60 tracking-[0.4em] uppercase mb-1.5">
+                  총 에너지 소비량 · Annual Cumulative
+                </p>
+                <div className="flex items-baseline justify-center gap-2">
+                  <AnimatedCounter
+                    value={d.kpis.totalConsumption}
+                    className="font-black font-mono tabular-nums"
+                    style={{
+                      fontSize: 'clamp(28px, 5vw, 40px)',
+                      color: '#67e8f9',
+                      textShadow: '0 0 30px rgba(6,182,212,0.7)',
+                      letterSpacing: '0.05em',
+                    }}
+                  />
+                  <span className="text-sm text-cyan-400/50 font-mono font-bold">{d.kpis.consumptionUnit}</span>
+                </div>
+                <div className="flex items-center justify-center gap-3 mt-2 flex-wrap">
+                  <div className={cn('flex items-center gap-1 text-xs font-mono font-semibold',
+                    d.kpis.consumptionTrend.direction === 'down' ? 'text-emerald-400' : 'text-red-400')}>
+                    <span>{d.kpis.consumptionTrend.direction === 'down' ? '▼' : '▲'}</span>
+                    <span>{(d.kpis.consumptionTrend.value ?? 0).toFixed(1)}% 전년 대비</span>
+                  </div>
+                  <div className="w-px h-4 bg-slate-700" />
+                  <div className="flex items-center gap-1.5 text-xs font-mono">
+                    <Zap className="w-3 h-3 text-yellow-500" />
+                    <span className="text-slate-500">현재</span>
+                    <span className="text-yellow-300 font-bold">{formatNumber(Math.round(livePower))} kW</span>
+                  </div>
+                  <div className="w-px h-4 bg-slate-700" />
+                  <div className="flex items-center gap-1.5 text-xs font-mono">
+                    <span className="text-slate-500">금일</span>
+                    <span className="text-cyan-300 font-bold">{formatNumber(d.realtime.dailyUsage)} kWh</span>
+                  </div>
+                </div>
+              </div>
+            </CenterFrame>
 
-          <DashboardPanel title="주간 소비 추이" variant="frame" fill className="flex-1 min-h-0">
-            <EnergyBarChart
-              data={d.weeklyTrend}
-              bars={[
-                { dataKey: 'current',  color: '#22d3ee', name: '이번주' },
-                { dataKey: 'previous', color: '#164e63', name: '지난주' },
-              ]}
-              height="100%"
-              showLegend={false}
-            />
-          </DashboardPanel>
+            {/* 4개 게이지 — 모바일에서도 가로 4분할 */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 flex-shrink-0">
+              <GaugeCard value={d.kpis.equipmentRate}   label="설비 가동률" sub="Equipment"  accent="green"  />
+              <GaugeCard value={d.kpis.efficiency}      label="에너지 효율" sub="Efficiency" accent="cyan"   />
+              <GaugeCard value={d.kpis.drParticipation} label="DR 참여율"   sub="Demand Res" accent="amber"  />
+              <GaugeCard value={d.kpis.carbonGoal}      label="탄소 목표"   sub="Carbon"     accent="purple" />
+            </div>
 
-          <DashboardPanel title="시간대별 부하" variant="frame" fill className="flex-1 min-h-0">
-            <EnergyBarChart
-              data={d.hourlyLoad}
-              bars={[
-                { dataKey: 'load', color: '#22d3ee', name: '부하' },
-                { dataKey: 'peak', color: '#f59e0b', name: '피크' },
-              ]}
-              height="100%"
-              showLegend={false}
-            />
-          </DashboardPanel>
+            {/* 실시간 현황 — 모바일에서 중앙에 위치 */}
+            <DashboardPanel title="실시간 현황" variant="glow" className="flex-shrink-0 lg:hidden">
+              <div className="grid grid-cols-2 gap-x-4 pt-0.5 pb-1 px-1">
+                <MetricRow label="현재 전력"  value={`${formatNumber(Math.round(livePower))} kW`}
+                  colorClass="text-cyan-400" live={sseConnected && livePower > 0} />
+                <MetricRow label="금일 사용량" value={`${formatNumber(d.realtime.dailyUsage)} kWh`}
+                  colorClass="text-emerald-400" />
+                <MetricRow label="피크 대비"  value={`${d.realtime.peakRatio}%`}
+                  colorClass="text-yellow-400" />
+                <MetricRow label="예상 요금"  value={formatCurrency(d.realtime.estimatedCost)}
+                  colorClass="text-orange-400" />
+                <MetricRow label="디바이스"  value={`${d.devices?.online ?? 0}/${d.devices?.total ?? 0} ON`}
+                  colorClass="text-slate-400" />
+                <MetricRow label="센서"      value={`${d.sensors?.online ?? 0}/${d.sensors?.total ?? 0} ACT`}
+                  colorClass="text-slate-400" />
+              </div>
+            </DashboardPanel>
 
-          <DashboardPanel title="피크 시간대 분석" variant="frame" fill className="flex-1 min-h-0">
-            <EnergyBarChart
-              data={d.peakHourAnalysis}
-              bars={[
-                { dataKey: 'value', color: '#fbbf24', name: '사용량' },
-                { dataKey: 'avg',   color: '#6366f1', name: '평균'   },
-              ]}
-              height="100%"
-              showLegend={false}
-            />
-          </DashboardPanel>
-        </div>
-
-        {/* ═══ 중앙 컬럼 ═══ */}
-        <div className="col-span-12 lg:col-span-6 flex flex-col gap-1">
-
-          {/* 메인 KPI */}
-          <CenterFrame className="flex-shrink-0 rounded-sm">
-            <div className="px-4 pt-3 pb-3 text-center">
-              <p className="text-[9px] font-bold text-cyan-500/60 tracking-[0.4em] uppercase mb-1.5">
-                총 에너지 소비량 · Annual Cumulative
-              </p>
-              <div className="flex items-baseline justify-center gap-2">
-                <AnimatedCounter
-                  value={d.kpis.totalConsumption}
-                  className="font-black font-mono tabular-nums"
-                  style={{
-                    fontSize: 'clamp(24px, 3.5vw, 40px)',
-                    color: '#67e8f9',
-                    textShadow: '0 0 30px rgba(6,182,212,0.7)',
-                    letterSpacing: '0.05em',
-                  }}
+            {/* 에너지 네트워크 시각화 */}
+            <CenterFrame className="rounded-sm flex flex-col" fill>
+              <div className="px-3 pt-1.5 pb-0 flex-shrink-0">
+                <h3 className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <span className="w-0.5 h-2.5 bg-cyan-500 rounded-full inline-block" />
+                  에너지 네트워크 토폴로지
+                </h3>
+              </div>
+              {/* 모바일: 고정 높이 / 데스크탑: flex-1 */}
+              <div className="h-[280px] lg:flex-1 lg:h-auto">
+                <EnergyNetworkViz
+                  power={Math.round(livePower)}
+                  nodes={[
+                    ...(d.topology?.sites ?? []).map(s => ({
+                      label: s.name.length > 8 ? s.name.slice(0, 7) + '…' : s.name,
+                      status: 'online',
+                    })),
+                    ...(d.topology?.gateways ?? []).map(g => ({
+                      label: g.name.length > 8 ? g.name.slice(0, 7) + '…' : g.name,
+                      status: g.status,
+                    })),
+                  ]}
                 />
-                <span className="text-sm text-cyan-400/50 font-mono font-bold">{d.kpis.consumptionUnit}</span>
               </div>
-              <div className="flex items-center justify-center gap-4 mt-1.5 flex-wrap">
-                <div className={cn('flex items-center gap-1 text-xs font-mono font-semibold',
-                  d.kpis.consumptionTrend.direction === 'down' ? 'text-emerald-400' : 'text-red-400')}>
-                  <span>{d.kpis.consumptionTrend.direction === 'down' ? '▼' : '▲'}</span>
-                  <span>{(d.kpis.consumptionTrend.value ?? 0).toFixed(1)}% 전년 대비</span>
-                </div>
-                <div className="w-px h-4 bg-slate-700" />
-                <div className="flex items-center gap-1.5 text-xs font-mono">
-                  <Zap className="w-3 h-3 text-yellow-500" />
-                  <span className="text-slate-500">현재</span>
-                  <span className="text-yellow-300 font-bold">{formatNumber(Math.round(livePower))} kW</span>
-                </div>
-                <div className="w-px h-4 bg-slate-700" />
-                <div className="flex items-center gap-1.5 text-xs font-mono">
-                  <span className="text-slate-500">금일</span>
-                  <span className="text-cyan-300 font-bold">{formatNumber(d.realtime.dailyUsage)} kWh</span>
-                </div>
-              </div>
-            </div>
-          </CenterFrame>
-
-          {/* 에너지 네트워크 시각화 */}
-          <CenterFrame className="flex-1 min-h-0 rounded-sm" fill>
-            <div className="px-3 pt-1.5 pb-0 flex-shrink-0">
-              <h3 className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-1.5">
-                <span className="w-0.5 h-2.5 bg-cyan-500 rounded-full inline-block" />
-                에너지 네트워크 토폴로지
-              </h3>
-            </div>
-            <div className="flex-1 min-h-0">
-              <EnergyNetworkViz
-                power={Math.round(livePower)}
-                nodes={[
-                  ...(d.topology?.sites ?? []).map(s => ({
-                    label: s.name.length > 8 ? s.name.slice(0, 7) + '…' : s.name,
-                    status: 'online',
-                  })),
-                  ...(d.topology?.gateways ?? []).map(g => ({
-                    label: g.name.length > 8 ? g.name.slice(0, 7) + '…' : g.name,
-                    status: g.status,
-                  })),
-                ]}
-              />
-            </div>
-          </CenterFrame>
-
-          {/* 4개 게이지 */}
-          <div className="grid grid-cols-4 gap-1 flex-shrink-0">
-            <GaugeCard value={d.kpis.equipmentRate}   label="설비 가동률" sub="Equipment"  accent="green"  />
-            <GaugeCard value={d.kpis.efficiency}      label="에너지 효율" sub="Efficiency" accent="cyan"   />
-            <GaugeCard value={d.kpis.drParticipation} label="DR 참여율"   sub="Demand Res" accent="amber"  />
-            <GaugeCard value={d.kpis.carbonGoal}      label="탄소 목표"   sub="Carbon"     accent="purple" />
+            </CenterFrame>
           </div>
-        </div>
 
-        {/* ═══ 우측 컬럼 ═══ */}
-        <div className="col-span-12 lg:col-span-3 flex flex-col gap-1">
+          {/* ═══ [모바일 2순위] 좌측 컬럼 — 차트 4개 ═══ */}
+          <div className="order-2 lg:col-span-3 lg:order-1 grid grid-cols-2 lg:grid-cols-1 lg:flex lg:flex-col gap-1.5">
 
-          <DashboardPanel title="효율성 추이" variant="frame" fill className="flex-1 min-h-0">
-            <EnergyLineChart
-              data={d.efficiencyTrend}
-              lines={[
-                { dataKey: 'efficiency', color: '#22d3ee', name: '효율' },
-                { dataKey: 'target',     color: '#f59e0b', name: '목표', dot: false },
-              ]}
-              height="100%"
-              showLegend={false}
-            />
-          </DashboardPanel>
+            <DashboardPanel title="월별 에너지" variant="frame" fill
+              className="min-h-[200px] lg:min-h-0 lg:flex-1">
+              <EnergyBarChart
+                data={d.monthlyConsumption}
+                bars={[
+                  { dataKey: 'consumption', color: '#06b6d4', name: '소비량' },
+                  { dataKey: 'target',      color: '#22c55e', name: '목표'   },
+                ]}
+                height="100%"
+                showLegend={false}
+              />
+            </DashboardPanel>
 
-          <DashboardPanel title="비용 절감 추이" variant="frame" fill className="flex-1 min-h-0">
-            <EnergyLineChart
-              data={d.costSavings}
-              lines={[
-                { dataKey: 'profit', color: '#4ade80', name: '절감액'         },
-                { dataKey: 'target', color: '#f97316', name: '목표', dot: false },
-              ]}
-              height="100%"
-              showLegend={false}
-            />
-          </DashboardPanel>
+            <DashboardPanel title="주간 소비 추이" variant="frame" fill
+              className="min-h-[200px] lg:min-h-0 lg:flex-1">
+              <EnergyBarChart
+                data={d.weeklyTrend}
+                bars={[
+                  { dataKey: 'current',  color: '#22d3ee', name: '이번주' },
+                  { dataKey: 'previous', color: '#164e63', name: '지난주' },
+                ]}
+                height="100%"
+                showLegend={false}
+              />
+            </DashboardPanel>
 
-          <DashboardPanel title="탄소 배출량 (tCO₂)" variant="frame" fill className="flex-1 min-h-0">
-            <EnergyBarChart
-              data={d.carbonEmission}
-              bars={[
-                { dataKey: 'emission', color: '#a78bfa', name: '배출량' },
-                { dataKey: 'limit',    color: '#ef4444', name: '한도'   },
-              ]}
-              height="100%"
-              showLegend={false}
-            />
-          </DashboardPanel>
+            <DashboardPanel title="시간대별 부하" variant="frame" fill
+              className="min-h-[200px] lg:min-h-0 lg:flex-1">
+              <EnergyBarChart
+                data={d.hourlyLoad}
+                bars={[
+                  { dataKey: 'load', color: '#22d3ee', name: '부하' },
+                  { dataKey: 'peak', color: '#f59e0b', name: '피크' },
+                ]}
+                height="100%"
+                showLegend={false}
+              />
+            </DashboardPanel>
 
+            <DashboardPanel title="피크 시간대" variant="frame" fill
+              className="min-h-[200px] lg:min-h-0 lg:flex-1">
+              <EnergyBarChart
+                data={d.peakHourAnalysis}
+                bars={[
+                  { dataKey: 'value', color: '#fbbf24', name: '사용량' },
+                  { dataKey: 'avg',   color: '#6366f1', name: '평균'   },
+                ]}
+                height="100%"
+                showLegend={false}
+              />
+            </DashboardPanel>
+          </div>
 
-          {/* 실시간 현황 — DashboardPanel variant="glow" (ah_image2.png) */}
-          <DashboardPanel title="실시간 현황" variant="glow" className="flex-shrink-0">
-            <div className="pt-0.5 pb-1 px-1">
-              <MetricRow label="현재 전력"  value={`${formatNumber(Math.round(livePower))} kW`}
-                colorClass="text-cyan-400" live={sseConnected && livePower > 0} />
-              <MetricRow label="금일 사용량" value={`${formatNumber(d.realtime.dailyUsage)} kWh`}
-                colorClass="text-emerald-400" />
-              <MetricRow label="피크 대비"  value={`${d.realtime.peakRatio}%`}
-                colorClass="text-yellow-400" />
-              <MetricRow label="예상 요금"  value={formatCurrency(d.realtime.estimatedCost)}
-                colorClass="text-orange-400" />
-              <MetricRow label="디바이스"  value={`${d.devices?.online ?? 0}/${d.devices?.total ?? 0} ON`}
-                colorClass="text-slate-400" />
-              <MetricRow label="센서"      value={`${d.sensors?.online ?? 0}/${d.sensors?.total ?? 0} ACT`}
-                colorClass="text-slate-400" />
-              {realtimeAggregates.alertCount > 0 && (
-                <MetricRow label="실시간 알림" value={`${realtimeAggregates.alertCount}건`}
-                  colorClass="text-red-400" live />
-              )}
-            </div>
-          </DashboardPanel>
+          {/* ═══ [모바일 3순위] 우측 컬럼 — 차트 3개 + 실시간 ═══ */}
+          <div className="order-3 lg:col-span-3 lg:order-3 grid grid-cols-2 lg:grid-cols-1 lg:flex lg:flex-col gap-1.5">
+
+            <DashboardPanel title="효율성 추이" variant="frame" fill
+              className="min-h-[200px] lg:min-h-0 lg:flex-1">
+              <EnergyLineChart
+                data={d.efficiencyTrend}
+                lines={[
+                  { dataKey: 'efficiency', color: '#22d3ee', name: '효율' },
+                  { dataKey: 'target',     color: '#f59e0b', name: '목표', dot: false },
+                ]}
+                height="100%"
+                showLegend={false}
+              />
+            </DashboardPanel>
+
+            <DashboardPanel title="비용 절감" variant="frame" fill
+              className="min-h-[200px] lg:min-h-0 lg:flex-1">
+              <EnergyLineChart
+                data={d.costSavings}
+                lines={[
+                  { dataKey: 'profit', color: '#4ade80', name: '절감액'         },
+                  { dataKey: 'target', color: '#f97316', name: '목표', dot: false },
+                ]}
+                height="100%"
+                showLegend={false}
+              />
+            </DashboardPanel>
+
+            {/* 탄소 배출량 — 모바일에서 2열 전체 너비 */}
+            <DashboardPanel title="탄소 배출량 (tCO₂)" variant="frame" fill
+              className="col-span-2 lg:col-span-1 min-h-[200px] lg:min-h-0 lg:flex-1">
+              <EnergyBarChart
+                data={d.carbonEmission}
+                bars={[
+                  { dataKey: 'emission', color: '#a78bfa', name: '배출량' },
+                  { dataKey: 'limit',    color: '#ef4444', name: '한도'   },
+                ]}
+                height="100%"
+                showLegend={false}
+              />
+            </DashboardPanel>
+
+            {/* 실시간 현황 — 데스크탑에서만 여기에 표시 (모바일은 중앙 컬럼에 표시) */}
+            <DashboardPanel title="실시간 현황" variant="glow"
+              className="col-span-2 lg:col-span-1 hidden lg:block flex-shrink-0">
+              <div className="pt-0.5 pb-1 px-1">
+                <MetricRow label="현재 전력"  value={`${formatNumber(Math.round(livePower))} kW`}
+                  colorClass="text-cyan-400" live={sseConnected && livePower > 0} />
+                <MetricRow label="금일 사용량" value={`${formatNumber(d.realtime.dailyUsage)} kWh`}
+                  colorClass="text-emerald-400" />
+                <MetricRow label="피크 대비"  value={`${d.realtime.peakRatio}%`}
+                  colorClass="text-yellow-400" />
+                <MetricRow label="예상 요금"  value={formatCurrency(d.realtime.estimatedCost)}
+                  colorClass="text-orange-400" />
+                <MetricRow label="디바이스"  value={`${d.devices?.online ?? 0}/${d.devices?.total ?? 0} ON`}
+                  colorClass="text-slate-400" />
+                <MetricRow label="센서"      value={`${d.sensors?.online ?? 0}/${d.sensors?.total ?? 0} ACT`}
+                  colorClass="text-slate-400" />
+                {realtimeAggregates.alertCount > 0 && (
+                  <MetricRow label="실시간 알림" value={`${realtimeAggregates.alertCount}건`}
+                    colorClass="text-red-400" live />
+                )}
+              </div>
+            </DashboardPanel>
+          </div>
+
         </div>
       </div>
 
