@@ -9,9 +9,6 @@ import {
   validationErrorResponse,
 } from '@/lib/api/response';
 import { logActivity, MENU_CODES, ACTION_TYPES } from '@/lib/services/activity-log.service';
-import { writeFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
 
 /**
  * GET /api/analytics/download/history
@@ -42,7 +39,6 @@ export async function GET(request: NextRequest) {
         rowCount: Number(r.rowCount),
         sizeBytes: Number(r.sizeBytes),
         status: r.status,
-        filepath: r.filepath, // filepath 포함
         createdAt: r.createdAt.toISOString(),
       }))
     );
@@ -56,6 +52,9 @@ export async function GET(request: NextRequest) {
  * POST /api/analytics/download/history
  * 다운로드 이력 저장
  * 응답: { success: true, data: { id: string } }
+ *
+ * NOTE: DownloadHistory 모델에 filepath 필드가 없으므로 파일 경로는 저장되지 않습니다.
+ *       fileContent 파라미터는 하위호환을 위해 수신하지만 무시됩니다.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -71,30 +70,13 @@ export async function POST(request: NextRequest) {
       rowCount: number;
       sizeBytes: number;
       status: 'completed' | 'failed';
-      fileContent?: string; // Base64 인코딩된 파일 콘텐츠
+      fileContent?: string; // 무시됨 (서버 파일 저장 미지원)
     };
 
-    const { category, format, filename, startDate, endDate, rowCount, sizeBytes, status, fileContent } = body;
+    const { category, format, filename, startDate, endDate, rowCount, sizeBytes, status } = body;
 
     if (!category || !format || !filename || !startDate || !endDate) {
       return validationErrorResponse({ message: '필수 항목이 누락되었습니다.' });
-    }
-
-    // 파일 저장 (fileContent가 제공된 경우)
-    let filepath: string | null = null;
-    if (fileContent && status === 'completed') {
-      try {
-        const downloadDir = join(tmpdir(), 'energy-mgmt-downloads');
-        mkdirSync(downloadDir, { recursive: true });
-        filepath = join(downloadDir, filename);
-
-        // Base64를 Buffer로 디코딩하여 파일 저장
-        const buffer = Buffer.from(fileContent, 'base64');
-        writeFileSync(filepath, buffer);
-      } catch (err) {
-        console.error('File save error:', err);
-        // 파일 저장 실패해도 이력은 저장 (filepath는 null)
-      }
     }
 
     const created = await prisma.downloadHistory.create({
@@ -110,7 +92,6 @@ export async function POST(request: NextRequest) {
         rowCount: rowCount ?? 0,
         sizeBytes: sizeBytes ?? 0,
         status: status ?? 'completed',
-        filepath: filepath ?? null, // filepath 필드 (존재하지 않으면 null)
       },
     });
 
@@ -131,7 +112,6 @@ export async function POST(request: NextRequest) {
       request,
     });
 
-    // 표준 응답: data 필드 안에 id 포함
     return successResponse({ id: created.id }, { status: 201 });
   } catch (error) {
     console.error('Download history POST error:', error);
@@ -153,20 +133,6 @@ export async function DELETE(request: NextRequest) {
     const all = searchParams.get('all') === '1';
 
     if (all) {
-      // 모든 이력의 파일 삭제
-      const rows = await prisma.downloadHistory.findMany({
-        where: { tenantId: auth.tenantId },
-        select: { filepath: true },
-      });
-      rows.forEach((row) => {
-        if (row.filepath) {
-          try {
-            const { unlinkSync } = require('fs');
-            unlinkSync(row.filepath);
-          } catch { /* ignore */ }
-        }
-      });
-
       const { count } = await prisma.downloadHistory.deleteMany({
         where: { tenantId: auth.tenantId },
       });
@@ -177,23 +143,17 @@ export async function DELETE(request: NextRequest) {
       return validationErrorResponse({ message: 'id 파라미터가 필요합니다.' });
     }
 
-    // 파일 삭제 후 이력 삭제
+    // tenantId 확인 (다른 테넌트 삭제 방지)
     const record = await prisma.downloadHistory.findUnique({
       where: { id },
-      select: { filepath: true, tenantId: true },
+      select: { tenantId: true },
     });
 
-    // tenantId 확인 (다른 테넌트 삭제 방지)
-    if (record && record.tenantId === auth.tenantId && record.filepath) {
-      try {
-        const { unlinkSync } = require('fs');
-        unlinkSync(record.filepath);
-      } catch { /* ignore */ }
+    if (!record || record.tenantId !== auth.tenantId) {
+      return validationErrorResponse({ message: '이력을 찾을 수 없습니다.' });
     }
 
-    await prisma.downloadHistory.deleteMany({
-      where: { id, tenantId: auth.tenantId },
-    });
+    await prisma.downloadHistory.delete({ where: { id } });
 
     return successResponse({ id });
   } catch (error) {
