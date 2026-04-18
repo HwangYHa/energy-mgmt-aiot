@@ -270,13 +270,13 @@ export async function recalculatePeriod(opts: RecalcOptions): Promise<RecalcResu
   // 트랜잭션으로 원자 처리
   await prisma.$transaction(async (tx) => {
     // 1. 기존 레코드 아카이브
-    await tx.emissionsRecord.updateMany({
+    await (tx.emissionsRecord as any).updateMany({
       where: { tenantId, period, isArchived: false },
       data: {
         isArchived:     true,
         archivedAt:     now,
         archivedBy:     requestedBy,
-        archivedReason: reason,
+        archive_reason: reason,
       },
     });
 
