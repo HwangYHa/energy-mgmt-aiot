@@ -507,14 +507,6 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
               </div>
             </CenterFrame>
 
-            {/* 4개 게이지 — 모바일에서도 가로 4분할 */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 flex-shrink-0">
-              <GaugeCard value={d.kpis.equipmentRate}   label="설비 가동률" sub="Equipment"  accent="green"  />
-              <GaugeCard value={d.kpis.efficiency}      label="에너지 효율" sub="Efficiency" accent="cyan"   />
-              <GaugeCard value={d.kpis.drParticipation} label="DR 참여율"   sub="Demand Res" accent="amber"  />
-              <GaugeCard value={d.kpis.carbonGoal}      label="탄소 목표"   sub="Carbon"     accent="purple" />
-            </div>
-
             {/* 실시간 현황 — 모바일에서 중앙에 위치 */}
             <DashboardPanel title="실시간 현황" variant="glow" className="flex-shrink-0 lg:hidden">
               <div className="grid grid-cols-2 gap-x-4 pt-0.5 pb-1 px-1">
@@ -558,6 +550,14 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
                 />
               </div>
             </CenterFrame>
+
+            {/* 4개 게이지 — 토폴로지 하단 배치 */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 flex-shrink-0">
+              <GaugeCard value={d.kpis.equipmentRate}   label="설비 가동률" sub="Equipment"  accent="green"  />
+              <GaugeCard value={d.kpis.efficiency}      label="에너지 효율" sub="Efficiency" accent="cyan"   />
+              <GaugeCard value={d.kpis.drParticipation} label="DR 참여율"   sub="Demand Res" accent="amber"  />
+              <GaugeCard value={d.kpis.carbonGoal}      label="탄소 목표"   sub="Carbon"     accent="purple" />
+            </div>
           </div>
 
           {/* ═══ [모바일 2순위] 좌측 컬럼 — 차트 4개 ═══ */}
