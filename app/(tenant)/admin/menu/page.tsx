@@ -694,6 +694,7 @@ export default function MenuManagementPage() {
                     <div className="flex items-center gap-1">
                       <span className="text-xs text-slate-500">#</span>
                       <input
+                        key={`${group.id}-order-${gi}`}
                         type="number" min={1} max={localGroups.length}
                         defaultValue={gi + 1}
                         onBlur={e => { const v = parseInt(e.target.value); if (!isNaN(v)) moveGroupToIndex(group.id, v); e.target.value = String(localGroups.findIndex(g => g.id === group.id) + 1); }}
@@ -789,6 +790,7 @@ export default function MenuManagementPage() {
                               <div className="flex items-center gap-0.5">
                                 <span className="text-xs text-slate-600">#</span>
                                 <input
+                                  key={`${item.id}-order-${ii}`}
                                   type="number" min={1} max={group.items.length}
                                   defaultValue={ii + 1}
                                   onBlur={e => { const v = parseInt(e.target.value); if (!isNaN(v)) moveItemToIndex(group.id, item.id, v); e.target.value = String(group.items.findIndex(i => i.id === item.id) + 1); }}

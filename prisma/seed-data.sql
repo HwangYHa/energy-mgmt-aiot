@@ -50,12 +50,27 @@ REPLACE INTO `feature` VALUES ('0537bab6-1a1b-11f1-805a-10ffe02f0abf','api_acces
 REPLACE INTO `feature` VALUES ('0537bb5f-1a1b-11f1-805a-10ffe02f0abf','multi_site','다중 사업장','2개 이상의 사업장 관리','admin',1,'2026-03-07 20:44:37.000','2026-03-07 20:44:37.000');
 REPLACE INTO `feature` VALUES ('0537bbf7-1a1b-11f1-805a-10ffe02f0abf','white_label','화이트 레이블','브랜드 커스터마이징','admin',1,'2026-03-07 20:44:37.000','2026-03-07 20:44:37.000');
 REPLACE INTO `feature` VALUES ('0537bc67-1a1b-11f1-805a-10ffe02f0abf','partner_portal','파트너 포털','리셀러/파트너 포털 접근','admin',1,'2026-03-07 20:44:37.000','2026-03-07 20:44:37.000');
--- 가격 근거 (2026-04): NCP 150K + 도메인 18K + AI 50K + SMS 30K = 268K/월 고정비
--- Basic 198K (5고객 기준 3.7x 마진) / Pro 490K (Basic 2.5x) / 연간 17% 할인
-REPLACE INTO `plan` VALUES ('plan_basic','기본 (Basic)','basic',198000.00,1980000.00,0.00,3,50,10,90,500,'{\"reports\": true, \"analytics\": true, \"dashboard\": true, \"monitoring\": true}',1,1,'2026-02-24 03:08:47.683','2026-04-17 00:00:00.000');
-REPLACE INTO `plan` VALUES ('plan_enterprise','기업 (Enterprise)','enterprise',NULL,NULL,0.00,NULL,NULL,NULL,1095,10000,'{\"all\": true}',1,0,'2026-02-24 03:08:47.687','2026-04-17 00:00:00.000');
-REPLACE INTO `plan` VALUES ('plan_pro','전문 (Pro)','pro',490000.00,4900000.00,0.00,10,200,30,365,2000,'{\"ai\": true, \"carbon\": true, \"reports\": true, \"analytics\": true, \"dashboard\": true, \"monitoring\": true, \"digital_twin\": true}',1,1,'2026-02-24 03:08:47.685','2026-04-17 00:00:00.000');
-REPLACE INTO `plan` VALUES ('plan_trial','체험 (Trial)','trial',0.00,0.00,0.00,1,10,2,30,100,'{\"dashboard\": true, \"monitoring\": true}',1,1,'2026-02-24 03:08:47.675','2026-04-17 00:00:00.000');
+-- ─────────────────────────────────────────────────────────────────────
+-- 가격 근거 (2026-04 ROI 기반 재산정)
+--
+-- 핵심 원칙: 절감액 기반 가격 (ROI 5~15%)
+--   전기료 1,000만원/월 고객 → 절감 8% = 80만원 절감 → 월 40~120만원 SaaS 지불 가능
+--
+-- 운영비 (NCP 150K + 도메인 18K + AI API 50K + SMS 30K = 268K/월 고정비)
+-- trial  : 무료 체험 14일 (리드 확보 도구)
+-- basic  : 99K/월 (스타터) — 소규모 사업장, 절감 50~100만원 수준 대상
+-- pro    : 299K/월 (비즈니스) — 중소기업, 절감 300~500만원 수준 대상
+-- enterprise: 790K~/월 — 대기업/공공, 절감 1,000만원+ 수준 대상
+--
+-- 구축비(setupFee): 초기 세팅·교육·Gateway 연동 비용 (현장 방문 없는 경우 기준)
+-- basic  구축비: 0원 (셀프 온보딩)
+-- pro    구축비: 500,000원
+-- enterprise 구축비: 1,500,000원 (협의)
+-- ─────────────────────────────────────────────────────────────────────
+REPLACE INTO `plan` VALUES ('plan_trial',    '체험 (Trial)',         'trial',     0.00,      0.00,       0.00,       1,    10,   2,   30,   100,  '{"dashboard": true, "monitoring": true}',                                                                                         1, 1, '2026-02-24 03:08:47.675', '2026-04-18 00:00:00.000');
+REPLACE INTO `plan` VALUES ('plan_basic',    '스타터 (Starter)',     'basic',     99000.00,  990000.00,  0.00,       1,    20,   5,   90,   500,  '{"reports": true, "analytics": true, "dashboard": true, "monitoring": true}',                                                   1, 1, '2026-02-24 03:08:47.683', '2026-04-18 00:00:00.000');
+REPLACE INTO `plan` VALUES ('plan_pro',      '비즈니스 (Business)',  'pro',       299000.00, 2990000.00, 500000.00,  5,    100,  20,  365,  2000, '{"ai": true, "carbon": true, "esg": true, "reports": true, "analytics": true, "dashboard": true, "monitoring": true, "dr": true}', 1, 1, '2026-02-24 03:08:47.685', '2026-04-18 00:00:00.000');
+REPLACE INTO `plan` VALUES ('plan_enterprise','엔터프라이즈 (Enterprise)', 'enterprise', 790000.00, 7900000.00, 1500000.00, NULL, NULL, NULL, 1095, 10000, '{"all": true, "erp": true, "white_label": true, "sla": true, "api": true, "custom": true}', 1, 0, '2026-02-24 03:08:47.687', '2026-04-18 00:00:00.000');
 REPLACE INTO `emission_factor` VALUES ('12df2521-4e3a-47c3-810f-95fdd978eec8',NULL,'한국 전력망 배출계수 2021','KR-ELEC-GRID-2021','electricity','electricity','kr-elec-grid-2021','KR',NULL,NULL,0.4387000000,'kgCO2eq/kWh','kWh','환경부','환경부',NULL,NULL,NULL,2021,'KR',0,0,1,'APPROVED','1.0.0',NULL,'2021-01-01','2021-12-31',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'2026-03-08 10:52:56.463','2026-03-08 10:52:56.463');
 REPLACE INTO `emission_factor` VALUES ('22b45a1c-f7a5-4eb0-9af9-75f03b6d6ed8',NULL,'LNG 배출계수','KR-LNG-2023','stationary_combustion','lng','kr-lng-2023','KR',NULL,NULL,2.2040000000,'kgCO2eq/Nm3','Nm3','환경부','환경부',NULL,NULL,NULL,2023,'KR',0,1,1,'APPROVED','1.0.0',NULL,'2023-01-01',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'2026-03-08 10:52:56.467','2026-03-08 10:52:56.467');
 REPLACE INTO `emission_factor` VALUES ('53a98d7d-efdb-4ce5-87e7-5f0fe4417b03',NULL,'경유 배출계수','KR-DIESEL-2023','mobile_combustion','diesel','kr-diesel-2023','KR',NULL,NULL,2.5820000000,'kgCO2eq/L','L','환경부','환경부',NULL,NULL,NULL,2023,'KR',0,1,1,'APPROVED','1.0.0',NULL,'2023-01-01',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'2026-03-08 10:52:56.465','2026-03-08 10:52:56.465');
