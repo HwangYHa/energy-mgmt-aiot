@@ -4,9 +4,9 @@ import { jwtVerify } from 'jose';
 import { securityHeadersMiddleware, generateNonce } from '@/lib/middleware/security-headers';
 import { verifyCsrfToken } from '@/lib/middleware/csrf';
 import {
-  checkRateLimit,
-  getAuthRateLimit,
-} from '@/lib/middleware/rate-limit';
+  checkRateLimitEdge as checkRateLimit,
+  getAuthRateLimitEdge as getAuthRateLimit,
+} from '@/lib/middleware/rate-limit-edge';
 
 // HTTPS 환경에서는 nonce를 request 헤더로 전달 (app/layout.tsx에서 사용)
 function makeResponseWithNonce(request: NextRequest, nonce?: string) {
@@ -123,7 +123,7 @@ export async function middleware(request: NextRequest) {
     // 인증 경로는 강화 Rate Limit 적용 (로그인 브루트포스 방지)
     if (AUTH_PATHS.some(p => pathname.startsWith(p)) && method === 'POST') {
       const authLimit = getAuthRateLimit(ip);
-      const result = await checkRateLimit(authLimit);
+      const result = checkRateLimit(authLimit);
 
       if (!result.allowed) {
         // 반복 초과 시 Edge 메모리 IP 차단 (30분)
@@ -220,7 +220,7 @@ export async function middleware(request: NextRequest) {
       ((token as Record<string, unknown>)?.apiRateLimit as number | undefined) ??
       naverPayload.apiRateLimit;
     const limit = tenantId ? (planLimit ?? 1000) : 100;
-    const result = await checkRateLimit({
+    const result = checkRateLimit({
       key: rateLimitKey,
       limit,
       windowMs: 60 * 60 * 1000, // 1시간
