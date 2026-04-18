@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   if (!tenantId) {
     // demo 테넌트 자동 검색 (slug 또는 이름 기준)
     const demoTenant = await prisma.tenant.findFirst({
-      where: { OR: [{ slug: 'demo' }, { name: { contains: '데모' } }, { name: { contains: 'demo' } }] },
+      where: { OR: [{ name: { contains: '데모' } }, { name: { contains: 'demo' } }, { code: 'demo' }] },
       select: { id: true, name: true },
     });
     if (!demoTenant) {
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
   const siteId = sites[0]?.id ?? null;
 
   // ── 2. PhysicalSpace (디지털 트윈 공간 계층) ──────────────────────
-  const existingSpaces = await prisma.physicalSpace.count({ where: { tenantId } });
+  const existingSpaces = await (prisma as any).physicalSpace.count({ where: { tenantId } });
   if (existingSpaces === 0 && siteId) {
     const buildingId = uid();
     const floor1Id   = uid();
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     const zoneA      = uid();
     const zoneB      = uid();
 
-    await prisma.physicalSpace.createMany({
+    await (prisma as any).physicalSpace.createMany({
       data: [
         { id: buildingId, tenantId, siteId, name: '메인 공장 건물', type: 'building', level: 1, parentId: null, area: 2400.0, floorPlanX: null, floorPlanY: null, metadata: JSON.stringify({ buildingCode: 'MAIN-01' }) },
         { id: floor1Id,   tenantId, siteId, name: '1층 (생산라인)', type: 'floor',    level: 2, parentId: buildingId, area: 1200.0, floorPlanX: null, floorPlanY: null, metadata: null },
@@ -89,11 +89,11 @@ export async function POST(request: NextRequest) {
       { id: uid(), tenantId, spaceId: floor2Id, deviceId: null,                 name: 'LED 조명 시스템',     type: 'sensor',    status: 'normal', posX: 200.0, posY: 150.0, metadata: JSON.stringify({ circuit: 'L-201', powerKw: 8 }) },
       { id: uid(), tenantId, spaceId: floor1Id, deviceId: devices[5]?.id ?? null, name: 'ESS (에너지 저장장치)', type: 'equipment', status: 'normal', posX: 185.0, posY: 60.0, metadata: JSON.stringify({ capacity_kwh: 200, soc: 78 }) },
     ];
-    await prisma.twinNode.createMany({ data: twinNodes, skipDuplicates: true });
+    await (prisma as any).twinNode.createMany({ data: twinNodes, skipDuplicates: true });
     stats.twinNodes = twinNodes.length;
   } else {
     stats.physicalSpaces = existingSpaces;
-    stats.twinNodes = await prisma.twinNode.count({ where: { tenantId } });
+    stats.twinNodes = await (prisma as any).twinNode.count({ where: { tenantId } });
   }
 
   // ── 4. AlertRule (알람 규칙) ──────────────────────────────────────
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
   }
 
   // ── 5. Sensor (센서 데이터) ──────────────────────────────────────
-  const existingSensors = await prisma.sensor.count({ where: { tenantId } });
+  const existingSensors = await (prisma as any).sensor.count({ where: { tenantId } });
   if (existingSensors < 5 && devices.length > 0) {
     const sensorTypes = ['temperature', 'humidity', 'power', 'vibration', 'pressure'];
     const sensorData = devices.slice(0, 5).flatMap((dev, i) =>
@@ -135,12 +135,12 @@ export async function POST(request: NextRequest) {
         lastReadAt: daysAgo(ri(0, 1)),
       }))
     );
-    await prisma.sensor.createMany({ data: sensorData, skipDuplicates: true });
+    await (prisma as any).sensor.createMany({ data: sensorData, skipDuplicates: true });
     stats.sensors = sensorData.length;
   }
 
   // ── 6. EmissionsData (Scope별 배출량 기준 데이터) ────────────────
-  const existingEm = await prisma.emissionsData.count({ where: { tenantId } });
+  const existingEm = await (prisma as any).emissionsData.count({ where: { tenantId } });
   if (existingEm < 6 && siteId) {
     const emData = Array.from({ length: 6 }, (_, i) => {
       const mo = new Date(); mo.setDate(1); mo.setMonth(mo.getMonth() - (5 - i));
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
         { id: uid(), tenantId, siteId, scope: 'scope2' as any, category: 'purchased_electricity', activityData: rf(80000, 120000), activityUnit: 'kWh', emissionFactor: 0.4589, co2Equivalent: rf(36000, 55000), period: periodStr, reportingYear: mo.getFullYear(), dataSource: 'SENSOR' as any, isVerified: i < 4, reportId: null },
       ];
     }).flat();
-    await prisma.emissionsData.createMany({ data: emData, skipDuplicates: true });
+    await (prisma as any).emissionsData.createMany({ data: emData, skipDuplicates: true });
     stats.emissionsData = emData.length;
   }
 

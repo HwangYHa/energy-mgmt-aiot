@@ -10,7 +10,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import useSWR from 'swr';
 import { EnergyBarChart, EnergyLineChart } from '@/components/dashboard';
 import { DashboardPanel } from '@/components/dashboard';
-import { Loader2, AlertCircle, RefreshCw, FileText, Settings, Radio, Zap } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, FileText, Settings, Radio, Zap, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useRealtime, useRealtimeAggregates } from '@/hooks/use-realtime';
@@ -55,6 +55,17 @@ interface DashboardStats {
   };
   meta?: { hasInvoiceData?: boolean };
   dataSource?: 'db' | 'simulation';
+}
+
+interface RoiData {
+  monthlySavings: number;
+  annualSavings: number;
+  subscriptionCost: number;
+  roiMultiple: number;
+  roiPercent: number;
+  paybackMonths: number;
+  planTier: string;
+  dataMonths: number;
 }
 
 // ─────────────────────────────────────────────────────
@@ -318,6 +329,12 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
     '/api/dashboard/stats', fetcher,
     { fallbackData: initialData ?? undefined, refreshInterval: refreshIntervalSec * 1000,
       revalidateOnFocus: true, keepPreviousData: true, dedupingInterval: 5_000 }
+  );
+
+  const { data: roiData } = useSWR<RoiData | null>(
+    '/api/analytics/roi',
+    (url: string) => apiGet<RoiData>(url).then(r => r.data ?? null),
+    { refreshInterval: 300_000, revalidateOnFocus: false, dedupingInterval: 60_000 }
   );
 
   const { status: sseStatus, isConnected: sseConnected } = useRealtime();
@@ -658,6 +675,38 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
                 showLegend={false}
               />
             </DashboardPanel>
+
+            {/* ROI 패널 — 에너지 절감 투자 회수 요약 */}
+            {roiData && roiData.monthlySavings > 0 && (
+              <DashboardPanel title="절감 ROI" variant="glow"
+                className="col-span-2 lg:col-span-1 flex-shrink-0">
+                <div className="pt-0.5 pb-1 px-1">
+                  <div className="flex items-center gap-1 mb-2">
+                    <TrendingUp className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                    <span className="text-[9px] text-slate-500 font-mono uppercase tracking-widest">
+                      월 절감액 / 구독비 기준
+                    </span>
+                  </div>
+                  <MetricRow label="월 절감 효과"
+                    value={formatCurrency(roiData.monthlySavings)}
+                    colorClass="text-emerald-400" />
+                  <MetricRow label="연간 절감 예상"
+                    value={formatCurrency(roiData.annualSavings)}
+                    colorClass="text-emerald-300" />
+                  <MetricRow label="구독료 대비"
+                    value={`${roiData.roiMultiple}× 절감`}
+                    colorClass={roiData.roiMultiple >= 2 ? 'text-cyan-400' : 'text-amber-400'} />
+                  <MetricRow label="ROI"
+                    value={`+${roiData.roiPercent.toFixed(0)}%`}
+                    colorClass="text-purple-300" />
+                  {roiData.paybackMonths <= 3 && (
+                    <MetricRow label="회수 기간"
+                      value={`${roiData.paybackMonths}개월`}
+                      colorClass="text-cyan-400" />
+                  )}
+                </div>
+              </DashboardPanel>
+            )}
 
             {/* 실시간 현황 — 데스크탑에서만 여기에 표시 (모바일은 중앙 컬럼에 표시) */}
             <DashboardPanel title="실시간 현황" variant="glow"

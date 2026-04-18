@@ -276,7 +276,7 @@ export async function recalculatePeriod(opts: RecalcOptions): Promise<RecalcResu
         isArchived:     true,
         archivedAt:     now,
         archivedBy:     requestedBy,
-        archive_reason: reason,
+        archivedReason: reason,
       },
     });
 
