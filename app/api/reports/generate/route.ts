@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
     // 리포트 DB 저장
     const report = await prisma.report.create({
       data: {
+        id: crypto.randomUUID(),
         tenantId: auth.tenantId,
         type,
         period,
