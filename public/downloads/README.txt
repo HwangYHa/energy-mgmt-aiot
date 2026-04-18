@@ -10,35 +10,40 @@ Served as: /downloads/TansoEum-Collector.exe
 BUILD INSTRUCTIONS
 ------------------
 
-IMPORTANT: Do NOT use --onefile. It extracts to %TEMP% at runtime and
-Windows Defender frequently blocks the extracted Python DLLs, causing
-"Failed to start embedded python interpreter!" errors.
+Use the spec file (--onefile with stable runtime_tmpdir):
 
-Recommended build (--onedir):
   cd collector
   pip install pyinstaller
-  pyinstaller --onedir --windowed --name TansoEum-Collector src/main.py
+  pyinstaller TansoEum-Collector.spec
 
-  Output: dist/TansoEum-Collector/ (folder with EXE + DLLs)
-  Zip the folder and distribute.
+  Output: dist\TansoEum-Collector.exe  (single file)
+  Copy to: public/downloads/TansoEum-Collector.exe
 
-If you must use --onefile, set a stable temp dir:
-  pyinstaller --onefile --windowed --runtime-tmpdir "C:\EmsCollector\tmp" ^
-    --name TansoEum-Collector src/main.py
-
-If using GUI framework (tkinter/wx), keep --windowed.
-For a headless Windows service, use --console to see startup errors.
+The spec sets runtime_tmpdir to C:\TansoEum\runtime to avoid
+Windows Defender blocking extraction from %TEMP%.
 
 
-TROUBLESHOOTING "Failed to start embedded python interpreter!"
---------------------------------------------------------------
-1. Install VC++ 2019 Redistributable (x64) on the target machine:
-   https://aka.ms/vs/17/release/vc_redist.x64.exe
+USER INSTALLATION GUIDE
+------------------------
 
-2. Check Windows Defender exclusion:
-   Add C:\EmsCollector\ to antivirus exclusions before running EXE.
+1. Download TansoEum-Collector.exe and config.yaml
+2. Place BOTH files in C:\TansoEum\ folder
+3. Add C:\TansoEum\ to antivirus exclusion list
+   (Windows Security → Virus & threat protection →
+    Exclusions → Add an exclusion → Folder → C:\TansoEum\)
+4. Run TansoEum-Collector.exe
 
-3. Run from CMD first (even if built --windowed) to see error output:
-   C:\EmsCollector\TansoEum-Collector.exe
 
-4. Switch to --onedir build (most reliable on Windows).
+TROUBLESHOOTING
+---------------
+
+"Failed to load Python DLL ... python313.dll"
+  → The EXE was built with --onedir but _internal folder is missing.
+  → Rebuild using TansoEum-Collector.spec (--onefile).
+
+"Failed to start embedded python interpreter!"
+  → Windows Defender blocked extraction.
+  → Add C:\TansoEum\ to antivirus exclusions and retry.
+
+VC++ Runtime error:
+  → Install: https://aka.ms/vs/17/release/vc_redist.x64.exe

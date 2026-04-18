@@ -124,9 +124,13 @@ export default function CollectorDownloadModal({ gateway, onClose }: Props) {
               </button>
             </div>
             <div className="mt-3 bg-slate-900/60 rounded-lg px-3 py-2 text-xs text-slate-400 space-y-0.5">
-              <div><span className="text-slate-500">1. </span>TansoEum-Collector.exe 다운로드</div>
-              <div><span className="text-slate-500">2. </span>config.yaml 다운로드 → EXE와 같은 폴더에 배치</div>
+              <div><span className="text-slate-500">1. </span>EXE와 config.yaml을 <span className="text-white font-mono">C:\TansoEum\</span> 폴더에 배치</div>
+              <div><span className="text-slate-500">2. </span>백신 소프트웨어에서 <span className="text-white font-mono">C:\TansoEum\</span> 폴더를 검사 제외 설정</div>
               <div><span className="text-slate-500">3. </span>TansoEum-Collector.exe 실행</div>
+            </div>
+            <div className="mt-2 flex items-start gap-1.5 text-xs text-amber-400/80">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>Windows Defender 오탐 방지: <span className="font-mono">C:\TansoEum\</span> 폴더를 바이러스 검사 제외 목록에 추가하세요.</span>
             </div>
           </div>
 
