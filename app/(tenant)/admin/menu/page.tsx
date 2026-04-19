@@ -8,15 +8,16 @@ import {
   FolderPlus, RotateCcw,
   // Icon registry (used in picker)
   LayoutDashboard, Activity, Boxes, Monitor, Database,
-  Zap, BarChart2, LineChart, PieChart, TrendingUp,
+  Zap, BarChart2, BarChart3, LineChart, PieChart, TrendingUp,
   Building2, Factory, MapPin, Cpu, Radio,
-  Users, UserCheck, Bell, FileText, Download,
+  Users, User, UserCheck, Bell, FileText, FileBarChart, Download,
   Wrench, Sliders, Key, Lock, Globe,
   Leaf, Recycle, Wind, Sun, Battery,
   ShieldCheck, AlertTriangle, Info, HelpCircle, MessageSquare,
   Wallet, CreditCard, Receipt, Package, Archive,
   Network, Server, Wifi, Link, Share2,
   ClipboardList, Calendar, Clock, Search, Filter,
+  Brain, DollarSign, Calculator, Target, FlaskConical, Table2,
 } from 'lucide-react';
 import { apiGet, apiPost } from '@/lib/api/client';
 import { toast } from '@/lib/toast';
@@ -75,10 +76,15 @@ const ICON_REGISTRY: IconDef[] = [
   // 대시보드/분석
   { name: 'LayoutDashboard', label: '대시보드',    component: LayoutDashboard, category: '대시보드/분석' },
   { name: 'Activity',        label: '활동/현황',   component: Activity,        category: '대시보드/분석' },
-  { name: 'BarChart2',       label: '막대 차트',   component: BarChart2,       category: '대시보드/분석' },
+  { name: 'BarChart2',       label: '막대 차트2',  component: BarChart2,       category: '대시보드/분석' },
+  { name: 'BarChart3',       label: '막대 차트3',  component: BarChart3,       category: '대시보드/분석' },
   { name: 'LineChart',       label: '라인 차트',   component: LineChart,       category: '대시보드/분석' },
   { name: 'PieChart',        label: '원형 차트',   component: PieChart,        category: '대시보드/분석' },
   { name: 'TrendingUp',      label: '추이/트렌드', component: TrendingUp,      category: '대시보드/분석' },
+  { name: 'DollarSign',      label: '비용/달러',   component: DollarSign,      category: '대시보드/분석' },
+  { name: 'Calculator',      label: '계산기',      component: Calculator,      category: '대시보드/분석' },
+  { name: 'Target',          label: '목표/타겟',   component: Target,          category: '대시보드/분석' },
+  { name: 'Brain',           label: 'AI/브레인',   component: Brain,           category: '대시보드/분석' },
   // 에너지/설비
   { name: 'Zap',             label: '전력/에너지', component: Zap,             category: '에너지/설비' },
   { name: 'Battery',         label: '배터리/ESS',  component: Battery,         category: '에너지/설비' },
@@ -106,19 +112,24 @@ const ICON_REGISTRY: IconDef[] = [
   { name: 'Recycle',         label: '재활용',      component: Recycle,         category: '탄소/환경' },
   { name: 'Globe',           label: '글로벌',      component: Globe,           category: '탄소/환경' },
   // 관리/설정
-  { name: 'Users',           label: '사용자',      component: Users,           category: '관리/설정' },
+  { name: 'Users',           label: '사용자(복수)', component: Users,          category: '관리/설정' },
+  { name: 'User',            label: '사용자(단수)', component: User,           category: '관리/설정' },
   { name: 'UserCheck',       label: '사용자 승인', component: UserCheck,       category: '관리/설정' },
   { name: 'Settings',        label: '설정',        component: Settings,        category: '관리/설정' },
   { name: 'Key',             label: 'API 키',      component: Key,             category: '관리/설정' },
   { name: 'Lock',            label: '보안/잠금',   component: Lock,            category: '관리/설정' },
+  { name: 'Shield',          label: '보안/방패',   component: Shield,          category: '관리/설정' },
   { name: 'ShieldCheck',     label: '보안 인증',   component: ShieldCheck,     category: '관리/설정' },
+  { name: 'FlaskConical',    label: '실험/샌드박스', component: FlaskConical,  category: '관리/설정' },
   { name: 'LayoutGrid',      label: '메뉴/그리드', component: LayoutGrid,      category: '관리/설정' },
   // 알림/보고
   { name: 'Bell',            label: '알림',        component: Bell,            category: '알림/보고' },
   { name: 'AlertTriangle',   label: '경고',        component: AlertTriangle,   category: '알림/보고' },
   { name: 'FileText',        label: '보고서',      component: FileText,        category: '알림/보고' },
+  { name: 'FileBarChart',    label: '차트 보고서', component: FileBarChart,    category: '알림/보고' },
   { name: 'ClipboardList',   label: '목록/감사',   component: ClipboardList,   category: '알림/보고' },
   { name: 'Download',        label: '다운로드',    component: Download,        category: '알림/보고' },
+  { name: 'Table2',          label: '테이블/원시', component: Table2,          category: '알림/보고' },
   // 결제/구독
   { name: 'Wallet',          label: '지갑/결제',   component: Wallet,          category: '결제/구독' },
   { name: 'CreditCard',      label: '신용카드',    component: CreditCard,      category: '결제/구독' },

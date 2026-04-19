@@ -55,8 +55,8 @@ const PATH_REQUIRED_PLAN: Record<string, SidebarPlanTier> = {
 
 const PLAN_DISPLAY_NAMES: Record<SidebarPlanTier, string> = {
   trial:      'Starter',
-  basic:      'Basic',
-  pro:        'Professional',
+  basic:      'Starter',
+  pro:        'Business',
   enterprise: 'Enterprise',
 };
 
