@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
       include: { plan: true },
     });
 
-    if (subscription?.plan.maxUsers) {
+    if (subscription?.plan?.maxUsers) {
       const currentUserCount = await prisma.user.count({
         where: {
           tenantId: auth.tenantId,
@@ -194,7 +194,7 @@ export async function POST(request: NextRequest) {
 
       if (currentUserCount >= subscription.plan.maxUsers) {
         return NextResponse.json(
-          { error: 'User limit reached. Please upgrade your plan.' },
+          { error: '플랜 사용자 한도에 도달했습니다. 플랜을 업그레이드하세요.' },
           { status: 403 }
         );
       }

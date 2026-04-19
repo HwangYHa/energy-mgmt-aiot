@@ -75,7 +75,7 @@ const TIER_COLORS: Record<string, string> = {
   trial: '#64748b', basic: '#3b82f6', pro: '#8b5cf6', enterprise: '#10b981',
 };
 const TIER_KO: Record<string, string> = {
-  trial: '체험판', basic: '기본', pro: '프로', enterprise: '엔터프라이즈',
+  trial: '체험판', basic: 'Starter', pro: 'Business', enterprise: '엔터프라이즈',
 };
 const STATUS_KO: Record<string, string> = {
   draft: '초안', sent: '발송됨', paid: '결제완료', cancelled: '취소', overdue: '연체',
@@ -95,6 +95,7 @@ export default function ERPDashboardPage() {
   const [period, setPeriod]     = useState(new Date().toISOString().slice(0, 7));
   const [loading, setLoading]   = useState(true);
   const [data, setData]         = useState<any>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [toast, setToast]       = useState<{ msg: string; ok: boolean } | null>(null);
   const fetchIdRef = useRef(0);
 
@@ -107,12 +108,15 @@ export default function ERPDashboardPage() {
     const fetchId = ++fetchIdRef.current;
     setLoading(true);
     setData(null);
+    setFetchError(null);
     try {
       const res = await apiGet<any>(`/api/admin/erp?period=${period}&module=${activeModule}`);
       if (fetchId !== fetchIdRef.current) return; // stale response 무시
       setData(res.data ?? null);
-    } catch {
+    } catch (e: any) {
       if (fetchId !== fetchIdRef.current) return;
+      const msg = e?.message ?? '데이터를 불러오지 못했습니다.';
+      setFetchError(msg);
       showToast('데이터 로드 실패', false);
     } finally {
       if (fetchId === fetchIdRef.current) setLoading(false);
@@ -188,6 +192,23 @@ export default function ERPDashboardPage() {
         {loading ? (
           <div className="flex items-center justify-center h-64 text-gray-500">
             <RefreshCw className="w-6 h-6 animate-spin mr-3" />로딩 중...
+          </div>
+        ) : fetchError ? (
+          <div className="flex flex-col items-center justify-center h-64 gap-4">
+            <div className="p-3 bg-red-900/20 rounded-full">
+              <Activity className="w-8 h-8 text-red-400" />
+            </div>
+            <div className="text-center">
+              <p className="text-red-400 font-medium">데이터 로드 실패</p>
+              <p className="text-gray-500 text-sm mt-1">{fetchError}</p>
+            </div>
+            <button
+              onClick={fetchData}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" />
+              다시 시도
+            </button>
           </div>
         ) : !data ? (
           <div className="flex items-center justify-center h-64 text-gray-500">데이터 없음</div>
