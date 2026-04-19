@@ -146,13 +146,14 @@ export default function CollectorDownloadModal({ gateway, onClose }: Props) {
               </button>
             </div>
             <div className="mt-3 bg-slate-900/60 rounded-lg px-3 py-2 text-xs text-slate-400 space-y-0.5">
-              <div><span className="text-slate-500">1. </span>EXE와 config.yaml을 <span className="text-white font-mono">C:\TansoEum\</span> 폴더에 배치</div>
-              <div><span className="text-slate-500">2. </span>백신 소프트웨어에서 <span className="text-white font-mono">C:\TansoEum\</span> 폴더를 검사 제외 설정</div>
-              <div><span className="text-slate-500">3. </span>TansoEum-Collector.exe 실행</div>
+              <div><span className="text-slate-500">1. </span><span className="text-white font-mono">C:\TansoEum\</span> 폴더를 먼저 생성 (없으면 DLL 오류 발생)</div>
+              <div><span className="text-slate-500">2. </span>EXE와 config.yaml을 <span className="text-white font-mono">C:\TansoEum\</span> 폴더에 복사</div>
+              <div><span className="text-slate-500">3. </span>백신에서 <span className="text-white font-mono">C:\TansoEum\</span> 폴더를 검사 제외 설정 <span className="text-amber-400">(필수)</span></div>
+              <div><span className="text-slate-500">4. </span><span className="text-white font-mono">C:\TansoEum\</span>에서 TansoEum-Collector.exe 실행</div>
             </div>
-            <div className="mt-2 flex items-start gap-1.5 text-xs text-amber-400/80">
+            <div className="mt-2 flex items-start gap-1.5 text-xs text-red-400/90">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              <span>Windows Defender 오탐 방지: <span className="font-mono">C:\TansoEum\</span> 폴더를 바이러스 검사 제외 목록에 추가하세요.</span>
+              <span><span className="font-semibold">다운로드 폴더에서 바로 실행 금지.</span> 반드시 <span className="font-mono">C:\TansoEum\</span> 폴더로 복사 후 실행하세요. 그렇지 않으면 &quot;Python DLL을 로드하지 못했습니다&quot; 오류가 발생합니다.</span>
             </div>
           </div>
 
