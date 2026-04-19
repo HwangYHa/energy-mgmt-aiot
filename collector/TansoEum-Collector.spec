@@ -121,7 +121,8 @@ exe = EXE(
     strip=False,
     upx=True,
     upx_exclude=['python313.dll', 'tcl*.dll', 'tk*.dll'],  # UPX 압축 제외 (안정성)
-    runtime_tmpdir=None,   # %TEMP%\_MEIxxxxxx 사용 — C:\TansoEum\runtime 미존재 시 오류 방지
+    runtime_tmpdir='C:\\TansoEum\\runtime',  # AV 제외 경로에 추출 — %TEMP% 추출 시 Defender 차단 방지
+    # 주의: C:\TansoEum\ 폴더가 존재해야 하고 Windows Defender 제외 목록에 있어야 함
     console=False,         # 윈도우 모드 (콘솔 창 없음)
     disable_windowed_traceback=False,
     argv_emulation=False,

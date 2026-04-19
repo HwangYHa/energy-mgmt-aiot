@@ -44,6 +44,7 @@ interface LocalGroup {
   minRole: string;
   sortOrder: number;
   section: string;
+  enabled: boolean;
   items: LocalItem[];
 }
 
@@ -357,9 +358,11 @@ export default function MenuManagementPage() {
   const fetchMenus = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await apiGet<LocalGroup[]>('/api/menus?all=true');
+      const res = await apiGet<Array<LocalGroup & { isActive?: boolean }>>('/api/menus?all=true');
       if (res.success && res.data) {
-        setLocalGroups(res.data);
+        // isActive → enabled 매핑 (그룹)
+        const mapped = res.data.map(g => ({ ...g, enabled: g.isActive ?? true }));
+        setLocalGroups(mapped);
         setExpandedGroups(new Set(res.data.map(g => g.id)));
         setDeletedGroupIds([]);
         setDeletedItemIds([]);
@@ -383,7 +386,7 @@ export default function MenuManagementPage() {
     updateGroups(g => [...g, {
       id, code: createGroupForm.code.trim(), label: createGroupForm.label.trim(),
       icon: createGroupForm.icon || 'LayoutGrid', minRole: createGroupForm.minRole,
-      sortOrder: g.length * 10, section: 'general', items: [],
+      sortOrder: g.length * 10, section: 'general', enabled: true, items: [],
     }]);
     setExpandedGroups(p => new Set([...p, id]));
     setShowCreateGroup(false);
@@ -439,6 +442,10 @@ export default function MenuManagementPage() {
         : i)
     })));
     setEditItemId(null);
+  };
+
+  const toggleGroupEnabled = (groupId: string) => {
+    updateGroups(g => g.map(grp => grp.id === groupId ? { ...grp, enabled: !grp.enabled } : grp));
   };
 
   const toggleEnabled = (groupId: string, itemId: string) => {
@@ -544,6 +551,7 @@ export default function MenuManagementPage() {
       icon:      g.icon,
       minRole:   g.minRole,
       sortOrder: gi * 10,
+      enabled:   g.enabled,
       items:     g.items.map((item, ii) => ({
         id:        item.id,
         code:      item.code,
@@ -624,7 +632,7 @@ export default function MenuManagementPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
           <div className="text-sm text-slate-400">메뉴 그룹</div>
           <div className="text-2xl font-bold text-white mt-1">{localGroups.length}</div>
@@ -632,6 +640,10 @@ export default function MenuManagementPage() {
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
           <div className="text-sm text-slate-400">전체 항목</div>
           <div className="text-2xl font-bold text-white mt-1">{localGroups.reduce((s, g) => s + g.items.length, 0)}</div>
+        </div>
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+          <div className="text-sm text-slate-400">비활성 그룹</div>
+          <div className="text-2xl font-bold text-orange-400 mt-1">{localGroups.filter(g => !g.enabled).length}</div>
         </div>
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
           <div className="text-sm text-slate-400">비활성 항목</div>
@@ -652,9 +664,11 @@ export default function MenuManagementPage() {
               onDragOver={e => handleGroupDragOver(e, group.id)}
               onDrop={e => handleGroupDrop(e, group, gi)}
               onDragEnd={handleDragEnd}
-              className={`bg-slate-800/50 border rounded-xl overflow-hidden transition-all ${
+              className={`border rounded-xl overflow-hidden transition-all ${
                 isDragOver ? 'border-cyan-400 shadow-lg shadow-cyan-400/10' : 'border-slate-700/50'
-              } ${isNew ? 'border-l-2 border-l-purple-500' : ''}`}
+              } ${isNew ? 'border-l-2 border-l-purple-500' : ''} ${
+                group.enabled ? 'bg-slate-800/50' : 'bg-slate-900/60 opacity-60'
+              }`}
             >
               {/* Group Header */}
               {editGroupId === group.id ? (
@@ -705,6 +719,19 @@ export default function MenuManagementPage() {
                     <button onClick={() => setCreateItemForGroup(group.id)}
                       className="flex items-center gap-1 px-2 py-1 text-xs text-cyan-400 hover:bg-cyan-500/10 rounded transition">
                       <Plus className="w-3.5 h-3.5" />항목
+                    </button>
+                    {/* 그룹 활성/비활성 토글 */}
+                    <button
+                      onClick={() => toggleGroupEnabled(group.id)}
+                      title={group.enabled ? '그룹 비활성화' : '그룹 활성화'}
+                      className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition font-medium ${
+                        group.enabled
+                          ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
+                          : 'text-slate-500 bg-slate-700/50 hover:bg-slate-700'
+                      }`}
+                    >
+                      {group.enabled ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                      {group.enabled ? '활성' : '비활성'}
                     </button>
                     <button onClick={() => { setEditGroupId(group.id); setEditGroupForm({ label: group.label, icon: group.icon, minRole: group.minRole }); }}
                       className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded transition">
@@ -783,9 +810,17 @@ export default function MenuManagementPage() {
                                 title="클릭하여 역할 변경">
                                 <Shield className="w-3 h-3" />{ROLE_LABELS[item.minRole]}
                               </button>
-                              <button onClick={() => toggleEnabled(group.id, item.id)}
-                                className={`p-1.5 rounded transition ${item.enabled ? 'text-emerald-400 hover:bg-emerald-500/10' : 'text-slate-600 hover:bg-slate-700/50'}`}>
-                                {item.enabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                              <button
+                                onClick={() => toggleEnabled(group.id, item.id)}
+                                title={item.enabled ? '비활성화' : '활성화'}
+                                className={`flex items-center gap-1 px-1.5 py-1 text-[11px] rounded transition font-medium ${
+                                  item.enabled
+                                    ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
+                                    : 'text-slate-500 bg-slate-700/50 hover:bg-slate-700'
+                                }`}
+                              >
+                                {item.enabled ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                                {item.enabled ? '활성' : '비활성'}
                               </button>
                               <div className="flex items-center gap-0.5">
                                 <span className="text-xs text-slate-600">#</span>

@@ -36,6 +36,7 @@ const groupSchema = z.object({
   icon:     z.string().max(50).default('LayoutGrid'),
   minRole:  z.enum(VALID_ROLES).default('viewer'),
   sortOrder:z.number().int().min(0).max(9999).default(0),
+  enabled:  z.boolean().default(true),
   items:    z.array(itemSchema).default([]),
 });
 
@@ -120,6 +121,7 @@ export async function POST(request: NextRequest) {
               icon:         group.icon,
               minRole:      group.minRole as any,
               displayOrder: group.sortOrder,
+              isActive:     group.enabled,
             },
           });
           realGroupId = group.id;
