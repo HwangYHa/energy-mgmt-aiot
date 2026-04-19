@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import {
   TrendingUp, DollarSign, Zap, Award, RefreshCw, Loader2,
-  ArrowUpRight, ArrowDownRight, Clock, PieChart,
+  Clock, PieChart,
 } from 'lucide-react';
 import { apiGet, ApiError } from '@/lib/api/client';
 
@@ -43,11 +43,6 @@ function fmt(n: number) {
   return String(n);
 }
 
-function fmtWon(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}백만원`;
-  return `${n.toLocaleString()}원`;
-}
-
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
@@ -72,8 +67,8 @@ export default function RoiPage() {
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const res = await apiGet<{ data: RoiData }>('/api/analytics/roi');
-      setData(res.data);
+      const res = await apiGet<RoiData>('/api/analytics/roi');
+      setData(res.data ?? null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '데이터를 불러오지 못했습니다.');
     } finally {
