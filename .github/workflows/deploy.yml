@@ -200,20 +200,30 @@ jobs:
                 --env-file .env.production \
                 up -d --no-deps --pull never "${service}"
 
-              # 헬스체크 (최대 2분 대기)
-              for i in $(seq 1 24); do
-                container=$(docker compose -f docker-compose.prod.yml ps -q "${service}" | head -1)
+              # 헬스체크 (최대 4분 대기: start_period=60s + interval=30s×3 여유)
+              for i in $(seq 1 48); do
+                container=$(docker compose -f docker-compose.prod.yml \
+                  --env-file .env.production ps -q "${service}" 2>/dev/null | head -1)
                 if [ -n "${container}" ]; then
                   health=$(docker inspect --format='{{.State.Health.Status}}' "${container}" 2>/dev/null || echo "none")
                   if [ "${health}" = "healthy" ]; then
                     echo "✅ ${service} healthy"
                     return 0
                   fi
+                  # 확정 실패 시 빠른 종료 (3회 재시도 소진)
+                  if [ "${health}" = "unhealthy" ]; then
+                    echo "❌ ${service} unhealthy — 컨테이너 로그:"
+                    docker logs "${container}" --tail 50 2>&1 || true
+                    return 1
+                  fi
                 fi
-                echo "⏳ ${service} 헬스체크 대기 중... (${i}/24)"
+                echo "⏳ ${service} 헬스체크 대기 중... (${i}/48, status=${health:-unknown})"
                 sleep 5
               done
-              echo "❌ ${service} 헬스체크 실패"
+              echo "❌ ${service} 헬스체크 타임아웃 — 컨테이너 로그:"
+              container=$(docker compose -f docker-compose.prod.yml \
+                --env-file .env.production ps -q "${service}" 2>/dev/null | head -1)
+              [ -n "${container}" ] && docker logs "${container}" --tail 50 2>&1 || true
               return 1
             }
 
