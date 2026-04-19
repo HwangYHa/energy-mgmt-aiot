@@ -20,7 +20,7 @@ const VALID_ROLES = ['viewer', 'operator', 'site_manager', 'tenant_admin', 'supe
 
 const itemSchema = z.object({
   id:       z.string().min(1),
-  code:     z.string().min(1).max(50).regex(/^[a-z0-9_-]+$/).optional(),
+  code:     z.string().min(1).max(100).optional(),
   name:     z.string().min(1).max(100),
   path:     z.string().max(200).default(''),
   icon:     z.string().max(50).default('Circle'),
@@ -31,7 +31,7 @@ const itemSchema = z.object({
 
 const groupSchema = z.object({
   id:       z.string().min(1),
-  code:     z.string().min(1).max(50).regex(/^[a-z0-9_-]+$/).optional(),
+  code:     z.string().min(1).max(100).optional(),
   name:     z.string().min(1).max(100),
   icon:     z.string().max(50).default('LayoutGrid'),
   minRole:  z.enum(VALID_ROLES).default('viewer'),

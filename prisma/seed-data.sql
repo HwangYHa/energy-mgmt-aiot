@@ -13,7 +13,7 @@ DELETE FROM menu_item WHERE code NOT IN (
   'analytics_energy','analytics_cost','analytics_carbon','analytics_anomaly',
   'analytics_forecast','analytics_simulator','analytics_templates','analytics_reports',
   'analytics_raw_data','analytics_download','analytics_carbon_trading',
-  'analytics_carbon_market_prices','analytics_carbon_roadmap',
+  'analytics_carbon_market_prices','analytics_carbon_roadmap','analytics_benchmark',
   'control_manual','control_schedule','control_optimization','control_dr',
   'management_sites','management_users','management_subscription',
   'control_devices','control_gateways','management_asset',
@@ -152,6 +152,7 @@ REPLACE INTO `menu_item` VALUES ('a231dc28-8883-4c59-b46b-528c150bad8e','control
 REPLACE INTO `menu_item` VALUES ('afab279d-595e-4268-8020-75bbe50d14aa','management_users','사용자 관리','Users','/admin/users',NULL,'fe16dbf0-4c9b-4671-be24-0e98eab417b3',NULL,2,1,'tenant_admin',NULL,1,NULL,NULL,1,1,'none',NULL,NULL,NULL,'2026-02-03 12:57:38.157','2026-03-02 12:35:36.731');
 REPLACE INTO `menu_item` VALUES ('c5c80786-c00b-4f6a-95f7-5400075b4724','analytics_cost','비용 분석','DollarSign','/analytics/cost',NULL,'32d92193-8825-4849-a8c0-db49084841d8',NULL,2,1,'viewer',NULL,1,NULL,NULL,1,1,'none',NULL,NULL,NULL,'2026-02-18 11:42:33.213','2026-03-02 12:35:36.679');
 REPLACE INTO `menu_item` VALUES ('c9941463-bfc5-4eef-ab74-45249e037220','analytics_carbon_roadmap','탄소중립 로드맵','Target','/analytics/carbon/roadmap',NULL,'32d92193-8825-4849-a8c0-db49084841d8',NULL,13,1,'viewer',NULL,1,NULL,NULL,1,1,'none',NULL,NULL,NULL,'2026-02-19 18:03:02.529','2026-03-13 13:56:49.217');
+REPLACE INTO `menu_item` VALUES ('a1b2c3d4-e5f6-7890-abcd-ef1234567890','analytics_benchmark','에너지 벤치마킹','BarChart2','/analytics/benchmark',NULL,'32d92193-8825-4849-a8c0-db49084841d8',NULL,14,1,'viewer',NULL,1,NULL,NULL,1,1,'none',NULL,NULL,NULL,'2026-04-18 00:00:00.000','2026-04-18 00:00:00.000');
 REPLACE INTO `menu_item` VALUES ('cbafcca6-ae4a-4e48-b260-961441885c6d','settings_api','API 키 관리','Key','/settings/api',NULL,'681824da-1be5-4127-a526-fc7bded543cf',NULL,3,1,'tenant_admin',NULL,1,NULL,NULL,1,1,'none',NULL,NULL,NULL,'2026-02-18 11:42:33.234','2026-03-02 12:35:36.744');
 REPLACE INTO `menu_item` VALUES ('cf5ad102-8361-48da-83cb-7237a1233d40','monitoring_overview','종합 모니터링','Monitor','/monitoring',NULL,'6562c499-5a2d-4eec-a49c-d384a651d972',NULL,1,1,'viewer',NULL,1,NULL,NULL,1,1,'none',NULL,NULL,NULL,'2026-02-18 11:42:33.209','2026-03-02 12:35:36.668');
 REPLACE INTO `menu_item` VALUES ('d2a884e5-3716-48e1-9080-d4d4d8944332','settings_manual','매뉴얼','FileText','/manual',NULL,'681824da-1be5-4127-a526-fc7bded543cf',NULL,6,1,'viewer',NULL,1,NULL,NULL,1,0,'none',NULL,NULL,NULL,'2026-02-24 03:08:47.660','2026-03-02 12:35:36.749');

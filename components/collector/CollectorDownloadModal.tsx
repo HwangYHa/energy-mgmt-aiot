@@ -5,6 +5,8 @@
  *
  * 사용:
  *   <CollectorDownloadModal gateway={gw} onClose={() => setGw(null)} />
+ *   <CollectorDownloadModal gateway={null} onClose={() => setShow(false)} />
+ *     → gateway=null 이면 EXE만 다운로드 가능, 설정파일은 게이트웨이 등록 후 이용
  *
  * API: GET /api/gateways/{id}/installer-config?type=windows|docker|linux
  *   → 인증 토큰 포함 config.yaml / docker-compose.yml / install.sh 반환
@@ -13,7 +15,7 @@
 import { useState } from 'react';
 import {
   Download, Monitor, Container, Terminal,
-  X, Copy, Check, AlertTriangle, Loader2,
+  X, Copy, Check, AlertTriangle, Loader2, Info,
 } from 'lucide-react';
 import { toast } from '@/lib/toast';
 
@@ -24,7 +26,7 @@ export interface CollectorGateway {
 }
 
 interface Props {
-  gateway: CollectorGateway;
+  gateway: CollectorGateway | null;
   onClose: () => void;
 }
 
@@ -32,9 +34,13 @@ export default function CollectorDownloadModal({ gateway, onClose }: Props) {
   const [downloading, setDownloading] = useState<string | null>(null);
   const [copied, setCopied]           = useState(false);
 
-  const gwName = gateway.name ?? gateway.serialNumber;
+  const gwName = gateway ? (gateway.name ?? gateway.serialNumber) : null;
 
   const handleDownload = async (type: 'windows' | 'docker' | 'linux') => {
+    if (!gateway) {
+      toast.error('게이트웨이를 먼저 등록하세요.');
+      return;
+    }
     setDownloading(type);
     try {
       const res = await fetch(`/api/gateways/${gateway.id}/installer-config?type=${type}`);
@@ -57,11 +63,12 @@ export default function CollectorDownloadModal({ gateway, onClose }: Props) {
     }
   };
 
-  const linuxOneLiner = typeof window !== 'undefined'
+  const linuxOneLiner = gateway && typeof window !== 'undefined'
     ? `curl -sSL "${window.location.origin}/api/gateways/${gateway.id}/installer-config?type=linux" | bash`
     : '';
 
   const copyOneLiner = () => {
+    if (!linuxOneLiner) return;
     navigator.clipboard.writeText(linuxOneLiner);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -77,12 +84,26 @@ export default function CollectorDownloadModal({ gateway, onClose }: Props) {
               <Download className="w-5 h-5 text-cyan-400" />
               수집기 다운로드
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">{gwName} · {gateway.id}</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {gwName ? `${gwName} · ${gateway!.id}` : '게이트웨이 미등록 — EXE만 먼저 다운로드 가능'}
+            </p>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700 transition">
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* 게이트웨이 미등록 안내 배너 */}
+        {!gateway && (
+          <div className="mx-6 mt-4 flex items-start gap-2.5 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+            <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div className="text-xs text-amber-300">
+              <span className="font-semibold">등록된 게이트웨이가 없습니다.</span><br />
+              수집기 EXE는 지금 바로 다운로드할 수 있습니다. 설정 파일(config.yaml)과 Docker 설치는
+              게이트웨이를 먼저 등록하신 후 이용하세요.
+            </div>
+          </div>
+        )}
 
         {/* 바디 */}
         <div className="px-6 py-5 space-y-3">
@@ -114,8 +135,9 @@ export default function CollectorDownloadModal({ gateway, onClose }: Props) {
               </a>
               <button
                 onClick={() => handleDownload('windows')}
-                disabled={!!downloading}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded-lg font-medium transition disabled:opacity-50"
+                disabled={!!downloading || !gateway}
+                title={!gateway ? '게이트웨이 등록 후 이용 가능' : undefined}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs rounded-lg font-medium transition"
               >
                 {downloading === 'windows'
                   ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -135,7 +157,7 @@ export default function CollectorDownloadModal({ gateway, onClose }: Props) {
           </div>
 
           {/* Docker */}
-          <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+          <div className={`bg-slate-800/60 border rounded-xl p-4 ${!gateway ? 'border-slate-700/40 opacity-60' : 'border-slate-700'}`}>
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-cyan-500/10 rounded-lg">
@@ -144,14 +166,17 @@ export default function CollectorDownloadModal({ gateway, onClose }: Props) {
                 <div>
                   <div className="text-sm font-medium text-white">Docker (Linux 서버)</div>
                   <div className="text-xs text-slate-400 mt-0.5">
-                    docker-compose.yml 다운로드 → docker compose up -d
+                    {!gateway
+                      ? '게이트웨이 등록 후 이용 가능'
+                      : 'docker-compose.yml 다운로드 → docker compose up -d'}
                   </div>
                 </div>
               </div>
               <button
                 onClick={() => handleDownload('docker')}
-                disabled={!!downloading}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs rounded-lg font-medium transition disabled:opacity-50"
+                disabled={!!downloading || !gateway}
+                title={!gateway ? '게이트웨이 등록 후 이용 가능' : undefined}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs rounded-lg font-medium transition"
               >
                 {downloading === 'docker'
                   ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -159,13 +184,15 @@ export default function CollectorDownloadModal({ gateway, onClose }: Props) {
                 compose.yml
               </button>
             </div>
-            <div className="mt-3 bg-slate-900/60 rounded-lg px-3 py-2 font-mono text-xs text-emerald-400">
-              docker compose up -d
-            </div>
+            {gateway && (
+              <div className="mt-3 bg-slate-900/60 rounded-lg px-3 py-2 font-mono text-xs text-emerald-400">
+                docker compose up -d
+              </div>
+            )}
           </div>
 
           {/* Linux 원클릭 */}
-          <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+          <div className={`bg-slate-800/60 border rounded-xl p-4 ${!gateway ? 'border-slate-700/40 opacity-60' : 'border-slate-700'}`}>
             <div className="flex items-center gap-3 mb-3">
               <div className="p-2 bg-orange-500/10 rounded-lg">
                 <Terminal className="w-5 h-5 text-orange-400" />
@@ -173,23 +200,29 @@ export default function CollectorDownloadModal({ gateway, onClose }: Props) {
               <div>
                 <div className="text-sm font-medium text-white">Linux 원클릭 설치</div>
                 <div className="text-xs text-slate-400 mt-0.5">
-                  서버 터미널에서 아래 명령어 실행 (Docker 자동 설치 포함)
+                  {!gateway
+                    ? '게이트웨이 등록 후 이용 가능'
+                    : '서버 터미널에서 아래 명령어 실행 (Docker 자동 설치 포함)'}
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2 bg-slate-900/80 rounded-lg px-3 py-2.5">
               <code className="flex-1 text-xs text-emerald-400 font-mono break-all">
-                curl -sSL &quot;…/installer-config?type=linux&quot; | bash
+                {gateway
+                  ? `curl -sSL "…/installer-config?type=linux" | bash`
+                  : '게이트웨이 등록 후 명령어가 표시됩니다'}
               </code>
-              <button
-                onClick={copyOneLiner}
-                className="shrink-0 p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-700 transition"
-                title="복사"
-              >
-                {copied
-                  ? <Check className="w-4 h-4 text-emerald-400" />
-                  : <Copy className="w-4 h-4" />}
-              </button>
+              {gateway && (
+                <button
+                  onClick={copyOneLiner}
+                  className="shrink-0 p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-700 transition"
+                  title="복사"
+                >
+                  {copied
+                    ? <Check className="w-4 h-4 text-emerald-400" />
+                    : <Copy className="w-4 h-4" />}
+                </button>
+              )}
             </div>
           </div>
 

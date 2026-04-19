@@ -815,6 +815,7 @@ function GatewaysPageContent() {
   const [page, setPage] = useState(1);
   const [modal, setModal] = useState<{ mode: 'create' | 'edit'; gateway?: Gateway } | null>(null);
   const [downloadGw, setDownloadGw] = useState<Gateway | null>(null);
+  const [showCollectorModal, setShowCollectorModal] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   // URL 파라미터로 모달 자동 오픈 여부 (한 번만 처리)
   const [autoOpenHandled, setAutoOpenHandled] = useState(false);
@@ -867,10 +868,11 @@ function GatewaysPageContent() {
     const gwId = searchParams.get('gwId');
     if (gwId) {
       const target = gateways.find(g => g.id === gwId) ?? null;
-      if (target) { setDownloadGw(target); return; }
+      if (target) { setDownloadGw(target); setShowCollectorModal(true); return; }
     }
-    // gwId 없으면 첫 번째 게이트웨이 자동 선택
-    if (gateways.length > 0) setDownloadGw(gateways[0] ?? null);
+    // gwId 없으면 첫 번째 게이트웨이 자동 선택 (없어도 모달 오픈)
+    setDownloadGw(gateways[0] ?? null);
+    setShowCollectorModal(true);
   }, [isLoading, gateways, searchParams, autoOpenHandled]);
 
   const handleDelete = async (gw: Gateway) => {
@@ -912,8 +914,8 @@ function GatewaysPageContent() {
           {canInstallCollector && (
             <button
               onClick={() => {
-                if (gateways.length === 0) { toast.error('등록된 게이트웨이가 없습니다.'); return; }
                 setDownloadGw(gateways[0] ?? null);
+                setShowCollectorModal(true);
               }}
               className="flex items-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-600 rounded-lg text-sm font-medium transition"
               title="수집기 설치 파일 다운로드"
@@ -1127,10 +1129,10 @@ function GatewaysPageContent() {
       )}
 
       {/* Collector Download Modal */}
-      {downloadGw && (
+      {showCollectorModal && (
         <CollectorDownloadModal
           gateway={downloadGw}
-          onClose={() => setDownloadGw(null)}
+          onClose={() => { setShowCollectorModal(false); setDownloadGw(null); }}
         />
       )}
 
