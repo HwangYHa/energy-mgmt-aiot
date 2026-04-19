@@ -104,12 +104,14 @@ WORKDIR /app
 # 전체 node_modules (deps 스테이지) — tsx, bcryptjs, prisma CLI 포함
 COPY --from=deps /app/node_modules ./node_modules
 
-# Prisma Client (Linux Alpine 바이너리) — builder 스테이지에서 npx prisma generate 완료
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-
-# 시드 소스 파일
+# 시드 소스 파일 + prisma 스키마 (generate에 필요)
 COPY prisma ./prisma
 COPY package.json tsconfig.json ./
+
+# Prisma Client 생성 (Linux Alpine 바이너리)
+# pnpm은 node_modules/.prisma 가 아닌 pnpm 내부 경로에 생성되므로
+# COPY --from=builder 대신 직접 generate
+RUN npx prisma generate
 
 ENV NODE_ENV=production
 
