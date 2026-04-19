@@ -25,8 +25,10 @@ from pathlib import Path
 # PyInstaller 6.x 는 python3XX.dll을 자동 수집하지 못하는 경우가 있음
 _py_dll_name = f'python{sys.version_info.major}{sys.version_info.minor}.dll'
 _search_dirs = [
+    Path(sys.base_prefix),                   # 시스템 Python 설치 경로 (venv 우회)
     Path(sys.prefix),                        # venv 기준
     Path(sys.executable).parent,            # python.exe 위치
+    Path(sys.base_prefix) / 'DLLs',
     Path(sys.prefix) / 'DLLs',
 ]
 _python_dll_path: str | None = None
