@@ -104,8 +104,6 @@ export async function GET(request: NextRequest) {
         select: { id: true },
       });
 
-      console.log('[Naver OAuth] Tenant created:', tenant.id);
-
       // First user (tenant creator) is admin, others are viewers
       const isFirstUser = true; // Creating new tenant, so this is the first user
       user = await prisma.user.create({
@@ -127,8 +125,6 @@ export async function GET(request: NextRequest) {
           name: true,
         },
       });
-
-      console.log('[Naver OAuth] User created:', user.id);
 
       // Trial 구독 자동 생성
       const trialPlan = await prisma.plan.findUnique({ where: { id: 'plan_trial' }, select: { id: true } });
@@ -156,7 +152,6 @@ export async function GET(request: NextRequest) {
         },
       });
 
-      console.log('[Naver OAuth] Existing user logged in:', user.id);
     }
 
     if (!user.isActive) {
