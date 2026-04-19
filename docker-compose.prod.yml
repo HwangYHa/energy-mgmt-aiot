@@ -160,6 +160,24 @@ services:
     networks:
       - ems_net
 
+  # ── DB 시딩 (마이그레이션 후 1회 실행) ──────────────────────
+  #   실행: docker compose -f docker-compose.prod.yml run --rm seeder
+  #   강제 비밀번호 재설정: SEED_FORCE_RESET=true docker compose ... run --rm seeder
+  seeder:
+    image: ${NCP_REGISTRY}/ems-seeder:${APP_VERSION:-latest}
+    container_name: ems_seeder
+    restart: "no"
+    environment:
+      DATABASE_URL: mysql://${MYSQL_USER:-ems}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-energy}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@carbonieum.co.kr}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Carbonieum2026!}
+      SEED_FORCE_RESET: ${SEED_FORCE_RESET:-false}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - ems_net
+
   # ── Next.js App 1 (Blue) ──────────────────────────────────
   app1:
     image: ${NCP_REGISTRY}/ems-app:${APP_VERSION:-latest}

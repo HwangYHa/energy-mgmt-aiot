@@ -86,3 +86,31 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:3000/api/health || exit 1
 
 CMD ["node", "server.js"]
+
+# ============================================================
+# Stage 4: seeder — DB 시딩 전용 이미지
+#   - deps 스테이지의 전체 node_modules (tsx, bcryptjs 포함)
+#   - builder 스테이지의 Prisma client (Linux 바이너리)
+#   - prisma/ 디렉터리 (seed*.ts 포함)
+#
+#   빌드:  docker build --target seeder -t ems-seeder .
+#   실행:  docker compose -f docker-compose.prod.yml run --rm seeder
+# ============================================================
+FROM node:22-alpine AS seeder
+RUN apk add --no-cache libc6-compat openssl
+
+WORKDIR /app
+
+# 전체 node_modules (deps 스테이지) — tsx, bcryptjs, prisma CLI 포함
+COPY --from=deps /app/node_modules ./node_modules
+
+# Prisma Client (Linux Alpine 바이너리) — builder 스테이지에서 npx prisma generate 완료
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+
+# 시드 소스 파일
+COPY prisma ./prisma
+COPY package.json tsconfig.json ./
+
+ENV NODE_ENV=production
+
+CMD ["npx", "tsx", "prisma/seed.ts"]
