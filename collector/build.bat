@@ -1,111 +1,126 @@
 @echo off
+chcp 65001 >nul 2>&1
 :: =============================================================================
-:: 탄소이음 Collector — Windows 빌드 스크립트
-:: 결과: dist\TansoEum-Collector.exe
+:: TansoEum Collector - Windows Build Script
+:: Output: dist\TansoEum-Collector.exe
 ::
-:: 사용법:
-::   build.bat           <- 일반 빌드
-::   build.bat --clean   <- 이전 빌드 캐시 삭제 후 빌드
-::   build.bat --deploy  <- 빌드 후 public\downloads\ 에 자동 복사
+:: Usage:
+::   build.bat              <- normal build
+::   build.bat --clean      <- delete cache then build
+::   build.bat --deploy     <- build + copy to ..\public\downloads\
+::   build.bat --clean --deploy
+::
+:: Run from collector\ directory:
+::   PowerShell: cd G:\Dev\react-workspace\energy-mgmt-aiot\collector
+::               .\build.bat --clean --deploy
+::   CMD:        cd /d G:\Dev\react-workspace\energy-mgmt-aiot\collector
+::               build.bat --clean --deploy
 :: =============================================================================
-
-setlocal EnableDelayedExpansion
 
 set SPEC=TansoEum-Collector.spec
-set DIST_DIR=dist
 set OUTPUT_EXE=dist\TansoEum-Collector.exe
 set DEPLOY_DIR=..\public\downloads
-set VENV_DIR=.venv
+set VENV_PYINSTALLER=.venv\Scripts\pyinstaller.exe
+set VENV_PYTHON=.venv\Scripts\python.exe
 
 echo.
 echo  ============================================================
-echo   탄소이음 Collector - PyInstaller 빌드
+echo   TansoEum Collector - PyInstaller Build
 echo  ============================================================
 echo.
 
-:: ── 가상환경 활성화 ──────────────────────────────────────────────────
-if exist "%VENV_DIR%\Scripts\activate.bat" (
-    call "%VENV_DIR%\Scripts\activate.bat"
-    echo [OK] 가상환경 활성화: %VENV_DIR%
-) else (
-    echo [WARN] 가상환경 없음 - 시스템 Python 사용
-)
-
-:: ── Python / PyInstaller 버전 확인 ──────────────────────────────────
-echo.
-python --version
-pyinstaller --version
-echo.
-
-:: ── 이전 빌드 정리 ──────────────────────────────────────────────────
-if "%1"=="--clean" goto :clean_build
-if "%2"=="--clean" goto :clean_build
-goto :start_build
-
-:clean_build
-echo [*] 이전 빌드 캐시 삭제 중...
-if exist build    rmdir /s /q build
-if exist dist     rmdir /s /q dist
-if exist __pycache__ rmdir /s /q __pycache__
-echo [OK] 정리 완료
-echo.
-
-:start_build
-:: ── PyInstaller 빌드 ────────────────────────────────────────────────
-echo [*] PyInstaller 빌드 시작...
-pyinstaller %SPEC% --clean --noconfirm
-
-if errorlevel 1 (
-    echo.
-    echo [ERROR] 빌드 실패!
-    echo   1. pip install -r requirements.txt 확인
-    echo   2. pyinstaller 설치 확인: pip install pyinstaller
-    echo   3. Python DLL 경로 확인: python -c "import sys; print(sys.prefix)"
+:: Check we are in the right directory
+if not exist "%SPEC%" (
+    echo [ERROR] %SPEC% not found.
+    echo         Run this script from the collector\ directory.
+    echo         Example: cd /d G:\Dev\...\collector ^&^& build.bat
     pause
     exit /b 1
 )
 
-:: ── 빌드 결과 확인 ──────────────────────────────────────────────────
-if not exist "%OUTPUT_EXE%" (
+:: Python version
+if exist "%VENV_PYTHON%" (
+    echo [OK] Using venv Python
+    set PYINSTALLER=%VENV_PYINSTALLER%
+    set PYTHON=%VENV_PYTHON%
+) else (
+    echo [WARN] venv not found - using system Python
+    set PYINSTALLER=pyinstaller
+    set PYTHON=python
+)
+
+%PYTHON% --version
+%PYINSTALLER% --version
+echo.
+
+:: --clean: delete previous build cache
+for %%A in (%*) do (
+    if "%%A"=="--clean" goto :do_clean
+)
+goto :start_build
+
+:do_clean
+echo [*] Removing previous build cache...
+if exist build    rmdir /s /q build
+if exist dist     rmdir /s /q dist
+echo [OK] Cleaned.
+echo.
+
+:start_build
+echo [*] Starting PyInstaller build...
+%PYINSTALLER% %SPEC% --clean --noconfirm
+
+if errorlevel 1 (
     echo.
-    echo [ERROR] EXE 파일 생성 실패: %OUTPUT_EXE%
+    echo [ERROR] Build failed!
+    echo   1. pip install -r requirements.txt
+    echo   2. pip install pyinstaller
+    echo   3. Check Python DLL: python -c "import sys; print(sys.base_prefix)"
+    pause
+    exit /b 1
+)
+
+if not exist "%OUTPUT_EXE%" (
+    echo [ERROR] EXE not found: %OUTPUT_EXE%
     pause
     exit /b 1
 )
 
 for %%F in (%OUTPUT_EXE%) do set EXE_SIZE=%%~zF
-set /a EXE_MB=!EXE_SIZE! / 1048576
+set /a EXE_MB=%EXE_SIZE% / 1048576
 
 echo.
 echo  ============================================================
-echo   빌드 성공!
-echo   파일: %OUTPUT_EXE%
-echo   크기: !EXE_MB! MB
+echo   Build SUCCESS
+echo   File : %OUTPUT_EXE%
+echo   Size : %EXE_MB% MB
 echo  ============================================================
 
-:: ── 배포 복사 ───────────────────────────────────────────────────────
-if "%1"=="--deploy" goto :deploy
-if "%2"=="--deploy" goto :deploy
+:: --deploy: copy to public/downloads
+for %%A in (%*) do (
+    if "%%A"=="--deploy" goto :do_deploy
+)
 goto :done
 
-:deploy
+:do_deploy
 if not exist "%DEPLOY_DIR%" mkdir "%DEPLOY_DIR%"
 echo.
-echo [*] 배포 복사: %OUTPUT_EXE% → %DEPLOY_DIR%\TansoEum-Collector.exe
+echo [*] Deploying to %DEPLOY_DIR%\TansoEum-Collector.exe
 copy /Y "%OUTPUT_EXE%" "%DEPLOY_DIR%\TansoEum-Collector.exe"
 if errorlevel 1 (
-    echo [ERROR] 복사 실패
+    echo [ERROR] Copy failed
     pause
     exit /b 1
 )
-echo [OK] 배포 완료: %DEPLOY_DIR%\TansoEum-Collector.exe
+echo [OK] Deployed: %DEPLOY_DIR%\TansoEum-Collector.exe
 
 :done
 echo.
-echo [안내] 배포 방법:
-echo   1. dist\TansoEum-Collector.exe 를 현장 PC의 C:\TansoEum\ 폴더에 복사
-echo   2. config.yaml 을 같은 폴더에 배치 (게이트웨이 관리 > 수집기 다운로드)
-echo   3. 백신에서 C:\TansoEum\ 폴더 검사 제외 설정
-echo   4. TansoEum-Collector.exe 실행
+echo [Guide] Installation steps:
+echo   1. Create folder: C:\TansoEum\
+echo   2. Copy TansoEum-Collector.exe to C:\TansoEum\
+echo   3. Copy config.yaml to C:\TansoEum\  (from gateway settings)
+echo   4. Add C:\TansoEum\ to Windows Defender exclusions
+echo   5. Run C:\TansoEum\TansoEum-Collector.exe
 echo.
 pause
