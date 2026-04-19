@@ -123,8 +123,6 @@ export async function GET(request: NextRequest) {
       prisma.notificationLog.count({ where }),
     ]);
 
-    console.log(`[Alerts] tenantId=${auth.tenantId} → ${total}건 조회`);
-
     return successResponse(logs, {
       pagination: { skip, take, total, hasMore: skip + take < total },
     });

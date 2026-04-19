@@ -137,7 +137,6 @@ export default function CarbonRoadmapPage() {
     setError(null);
     try {
       const res = await apiGet('/api/analytics/carbon/roadmap/milestones') as { data: Milestone[] };
-      console.log('로드된 마일스톤:', res.data);
       setMilestones((res.data ?? []).sort((a, b) => a.displayOrder - b.displayOrder || a.year - b.year));
     } catch (err) {
       setError(err instanceof Error ? err.message : '마일스톤 조회 실패');
