@@ -244,31 +244,30 @@ export const PLAN_DISPLAY: Record<string, {
     color: 'slate',
   },
   basic: {
-    name: 'Basic',
-    // 원가 근거 (2026): NCP 150K + 도메인 18K + AI 50K + SMS 30K = 268K/월
-    // 5고객 기준 고객당 원가 54K → 3.7x 마진 = 198K
-    // 경쟁사: 한전KDN 기본 200K대 / 스마트팩토리 패키지 300K대
+    name: 'Starter',
+    // 가격 근거 (2026 ROI 기반): 소규모 사업장 절감액 50~100만원 → ROI 5~10x
+    // 월 전기요금 ₩2-5M 타겟, 10% 절감 시 ₩20~50만원 효과
     description: '소규모 공장·건물을 위한 IoT 에너지 관리',
-    monthlyPrice: 198000,
-    yearlyPrice: 1980000,    // 월 ₩165,000 — 17% 절감
-    installationFee: 500000,
+    monthlyPrice: 99000,
+    yearlyPrice: 990000,     // 월 ₩82,500 — 17% 절감
+    installationFee: 0,
     installationIncludes: [
       '원격 설치 지원 (4시간)',
       '게이트웨이 최대 2대 설정',
       '센서 최대 10개 등록',
+      '셀프 온보딩 (원격 지원 포함)',
       '※ 하드웨어(게이트웨이·센서) 별도 구매',
     ],
     color: 'blue',
   },
   pro: {
-    name: 'Professional',
-    // 원가 근거 (2026): Basic 원가 + AI 이상감지·DR·SMS·우선지원 추가분
-    // Basic 198K × 2.5배 = 495K → 반올림 490K (경쟁사 대비 여전히 저렴)
-    // 월 전기요금 ₩10M 사업장 → 10% 절감 시 ₩1M/월 효과 → ROI 2배 이상
+    name: 'Business',
+    // 가격 근거 (2026 ROI 기반): 중소기업 절감액 300~500만원 → ROI 10~16x
+    // 월 전기요금 ₩5-30M 타겟, 10% 절감 시 ₩50~300만원 효과
     description: 'AI 기반 고급 최적화 · 탄소중립 대응',
-    monthlyPrice: 490000,
-    yearlyPrice: 4900000,    // 월 ₩408,333 — 17% 절감
-    installationFee: 1800000,
+    monthlyPrice: 299000,
+    yearlyPrice: 2990000,    // 월 ₩249,167 — 17% 절감
+    installationFee: 500000,
     installationIncludes: [
       '현장 방문 설치 (1일)',
       '게이트웨이 + 센서 전체 커미셔닝',

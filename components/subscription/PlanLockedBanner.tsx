@@ -5,10 +5,10 @@ import { cn } from '@/lib/utils';
 
 // 코드레벨 planTier → 표시명
 const PLAN_DISPLAY: Record<string, string> = {
-  STARTER:      'Basic',
-  BASIC:        'Basic',
-  PROFESSIONAL: 'Professional',
-  PRO:          'Professional',
+  STARTER:      'Starter',
+  BASIC:        'Starter',
+  PROFESSIONAL: 'Business',
+  PRO:          'Business',
   ENTERPRISE:   'Enterprise',
 };
 
