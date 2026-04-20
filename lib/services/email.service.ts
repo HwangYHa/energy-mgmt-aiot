@@ -514,3 +514,93 @@ export async function sendInstallationRequestEmail(req: InstallationRequest): Pr
 
   console.info(`[Email] 설치예약 이메일 발송 → admin + ${req.email?.substring(0, 3)}***`);
 }
+
+// ────────────────────────────────────────────────────────────────
+// 6. 백업 완료/실패 알림
+//    수신: 시스템 설정의 backup.notifyEmail
+// ────────────────────────────────────────────────────────────────
+
+export async function sendBackupNotificationEmail(opts: {
+  to: string;
+  tenantName: string;
+  status: 'success' | 'failed';
+  backupId: string;
+  storageType: string;
+  backupPath: string;
+  sizeBytes?: number;
+  recordCount?: number;
+  durationMs: number;
+  error?: string;
+  trigger?: string;
+}): Promise<void> {
+  const transport = getTransport();
+  if (!transport) {
+    console.warn('[Email] GMAIL_APP_PASSWORD 미설정 → 백업 알림 이메일 생략');
+    return;
+  }
+
+  const isOk     = opts.status === 'success';
+  const sizeStr  = opts.sizeBytes ? ` · ${(opts.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : '';
+  const recStr   = opts.recordCount ? ` · ${opts.recordCount.toLocaleString()}건` : '';
+  const secStr   = `${(opts.durationMs / 1000).toFixed(1)}초`;
+  const typeMap: Record<string, string> = { local: '로컬 스토리지', ncp: 'NCP Object Storage', s3: 'AWS S3', gcs: 'GCS' };
+  const storageLabel = typeMap[opts.storageType] ?? opts.storageType;
+  const triggerLabel = opts.trigger === 'scheduled' ? '자동(스케줄)' : '수동';
+
+  const statusRow = isOk
+    ? `<span style="background:#052e16;color:#4ade80;border:1px solid #16a34a44;padding:3px 14px;border-radius:4px;font-weight:700;font-size:13px;">✅ 성공</span>`
+    : `<span style="background:#450a0a;color:#f87171;border:1px solid #dc262644;padding:3px 14px;border-radius:4px;font-weight:700;font-size:13px;">❌ 실패</span>`;
+
+  const content = `
+    <h2 style="margin:0 0 20px;color:#f1f5f9;font-size:20px;font-weight:700;">
+      ${isOk ? '🗄️ 백업 완료 알림' : '⚠️ 백업 실패 알림'}
+    </h2>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;border-radius:8px;border:1px solid #334155;margin-bottom:24px;">
+      <tr>
+        <td style="padding:14px 20px;border-bottom:1px solid #1e293b;">
+          <p style="margin:0 0 4px;color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;">업체명</p>
+          <p style="margin:0;color:#f1f5f9;font-size:15px;font-weight:600;">${opts.tenantName}</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:14px 20px;border-bottom:1px solid #1e293b;">
+          <p style="margin:0 0 6px;color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;">상태</p>
+          ${statusRow}
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:14px 20px;border-bottom:1px solid #1e293b;">
+          <p style="margin:0 0 4px;color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;">백업 정보</p>
+          <p style="margin:0;color:#cbd5e1;font-size:13px;line-height:1.8;">
+            저장소: ${storageLabel}<br>
+            트리거: ${triggerLabel}<br>
+            소요: ${secStr}${sizeStr}${recStr}<br>
+            파일: <code style="color:#67e8f9;font-size:12px;">${opts.backupPath}</code>
+          </p>
+        </td>
+      </tr>
+      ${opts.error ? `
+      <tr>
+        <td style="padding:14px 20px;">
+          <p style="margin:0 0 4px;color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;">오류 내용</p>
+          <p style="margin:0;color:#f87171;font-size:13px;font-family:monospace;">${opts.error}</p>
+        </td>
+      </tr>` : ''}
+    </table>
+
+    <p style="margin:0;color:#64748b;font-size:13px;line-height:1.7;">
+      백업 ID: <code style="color:#94a3b8;font-size:12px;">${opts.backupId}</code><br>
+      시간: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+    </p>
+  `;
+
+  await transport.sendMail({
+    from:    EMAIL_FROM,
+    to:      opts.to,
+    subject: `[탄소이음] ${opts.tenantName} 백업 ${isOk ? '완료' : '실패'} — ${new Date().toLocaleDateString('ko-KR')}`,
+    html:    wrapTemplate('백업 알림', content),
+  }).catch(e => console.error('[Email] 백업 알림 이메일 실패:', e));
+
+  console.info(`[Email] 백업 알림 발송 → ${opts.to.substring(0, 3)}*** (${opts.status})`);
+}

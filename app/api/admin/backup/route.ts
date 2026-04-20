@@ -30,6 +30,7 @@ import {
   getNcpConfig,
   getAwsS3Config,
 } from '@/lib/services/backup.service';
+import { sendBackupNotificationEmail } from '@/lib/services/email.service';
 import { prisma } from '@/lib/db/prisma';
 import {
   successResponse,
@@ -173,9 +174,44 @@ export async function PUT(request: NextRequest) {
       console.warn('[Backup] 감사 로그 기록 실패:', logErr);
     }
 
-    // ── 완료 알림 이메일 ───────────────────────────────────────
-    if (backupCfg.notifyEmail && resultStatus === 'success') {
-      console.info(`[Backup] 완료 알림 예정: ${backupCfg.notifyEmail}`);
+    // ── 완료/실패 알림 이메일 ──────────────────────────────────
+    if (backupCfg.notifyEmail) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: auth.tenantId },
+        select: { name: true },
+      });
+      sendBackupNotificationEmail({
+        to:          backupCfg.notifyEmail,
+        tenantName:  tenant?.name ?? auth.tenantId,
+        status:      resultStatus,
+        backupId,
+        storageType: backupCfg.storageType,
+        backupPath,
+        sizeBytes,
+        recordCount,
+        durationMs,
+        error:       errorDetail,
+        trigger,
+      }).catch(e => console.error('[Backup] 알림 이메일 실패:', e));
+    }
+
+    // ── 오래된 백업 정리 (retentionCount 초과분 삭제) ─────────
+    if (resultStatus === 'success' && backupCfg.retentionCount > 0) {
+      try {
+        const allBackups = await prisma.auditLog.findMany({
+          where:   { tenantId: auth.tenantId, action: 'BACKUP_TRIGGERED' },
+          orderBy: { createdAt: 'desc' },
+          select:  { id: true },
+        });
+        const toDelete = allBackups.slice(backupCfg.retentionCount);
+        if (toDelete.length > 0) {
+          await prisma.auditLog.deleteMany({
+            where: { id: { in: toDelete.map(b => b.id) } },
+          });
+        }
+      } catch (e) {
+        console.warn('[Backup] 오래된 백업 이력 정리 실패:', e);
+      }
     }
 
     return successResponse({

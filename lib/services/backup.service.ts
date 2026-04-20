@@ -8,7 +8,9 @@
  * │  ① 테넌트 데이터 추출: Prisma → JSON Lines → gzip (.jsonl.gz) │
  * │     - 해당 tenantId의 모든 테이블 데이터만 선택적 추출          │
  * │     - 전체 DB 덤프 금지 (타 업체 데이터 포함 방지)              │
- * │  ② 저장 위치                                                  │
+ * │  ② measurement 대용량 처리                                    │
+ * │     - 50,000건 청크 단위 스트리밍 (OOM 방지)                   │
+ * │  ③ 저장 위치                                                  │
  * │     - local: 서버 로컬 파일시스템                              │
  * │     - ncp:   네이버 클라우드 Object Storage (S3 호환 API)      │
  * │     - s3:    AWS S3 (동일 SDK, 엔드포인트만 다름)              │
@@ -17,9 +19,9 @@
 
 import { createWriteStream, mkdirSync, statSync, unlinkSync } from 'fs';
 import { createGzip } from 'zlib';
+import { PassThrough } from 'stream';
 import path from 'path';
 import { pipeline } from 'stream/promises';
-import { Readable } from 'stream';
 import { prisma } from '@/lib/db/prisma';
 
 // ─── 타입 ─────────────────────────────────────────────────────────
@@ -57,8 +59,9 @@ export function resolveBackupPath(
   return path.join(base, `${backupId}.${ext}`);
 }
 
-// ─── 테넌트 데이터 추출 목록 ──────────────────────────────────────
-// tenantId 컬럼이 있는 테이블만 포함. 외래키 의존 테이블은 JOIN으로 해결.
+// ─── 테넌트 테이블 목록 ───────────────────────────────────────────
+// tenantId 컬럼이 있는 테이블만 포함.
+// measurement는 대용량이므로 별도 청크 스트리밍 처리 (아래 참조).
 
 const TENANT_TABLES: Array<{
   name: string;
@@ -67,6 +70,7 @@ const TENANT_TABLES: Array<{
   { name: 'site',             fetch: (id) => prisma.site.findMany({ where: { tenantId: id } }) },
   { name: 'gateway',          fetch: (id) => (prisma as any).gateway.findMany({ where: { tenantId: id } }) },
   { name: 'device',           fetch: (id) => prisma.device.findMany({ where: { tenantId: id } }) },
+  { name: 'metric',           fetch: (id) => (prisma as any).metric.findMany({ where: { tenantId: id } }) },
   { name: 'sensor',           fetch: (id) => (prisma as any).sensor.findMany({ where: { tenantId: id } }) },
   { name: 'alertRule',        fetch: (id) => (prisma as any).alertRule.findMany({ where: { tenantId: id } }) },
   { name: 'alertLog',         fetch: (id) => (prisma as any).alertLog.findMany({ where: { tenantId: id } }) },
@@ -98,16 +102,18 @@ const TENANT_TABLES: Array<{
   { name: 'supportInquiry',   fetch: (id) => (prisma as any).supportInquiry?.findMany({ where: { tenantId: id } }) ?? [] },
 ];
 
+// measurement 청크 크기 (OOM 방지: 한 번에 50,000건씩 읽기)
+const MEASUREMENT_CHUNK_SIZE = 50_000;
+
 // ─── 테넌트 데이터 추출 (핵심 함수) ──────────────────────────────
 
 /**
- * 해당 tenantId의 데이터만 JSON Lines 형식으로 추출하여 gzip 압축 파일 생성
+ * 해당 tenantId의 데이터만 JSON Lines 형식으로 추출하여 gzip 압축 파일 생성.
  *
- * 형식: 각 줄 = JSON 객체 (헤더 줄: {"_meta": {...}})
- * 파일: {backupId}.jsonl.gz
- *
- * @param tenantId 백업 대상 테넌트 ID
- * @param backupPath 저장할 파일 경로 (로컬)
+ * - 소규모 테이블: 전체 fetch 후 스트림 기록
+ * - measurement: 50,000건 단위 청크 페이징 (대용량 OOM 방지)
+ * - 형식: 각 줄 = JSON 객체 (헤더 줄: {"_meta": {...}})
+ * - 파일: {backupId}.jsonl.gz
  */
 export async function runTenantDataExport(
   tenantId: string,
@@ -128,7 +134,7 @@ export async function runTenantDataExport(
   }
 
   try {
-    // 테넌트 기본 정보 조회
+    // 테넌트 기본 정보
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { id: true, name: true, domain: true, industryType: true, country: true },
@@ -137,58 +143,113 @@ export async function runTenantDataExport(
       return { status: 'failed', backupPath, durationMs: Date.now() - startedAt, error: '테넌트를 찾을 수 없습니다.' };
     }
 
-    const gzip  = createGzip({ level: 6 });
-    const output = createWriteStream(backupPath);
+    // ── 스트리밍 파이프라인 설정 ──────────────────────────────────
+    // PassThrough → gzip → file 순으로 연결
+    // 데이터를 passThrough에 점진적으로 write하면서 백프레셔 없이 처리
 
-    // 헤더 메타데이터 줄 작성
-    const header = {
-      _meta: {
-        version:   '2.0',
-        format:    'jsonl-gz',
-        tenantId,
-        tenantName: tenant.name,
-        domain:     tenant.domain,
-        exportedAt: new Date().toISOString(),
-        tables:     TENANT_TABLES.map(t => t.name),
-      },
+    const gzip        = createGzip({ level: 6 });
+    const passThrough = new PassThrough();
+    const output      = createWriteStream(backupPath);
+
+    // 파이프라인은 비동기로 시작 (end 호출 시 완료)
+    const pipelinePromise = pipeline(passThrough, gzip, output);
+
+    const writeLine = (obj: unknown) => {
+      passThrough.write(JSON.stringify(obj) + '\n');
     };
 
-    // 각 테이블 데이터를 JSON Lines 형식으로 수집
-    const lines: string[] = [JSON.stringify(header)];
+    // 헤더 메타데이터
+    writeLine({
+      _meta: {
+        version:    '2.1',
+        format:     'jsonl-gz',
+        tenantId,
+        tenantName:  tenant.name,
+        domain:      tenant.domain,
+        exportedAt:  new Date().toISOString(),
+        tables:      [...TENANT_TABLES.map(t => t.name), 'measurement'],
+      },
+    });
+
     let totalRecords = 0;
 
+    // ── 소규모 테이블 순차 추출 ──────────────────────────────────
     for (const table of TENANT_TABLES) {
       let rows: unknown[] = [];
       try {
         rows = await table.fetch(tenantId);
       } catch {
-        // 테이블이 없거나 컬럼 불일치 시 빈 배열로 처리 (마이그레이션 과도기 대응)
         rows = [];
       }
 
       if (rows.length > 0) {
-        // 테이블 시작 마커
-        lines.push(JSON.stringify({ _table: table.name, _count: rows.length }));
+        writeLine({ _table: table.name, _count: rows.length });
         for (const row of rows) {
-          lines.push(JSON.stringify({ _t: table.name, d: row }));
+          writeLine({ _t: table.name, d: row });
           totalRecords++;
         }
       }
     }
 
-    // 문자열 배열 → 스트림 → gzip → 파일
-    const content  = lines.join('\n') + '\n';
-    const readable = Readable.from([Buffer.from(content, 'utf-8')]);
-    await pipeline(readable, gzip, output);
+    // ── measurement 청크 스트리밍 ────────────────────────────────
+    // 50,000건씩 페이징하여 메모리 사용량 제한
+    {
+      let offset          = 0;
+      let measureCount    = 0;
+      let headerWritten   = false;
 
-    const durationMs  = Date.now() - startedAt;
-    const sizeBytes   = statSync(backupPath).size;
-    const sizeMb      = (sizeBytes / (1024 * 1024)).toFixed(2);
+      while (true) {
+        let rows: { metricId: string; tenantId: string; time: Date; value: unknown; quality: unknown }[] = [];
+        try {
+          rows = await prisma.measurement.findMany({
+            where:   { tenantId },
+            skip:    offset,
+            take:    MEASUREMENT_CHUNK_SIZE,
+            orderBy: { time: 'asc' },
+            select: {
+              metricId: true, tenantId: true,
+              time: true, value: true, quality: true,
+            },
+          });
+        } catch {
+          break;
+        }
+
+        if (rows.length === 0) break;
+
+        if (!headerWritten) {
+          // 실제 총 건수는 나중에 알 수 없으므로 '...' 으로 표시
+          writeLine({ _table: 'measurement', _count: '(chunked)' });
+          headerWritten = true;
+        }
+
+        for (const row of rows) {
+          writeLine({ _t: 'measurement', d: row });
+          measureCount++;
+          totalRecords++;
+        }
+
+        offset += rows.length;
+        if (rows.length < MEASUREMENT_CHUNK_SIZE) break;
+      }
+
+      if (headerWritten) {
+        // 마커로 실제 건수 기록 (복원 시 참조용)
+        writeLine({ _table_end: 'measurement', _count: measureCount });
+      }
+    }
+
+    // 스트림 종료 → gzip flush → 파일 close
+    passThrough.end();
+    await pipelinePromise;
+
+    const durationMs = Date.now() - startedAt;
+    const sizeBytes  = statSync(backupPath).size;
+    const sizeMb     = (sizeBytes / (1024 * 1024)).toFixed(2);
 
     return { status: 'success', backupPath, sizeBytes, sizeMb, durationMs, recordCount: totalRecords };
 
   } catch (e) {
-    // 실패 시 불완전 파일 정리
     try { unlinkSync(backupPath); } catch { /* ignore */ }
     return {
       status: 'failed', backupPath,
@@ -207,15 +268,12 @@ export async function runTenantDataExport(
  *   endpoint: https://kr.object.ncloudstorage.com
  *   region:   kr-standard
  *   bucket:   NCP_BUCKET_NAME 환경변수
- *
- * 멀티파트 업로드 사용 (파일 크기 무관 안정적 업로드)
  */
 export async function uploadToObjectStorage(
   localPath: string,
-  remoteKey: string,        // 예: tansoeum-backups/{tenantId}/backup_xxx.jsonl.gz
+  remoteKey: string,
   config: NcpUploadConfig,
 ): Promise<{ url: string }> {
-  // 동적 import (서버 사이드에서만 실행)
   const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
   const { createReadStream } = await import('fs');
 
@@ -226,7 +284,7 @@ export async function uploadToObjectStorage(
       accessKeyId:     config.accessKey,
       secretAccessKey: config.secretKey,
     },
-    forcePathStyle: true, // NCP Object Storage 필수
+    forcePathStyle: true,
   });
 
   const fileStream = createReadStream(localPath);
@@ -238,13 +296,10 @@ export async function uploadToObjectStorage(
     Body:          fileStream,
     ContentLength: stat.size,
     ContentType:   'application/gzip',
-    Metadata: {
-      'x-backup-format': 'jsonl-gz',
-    },
+    Metadata: { 'x-backup-format': 'jsonl-gz' },
   }));
 
-  const url = `${config.endpoint}/${config.bucket}/${remoteKey}`;
-  return { url };
+  return { url: `${config.endpoint}/${config.bucket}/${remoteKey}` };
 }
 
 /**
@@ -298,7 +353,4 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-// ─── 하위 호환 (mysqldump 전체 DB 백업 — super_admin 전용) ──────
-// 개별 테넌트 백업은 runTenantDataExport() 사용
-
-export { } // 명시적 모듈
+export { };
