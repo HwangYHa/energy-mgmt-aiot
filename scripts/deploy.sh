@@ -160,6 +160,22 @@ if [[ "$SEED_ONLY" != true && "$MIGRATE_ONLY" != true ]]; then
   docker push "${NCP_REGISTRY}/ems-seeder:${VERSION}"
   docker push "${NCP_REGISTRY}/ems-seeder:latest"
   log "이미지 푸시 완료"
+
+  # ── 오래된 로컬 이미지 정리 (빌드 캐시 외 dangling 이미지 제거) ──
+  header "이미지 정리 (로컬 디스크 절약)"
+  docker image prune -f --filter "until=72h" 2>/dev/null || true
+  # 현재 버전 + latest 제외한 구버전 ems-app 이미지 제거 (최근 3개 유지)
+  docker images "${NCP_REGISTRY}/ems-app" --format '{{.Tag}}' \
+    | grep -v 'latest' \
+    | sort -r \
+    | tail -n +4 \
+    | xargs -r -I{} docker rmi "${NCP_REGISTRY}/ems-app:{}" 2>/dev/null || true
+  docker images "${NCP_REGISTRY}/ems-seeder" --format '{{.Tag}}' \
+    | grep -v 'latest' \
+    | sort -r \
+    | tail -n +4 \
+    | xargs -r -I{} docker rmi "${NCP_REGISTRY}/ems-seeder:{}" 2>/dev/null || true
+  log "로컬 이미지 정리 완료"
 fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -197,6 +213,10 @@ docker compose -f ${COMPOSE_FILE} --env-file .env.production up -d --no-deps app
 echo "  [4] 시딩..."
 SEED_FORCE_RESET=${FORCE_RESET} \
 docker compose -f ${COMPOSE_FILE} --env-file .env.production run --rm seeder
+
+echo "  [5] 서버 Docker 이미지/컨테이너 정리 (디스크 절약)..."
+docker image prune -f --filter "until=72h" 2>/dev/null || true
+docker container prune -f --filter "until=24h" 2>/dev/null || true
 
 echo "  [✓] 서버 배포 완료"
 REMOTE

@@ -82,15 +82,15 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 2G
+          cpus: '1.5'
+          memory: 1536M
         reservations:
-          memory: 1G
+          memory: 512M
     logging:
       driver: "json-file"
       options:
-        max-size: "100m"
-        max-file: "5"
+        max-size: "50m"
+        max-file: "3"
 
   # ── Redis 7 ──────────────────────────────────────────────
   redis:
@@ -247,15 +247,15 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.5'
-          memory: 1G
+          cpus: '1.0'
+          memory: 768M
         reservations:
-          memory: 512M
+          memory: 256M
     logging:
       driver: "json-file"
       options:
-        max-size: "50m"
-        max-file: "10"
+        max-size: "20m"
+        max-file: "5"
 
   # ── Next.js App 2 (Green) ─────────────────────────────────
   app2:
@@ -326,15 +326,15 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.5'
-          memory: 1G
+          cpus: '1.0'
+          memory: 768M
         reservations:
-          memory: 512M
+          memory: 256M
     logging:
       driver: "json-file"
       options:
-        max-size: "50m"
-        max-file: "10"
+        max-size: "20m"
+        max-file: "5"
 
   # ── AI Engine ─────────────────────────────────────────────
   ai-engine:
@@ -366,10 +366,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 2G
-        reservations:
+          cpus: '1.0'
           memory: 1G
+        reservations:
+          memory: 256M
 
   # ── Nginx + SSL ───────────────────────────────────────────
   nginx:
@@ -393,8 +393,8 @@ services:
     logging:
       driver: "json-file"
       options:
-        max-size: "100m"
-        max-file: "10"
+        max-size: "20m"
+        max-file: "5"
 
   # ── Certbot (Let's Encrypt 자동 갱신) ─────────────────────
   certbot:
@@ -494,3 +494,63 @@ services:
       - /:/host:ro,rslave
     pid: host
     network_mode: host
+
+  # ── Cron Runner ───────────────────────────────────────────
+  # NCP 서버에서 내부 크론 엔드포인트를 주기적으로 호출하는 경량 컨테이너
+  # Alpine + curl 만 사용 (수십 MB)
+  cron:
+    image: alpine:3.19
+    container_name: ems_cron
+    restart: always
+    environment:
+      CRON_SECRET: ${CRON_SECRET}
+      APP_INTERNAL_URL: http://app1:3000
+    networks:
+      - ems_net
+    depends_on:
+      app1:
+        condition: service_healthy
+    # crontab 설치 후 실행 (KST = UTC+9)
+    command: >
+      sh -c "
+        apk add --no-cache curl tzdata &&
+        cp /usr/share/zoneinfo/Asia/Seoul /etc/localtime &&
+        echo 'Asia/Seoul' > /etc/timezone &&
+
+        echo '
+        # 형식: 분 시 일 월 요일 커맨드 (KST 기준)
+
+        # 매일 00:10 — 자동 백업
+        10 0 * * * curl -sf -H \"Authorization: Bearer $CRON_SECRET\" $APP_INTERNAL_URL/api/cron/backup >> /var/log/cron.log 2>&1
+
+        # 매일 00:30 — 구독 상태 동기화 + 만료 알림
+        30 0 * * * curl -sf -H \"Authorization: Bearer $CRON_SECRET\" $APP_INTERNAL_URL/api/cron/subscription-sync >> /var/log/cron.log 2>&1
+
+        # 매일 03:00 — 로그/데이터 보존 정책 정리 (디스크 절약)
+        0 3 * * * curl -sf -H \"Authorization: Bearer $CRON_SECRET\" $APP_INTERNAL_URL/api/cron/cleanup-logs >> /var/log/cron.log 2>&1
+
+        # 매일 06:00 — 일일 리포트 생성
+        0 6 * * * curl -sf -H \"Authorization: Bearer $CRON_SECRET\" $APP_INTERNAL_URL/api/cron/daily-report >> /var/log/cron.log 2>&1
+
+        # 매 30분 — 알림 체크 (게이트웨이 오프라인, 구독 만료 임박)
+        */30 * * * * curl -sf -H \"Authorization: Bearer $CRON_SECRET\" $APP_INTERNAL_URL/api/cron/check-alerts >> /var/log/cron.log 2>&1
+
+        # 매주 월요일 02:00 — 이탈 위험 점수 계산
+        0 2 * * 1 curl -sf -H \"Authorization: Bearer $CRON_SECRET\" $APP_INTERNAL_URL/api/cron/churn-score >> /var/log/cron.log 2>&1
+
+        # 매주 일요일 03:00 — 블록체인 토큰 상태 동기화
+        0 3 * * 0 curl -sf -H \"Authorization: Bearer $CRON_SECRET\" $APP_INTERNAL_URL/api/cron/sync-blockchain >> /var/log/cron.log 2>&1
+        ' | tr -s ' ' | crontab - &&
+
+        crond -f -l 8
+      "
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
