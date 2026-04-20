@@ -97,7 +97,7 @@ const systemSettingsSchema = z.object({
     retentionCount:     z.number().int().min(1).max(30).default(7),
     includeAttachments: z.boolean().default(false),
     notifyEmail:        z.string().email().optional().or(z.literal('')),
-    storageType:        z.enum(['local', 's3', 'gcs']).default('local'),
+    storageType:        z.enum(['local', 'ncp', 's3', 'gcs']).default('local'),
     storagePath:        z.string().max(255).optional(),
   }).optional(),
 });

@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import { useRealtime, useRealtimeAggregates } from '@/hooks/use-realtime';
 import { InvoiceUploadModal } from '@/features/carbon/components/InvoiceUploadModal';
 import { apiGet } from '@/lib/api/client';
-import { useRefreshInterval } from '@/hooks/use-display-settings';
+import { useDisplaySettings } from '@/hooks/use-display-settings';
 
 // ─────────────────────────────────────────────────────
 // 타입 정의
@@ -69,11 +69,16 @@ interface RoiData {
 }
 
 // ─────────────────────────────────────────────────────
-// 포맷팅
+// 포맷팅 (시스템 설정의 numberFormat/language 반영)
 // ─────────────────────────────────────────────────────
 
-const formatNumber   = (n: number) => n.toLocaleString('ko-KR');
-const formatCurrency = (n: number) => `₩${n.toLocaleString('ko-KR')}`;
+function makeFormatters(numberFormat?: string, language?: string) {
+  // numberFormat: '1,000.00' → en-US style, '1.000,00' → de-DE style
+  const locale = numberFormat === '1.000,00' ? 'de-DE' : language === 'en' ? 'en-US' : 'ko-KR';
+  const formatNumber   = (n: number) => n.toLocaleString(locale, { maximumFractionDigits: 0 });
+  const formatCurrency = (n: number) => `₩${n.toLocaleString(locale, { maximumFractionDigits: 0 })}`;
+  return { formatNumber, formatCurrency };
+}
 
 const fetcher = (url: string) =>
   apiGet<DashboardStats>(url).then((res) => {
@@ -323,7 +328,15 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
   const [currentTime, setCurrentTime] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
 
-  const refreshIntervalSec = useRefreshInterval();
+  const { displaySettings } = useDisplaySettings();
+  const refreshIntervalSec = displaySettings?.alerts.refreshInterval ?? 30;
+  const showCarbonWidget   = displaySettings?.dashboard.showCarbonWidget  ?? true;
+  const showCostWidget     = displaySettings?.dashboard.showCostWidget    ?? true;
+  const showDeviceStatus   = displaySettings?.dashboard.showDeviceStatus  ?? true;
+  const { formatNumber, formatCurrency } = makeFormatters(
+    displaySettings?.general.numberFormat,
+    displaySettings?.general.language,
+  );
 
   const { data: stats, error, isLoading, mutate } = useSWR<DashboardStats>(
     '/api/dashboard/stats', fetcher,
@@ -535,10 +548,14 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
                   colorClass="text-yellow-400" />
                 <MetricRow label="예상 요금"  value={formatCurrency(d.realtime.estimatedCost)}
                   colorClass="text-orange-400" />
-                <MetricRow label="디바이스"  value={`${d.devices?.online ?? 0}/${d.devices?.total ?? 0} ON`}
-                  colorClass="text-slate-400" />
-                <MetricRow label="센서"      value={`${d.sensors?.online ?? 0}/${d.sensors?.total ?? 0} ACT`}
-                  colorClass="text-slate-400" />
+                {showDeviceStatus && (
+                  <>
+                    <MetricRow label="디바이스"  value={`${d.devices?.online ?? 0}/${d.devices?.total ?? 0} ON`}
+                      colorClass="text-slate-400" />
+                    <MetricRow label="센서"      value={`${d.sensors?.online ?? 0}/${d.sensors?.total ?? 0} ACT`}
+                      colorClass="text-slate-400" />
+                  </>
+                )}
               </div>
             </DashboardPanel>
 
@@ -649,35 +666,39 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
               />
             </DashboardPanel>
 
-            <DashboardPanel title="비용 절감" variant="frame" fill
-              className="min-h-[200px] lg:min-h-0 lg:flex-1">
-              <EnergyLineChart
-                data={d.costSavings}
-                lines={[
-                  { dataKey: 'profit', color: '#4ade80', name: '절감액'         },
-                  { dataKey: 'target', color: '#f97316', name: '목표', dot: false },
-                ]}
-                height="100%"
-                showLegend={false}
-              />
-            </DashboardPanel>
+            {showCostWidget && (
+              <DashboardPanel title="비용 절감" variant="frame" fill
+                className="min-h-[200px] lg:min-h-0 lg:flex-1">
+                <EnergyLineChart
+                  data={d.costSavings}
+                  lines={[
+                    { dataKey: 'profit', color: '#4ade80', name: '절감액'         },
+                    { dataKey: 'target', color: '#f97316', name: '목표', dot: false },
+                  ]}
+                  height="100%"
+                  showLegend={false}
+                />
+              </DashboardPanel>
+            )}
 
-            {/* 탄소 배출량 — 모바일에서 2열 전체 너비 */}
-            <DashboardPanel title="탄소 배출량 (tCO₂)" variant="frame" fill
-              className="col-span-2 lg:col-span-1 min-h-[200px] lg:min-h-0 lg:flex-1">
-              <EnergyBarChart
-                data={d.carbonEmission}
-                bars={[
-                  { dataKey: 'emission', color: '#a78bfa', name: '배출량' },
-                  { dataKey: 'limit',    color: '#ef4444', name: '한도'   },
-                ]}
-                height="100%"
-                showLegend={false}
-              />
-            </DashboardPanel>
+            {/* 탄소 배출량 — showCarbonWidget 설정으로 on/off */}
+            {showCarbonWidget && (
+              <DashboardPanel title="탄소 배출량 (tCO₂)" variant="frame" fill
+                className="col-span-2 lg:col-span-1 min-h-[200px] lg:min-h-0 lg:flex-1">
+                <EnergyBarChart
+                  data={d.carbonEmission}
+                  bars={[
+                    { dataKey: 'emission', color: '#a78bfa', name: '배출량' },
+                    { dataKey: 'limit',    color: '#ef4444', name: '한도'   },
+                  ]}
+                  height="100%"
+                  showLegend={false}
+                />
+              </DashboardPanel>
+            )}
 
-            {/* ROI 패널 — 에너지 절감 투자 회수 요약 */}
-            {roiData && roiData.monthlySavings > 0 && (
+            {/* ROI 패널 — showCostWidget 설정으로 on/off */}
+            {showCostWidget && roiData && roiData.monthlySavings > 0 && (
               <DashboardPanel title="절감 ROI" variant="glow"
                 className="col-span-2 lg:col-span-1 flex-shrink-0">
                 <div className="pt-0.5 pb-1 px-1">
@@ -720,10 +741,14 @@ export default function DashboardClient({ initialData }: DashboardClientProps) {
                   colorClass="text-yellow-400" />
                 <MetricRow label="예상 요금"  value={formatCurrency(d.realtime.estimatedCost)}
                   colorClass="text-orange-400" />
-                <MetricRow label="디바이스"  value={`${d.devices?.online ?? 0}/${d.devices?.total ?? 0} ON`}
-                  colorClass="text-slate-400" />
-                <MetricRow label="센서"      value={`${d.sensors?.online ?? 0}/${d.sensors?.total ?? 0} ACT`}
-                  colorClass="text-slate-400" />
+                {showDeviceStatus && (
+                  <>
+                    <MetricRow label="디바이스"  value={`${d.devices?.online ?? 0}/${d.devices?.total ?? 0} ON`}
+                      colorClass="text-slate-400" />
+                    <MetricRow label="센서"      value={`${d.sensors?.online ?? 0}/${d.sensors?.total ?? 0} ACT`}
+                      colorClass="text-slate-400" />
+                  </>
+                )}
                 {realtimeAggregates.alertCount > 0 && (
                   <MetricRow label="실시간 알림" value={`${realtimeAggregates.alertCount}건`}
                     colorClass="text-red-400" live />

@@ -18,6 +18,7 @@ import { successResponse, serverErrorResponse, unauthorizedResponse } from '@/li
 import { logActivity, MENU_CODES, ACTION_TYPES } from '@/lib/services/activity-log.service';
 import { generateSeqNo } from '@/lib/utils/sequence';
 import { getAllowedSiteIds } from '@/lib/auth/site-access';
+import { getDataCollectionSettings } from '@/lib/services/system-settings.service';
 
 export async function GET(request: NextRequest) {
   try {
@@ -137,7 +138,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 기기 코드 자동 채번: DV-YYYYMMDD-NNNN
-    const code = await generateSeqNo('DEVICE_MGMT');
+    const [code, dcSettings] = await Promise.all([
+      generateSeqNo('DEVICE_MGMT'),
+      getDataCollectionSettings(auth.tenantId),
+    ]);
+
+    // 폴링 주기: 시스템 설정의 defaultInterval(초) → ms 변환. 기본 60초=60000ms
+    const pollIntervalMs = dcSettings.defaultInterval * 1000;
 
     // ✅ 기기 생성
     const device = await prisma.device.create({
@@ -146,6 +153,7 @@ export async function POST(request: NextRequest) {
         code,
         tenantId: auth.tenantId, // ← 검증된 tenantId만 사용
         status: 'offline',
+        pollIntervalMs,
       },
       select: {
         id: true,
