@@ -201,10 +201,38 @@ export async function PUT(request: NextRequest) {
         const allBackups = await prisma.auditLog.findMany({
           where:   { tenantId: auth.tenantId, action: 'BACKUP_TRIGGERED' },
           orderBy: { createdAt: 'desc' },
-          select:  { id: true },
+          select:  { id: true, metadata: true },
         });
         const toDelete = allBackups.slice(backupCfg.retentionCount);
         if (toDelete.length > 0) {
+          // Object Storage 파일 실제 삭제 (스토리지 비용 절감)
+          for (const old of toDelete) {
+            const meta = old.metadata as Record<string, unknown> | null;
+            const oldPath   = meta?.backupPath as string | undefined;
+            const oldStatus = meta?.backupStatus as string | undefined;
+            if (oldStatus === 'success' && oldPath) {
+              if (oldPath.startsWith('https://') && (backupCfg.storageType === 'ncp' || backupCfg.storageType === 's3')) {
+                // Object Storage 파일 삭제
+                try {
+                  const { S3Client, DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+                  const cfg = backupCfg.storageType === 'ncp' ? getNcpConfig() : getAwsS3Config();
+                  const client = new S3Client({
+                    region: cfg.region, endpoint: cfg.endpoint,
+                    credentials: { accessKeyId: cfg.accessKey, secretAccessKey: cfg.secretKey },
+                    forcePathStyle: true,
+                  });
+                  // URL에서 key 추출: endpoint/bucket/key → key 부분
+                  const urlParts = oldPath.replace(`${cfg.endpoint}/${cfg.bucket}/`, '');
+                  await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: urlParts }));
+                } catch (delErr) {
+                  console.warn('[Backup] 오래된 Object Storage 파일 삭제 실패:', delErr);
+                }
+              } else if (!oldPath.startsWith('https://') && backupCfg.storageType === 'local') {
+                // 로컬 파일 삭제
+                try { unlinkSync(oldPath); } catch { /* ignore */ }
+              }
+            }
+          }
           await prisma.auditLog.deleteMany({
             where: { id: { in: toDelete.map(b => b.id) } },
           });
