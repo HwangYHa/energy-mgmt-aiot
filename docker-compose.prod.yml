@@ -257,85 +257,6 @@ services:
         max-size: "20m"
         max-file: "5"
 
-  # ── Next.js App 2 (Green) ─────────────────────────────────
-  app2:
-    image: ${NCP_REGISTRY}/ems-app:${APP_VERSION:-latest}
-    container_name: ems_app2
-    restart: always
-    environment:
-      NODE_ENV: production
-      DATABASE_URL: mysql://${MYSQL_USER:-ems}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-energy}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
-      MQTT_BROKER_URL: mqtt://mqtt:1883
-      MQTT_USERNAME: ${MQTT_USERNAME}
-      MQTT_PASSWORD: ${MQTT_PASSWORD}
-      MQTT_CLIENT_ID: ems-app2
-      NEXTAUTH_URL: ${NEXTAUTH_URL}
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
-      JWT_SECRET: ${JWT_SECRET}
-      WEB_APP_URL: ${WEB_APP_URL}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
-      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
-      NAVER_REDIRECT_URI: ${NAVER_REDIRECT_URI:-}
-      AI_ENGINE_URL: http://ai-engine:8001
-      CRON_SECRET: ${CRON_SECRET}
-      GATEWAY_API_KEY: ${GATEWAY_API_KEY}
-      GMAIL_USER: ${GMAIL_USER:-}
-      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
-      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
-      SECURITY_ALERT_EMAIL: ${SECURITY_ALERT_EMAIL:-}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      TOSS_SECRET_KEY: ${TOSS_SECRET_KEY:-}
-      NEXT_PUBLIC_TOSS_CLIENT_KEY: ${NEXT_PUBLIC_TOSS_CLIENT_KEY:-}
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      STRIPE_BASIC_MONTHLY_PRICE_ID: ${STRIPE_BASIC_MONTHLY_PRICE_ID:-}
-      STRIPE_BASIC_YEARLY_PRICE_ID: ${STRIPE_BASIC_YEARLY_PRICE_ID:-}
-      STRIPE_PRO_MONTHLY_PRICE_ID: ${STRIPE_PRO_MONTHLY_PRICE_ID:-}
-      STRIPE_PRO_YEARLY_PRICE_ID: ${STRIPE_PRO_YEARLY_PRICE_ID:-}
-      SOLAPI_API_KEY: ${SOLAPI_API_KEY:-}
-      SOLAPI_API_SECRET: ${SOLAPI_API_SECRET:-}
-      SOLAPI_SENDER_PHONE: ${SOLAPI_SENDER_PHONE:-}
-      KAKAO_SENDER_KEY: ${KAKAO_SENDER_KEY:-}
-      SOLAPI_KAKAO_CHANNEL_ID: ${SOLAPI_KAKAO_CHANNEL_ID:-}
-      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
-      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
-      NEXT_PUBLIC_SUPPORT_EMAIL: ${NEXT_PUBLIC_SUPPORT_EMAIL:-}
-      NEXT_PUBLIC_COMMIT_SHA: ${APP_VERSION:-unknown}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-      redis:
-        condition: service_healthy
-    networks:
-      - ems_net
-    expose:
-      - "3000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 15s
-      timeout: 10s
-      start_period: 90s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 768M
-        reservations:
-          memory: 256M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "20m"
-        max-file: "5"
-
   # ── AI Engine ─────────────────────────────────────────────
   ai-engine:
     image: ${NCP_REGISTRY}/ems-ai:${APP_VERSION:-latest}
@@ -387,7 +308,6 @@ services:
       - "443:443"
     depends_on:
       - app1
-      - app2
     networks:
       - ems_net
     logging:

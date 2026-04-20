@@ -200,15 +200,13 @@ export APP_VERSION="${VERSION}"
 source .env.production
 
 echo "  [1] 이미지 pull..."
-docker compose -f ${COMPOSE_FILE} --env-file .env.production pull seeder app1 app2 migrate
+docker compose -f ${COMPOSE_FILE} --env-file .env.production pull seeder app1 migrate
 
 echo "  [2] 마이그레이션..."
 docker compose -f ${COMPOSE_FILE} --env-file .env.production run --rm migrate
 
-echo "  [3] 앱 재시작 (rolling update)..."
+echo "  [3] 앱 재시작..."
 docker compose -f ${COMPOSE_FILE} --env-file .env.production up -d --no-deps app1
-sleep 10
-docker compose -f ${COMPOSE_FILE} --env-file .env.production up -d --no-deps app2
 
 echo "  [4] 시딩..."
 SEED_FORCE_RESET=${FORCE_RESET} \
@@ -234,9 +232,6 @@ else
     header "4/5 앱 재시작"
     log "ems_app1 재시작..."
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --no-deps app1
-    sleep 10
-    log "ems_app2 재시작..."
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --no-deps app2
     log "앱 재시작 완료"
   fi
 
